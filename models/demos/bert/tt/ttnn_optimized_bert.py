@@ -42,7 +42,7 @@ def bert_attention(
     attention_scores = ttnn.matmul(
         query,
         key,
-        memory_config=ttnn.L1_MEMORY_CONFIG,
+        # memory_config=ttnn.L1_MEMORY_CONFIG,
         dtype=ttnn.bfloat16,
         core_grid=ttnn.CoreGrid(y=batch_size, x=num_cores_x),
     )
