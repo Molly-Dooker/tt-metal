@@ -7,7 +7,10 @@
 #include <iostream>
 #include <random>
 #include <vector>
+
+#if defined(__x86_64__)
 #include <immintrin.h>
+#endif
 
 #include "tt_metal/common/assert.hpp"
 #include "tt_metal/common/tt_backend_api_types.hpp"
@@ -16,6 +19,38 @@
 
 // TODO: empty struct to facilitate Tensor template logic. Reconsider how/why templating is supported in Tensor
 struct bfloat4_b {};
+
+// Slow; used for architectures that haven't had a vectorized implementation written yet.
+// bfp4[2:0] = mantissa
+// bfp4[3] = sign
+// bfp4[7:4] = ignored
+inline float convert_bfp4_to_float(uint8_t bfp4, uint32_t exp, bool is_exp_a) {
+    uint32_t rebias_offset = is_exp_a ? -112 : 0;
+    uint32_t sign = bfp4 >> 3;
+    uint32_t mantissa = bfp4 & 0x7;
+    uint32_t shifted_mantissa = mantissa;
+    bool mantissa_is_zero = (mantissa == 0);
+    uint32_t shift_count = 0;
+
+    for (size_t shift_val = 0; shift_val < 3; ++shift_val) {
+        if (shifted_mantissa < 0x4) {
+            shifted_mantissa <<= 1;
+            shift_count = shift_val + 1;
+        }
+    }
+
+    shifted_mantissa = (shifted_mantissa << 1) & 0x7;
+
+    if (!mantissa_is_zero) {
+        mantissa = shifted_mantissa;
+        exp = exp - (rebias_offset + shift_count);
+    } else {
+        exp = 0;
+    }
+
+    uint32_t result = (sign << 31) | (exp << 23) | (mantissa << 20);
+    return *reinterpret_cast<float*>(&result);
+}
 
 inline std::vector<uint32_t> pack_fp32_vec_as_bfp4_tiles(const std::vector<float> &fp32_vec, bool row_major_input, bool is_exp_a) {
     return pack_fp32_vec_as_bfp_tiles<tt::DataFormat::Bfp4_b>(fp32_vec, row_major_input, is_exp_a);
@@ -27,6 +62,7 @@ constexpr int log2(int n) {
     return log;
 }
 
+#if defined(__x86_64__)
 inline std::vector<float> unpack_bfp4_tiles_into_float_vec(const std::vector<uint32_t> &bfp_tiles, bool row_major_output, bool is_exp_a) {
     ZoneScoped;
 
@@ -159,6 +195,81 @@ inline std::vector<float> unpack_bfp4_tiles_into_float_vec(const std::vector<uin
     }
     return float_vec;
 }
+#else
+inline std::vector<float> unpack_bfp4_tiles_into_float_vec(const std::vector<uint32_t> &bfp_tiles, bool row_major_output, bool is_exp_a) {
+    ZoneScoped;
+
+    constexpr int num_elements_in_dword = 8;
+    constexpr int data_dwords_per_exp = 16 / num_elements_in_dword;
+    constexpr int num_exps_in_dword = 4;
+    constexpr int data_dwords_per_exp_dword_log2 = log2(data_dwords_per_exp * num_exps_in_dword);
+    constexpr int data_dwords_per_exp_log2 = log2(data_dwords_per_exp);
+
+    uint32_t size_bytes = bfp_tiles.size() * 4;
+    uint32_t single_bfp_tile_size = tile_size(tt::DataFormat::Bfp4_b);
+    TT_ASSERT(size_bytes % single_bfp_tile_size == 0);
+    uint32_t num_tiles = size_bytes / single_bfp_tile_size;
+
+    int data_index;
+    int subtile_r;
+    int subtile_c;
+    uint32_t rebias_offset = (is_exp_a ? -112 : 0);
+    uint32_t exp_word, sub_word_index;
+
+    constexpr int subtiles_in_tile_row = 2;
+    constexpr int subtiles_in_tile_col = 2;
+    constexpr int subtile_rows = 16;
+    constexpr int subtile_cols = 16;
+    constexpr uint32_t num_float_in_tile = subtiles_in_tile_row * subtiles_in_tile_col * subtile_rows * subtile_cols;
+    uint32_t fp32_element_index = 0;
+
+    constexpr int num_bfp_dwords_in_tile = 128 + 16;
+    constexpr int num_dwords_per_row = subtile_cols / num_elements_in_dword;
+
+    std::vector<float> float_vec;
+    float_vec.resize(num_tiles * num_float_in_tile);
+    for (int tile_index = 0; tile_index < num_tiles; ++tile_index) {
+        for (int tr = 0; tr < subtiles_in_tile_row; ++tr) {
+            for (int tc = 0; tc < subtiles_in_tile_col; ++tc) {
+                for (int i = 0; i < subtile_rows; ++i) {
+                    subtile_r = tr * subtile_rows + i;
+                    for (int j = 0; j < subtile_cols; j += 2*num_elements_in_dword) {
+                        subtile_c = tc * subtile_cols + j;
+                        data_index = (tr*64 + tc*32 + i*num_dwords_per_row + j/num_elements_in_dword); // Each uint32_t contains 8 BFP4 values. Divide data index by 8
+                        int tile_and_data_index = data_index + (num_bfp_dwords_in_tile * tile_index);
+
+                        int exponent_index = (data_index >> data_dwords_per_exp_dword_log2) + (num_bfp_dwords_in_tile * tile_index);
+                        exp_word = bfp_tiles.at(exponent_index); // Extract the uint32_t value that stores the shared exponent for this set of data. Each 32 bit word is shared amongst 64 datums
+
+                        sub_word_index = (tile_and_data_index >> data_dwords_per_exp_log2) & 0x3; // Extract the byte in which the shared exponent is stored. Each byte is shared amongst 16 datums.
+                        auto exp = get_byte(exp_word, sub_word_index);
+
+                        uint32_t float_data_index;
+                        if (row_major_output) {
+                            float_data_index = subtile_c + (32 * subtile_r) + (tile_index * num_float_in_tile);
+                        } else {
+                            float_data_index = fp32_element_index;
+                            fp32_element_index += 2*num_elements_in_dword;
+                        }
+
+                        // sixteen bfp4 values packed into eight bytes
+                        const uint8_t *bfp4_x16 = reinterpret_cast<const uint8_t*>(&bfp_tiles[16 + tile_and_data_index]);
+                        for (int k = 0; k < 8; ++k) {
+                            uint8_t bfp4_0 = (bfp4_x16[k] >> 0) & 0xF;
+                            uint8_t bfp4_1 = (bfp4_x16[k] >> 4) & 0xF;
+                            float float_0 = convert_bfp4_to_float(bfp4_0, exp, is_exp_a);
+                            float float_1 = convert_bfp4_to_float(bfp4_1, exp, is_exp_a);
+                            float_vec.at(float_data_index + (2 * k) + 0) = float_0;
+                            float_vec.at(float_data_index + (2 * k) + 1) = float_1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return float_vec;
+}
+#endif
 
 inline std::vector<uint32_t> create_random_vector_of_bfp4(uint32_t num_bytes, bool is_exp_a, int rand_max_float, int seed, float offset = 0.0f) {
     uint32_t single_bfp4_tile_size = tile_size(tt::DataFormat::Bfp4_b);
