@@ -12,6 +12,8 @@ def convnet_mnist(
     input_tensor,
     parameters,
     device,
+    mesh_mapper,
+    mesh_composer,
 ):
     batch_size = input_tensor.shape[0]
     torch_maxpool = True
@@ -31,9 +33,8 @@ def convnet_mnist(
         reallocate_halo_output=True,
     )
 
-    x = ttnn.to_layout(input_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
     [x, out_height, out_width, weights_device, bias_device] = ttnn.conv2d(
-        input_tensor=x,
+        input_tensor=input_tensor,
         weight_tensor=parameters.conv1.weight,
         in_channels=1,
         out_channels=32,
@@ -50,15 +51,19 @@ def convnet_mnist(
         debug=True,
         groups=1,
     )
+
     x = ttnn.relu(x)
 
     if torch_maxpool:  # Can be removed once issue #12642 is resolved
-        x = ttnn.to_torch(x)
-        x = torch.reshape(x, (batch_size, 30, 30, 32))
+        x = ttnn.to_layout(x, layout=ttnn.ROW_MAJOR_LAYOUT)
+        x = ttnn.reshape(x, (batch_size, 30, 30, 32))
+        x = ttnn.to_torch(x, mesh_composer=mesh_composer)
         x = torch.permute(x, (0, 3, 1, 2))
         x = F.max_pool2d(x, 2)
         x = torch.permute(x, (0, 2, 3, 1))
-        x = ttnn.from_torch(x, device=device, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT)
+        x = ttnn.from_torch(
+            x, device=device, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT, mesh_mapper=mesh_mapper
+        )
 
     else:
         x = ttnn.sharded_to_interleaved(x, ttnn.L1_MEMORY_CONFIG)
@@ -73,6 +78,7 @@ def convnet_mnist(
             stride=[1, 1],
             padding=[0, 0],
             dilation=[1, 1],
+            device=device,
         )
 
     [x, out_height, out_width, weights_device, bias_device] = ttnn.conv2d(
@@ -97,11 +103,14 @@ def convnet_mnist(
     x = ttnn.relu(x)
 
     if torch_maxpool:  # Can be removed once issue #12642 is resolved
-        x = ttnn.to_torch(x)
-        x = torch.reshape(x, (batch_size, 13, 13, 64))
+        x = ttnn.to_layout(x, layout=ttnn.ROW_MAJOR_LAYOUT)
+        x = ttnn.reshape(x, (batch_size, 13, 13, 64))
+        x = ttnn.to_torch(x, mesh_composer=mesh_composer)
         x = torch.permute(x, (0, 3, 1, 2))
         x = F.max_pool2d(x, 2)
-        x = ttnn.from_torch(x, device=device, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT)
+        x = ttnn.from_torch(
+            x, device=device, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT, mesh_mapper=mesh_mapper
+        )
 
     else:
         x = ttnn.sharded_to_interleaved(x, ttnn.DRAM_MEMORY_CONFIG)
@@ -116,18 +125,27 @@ def convnet_mnist(
             stride=[1, 1],
             padding=[0, 0],
             dilation=[1, 1],
+            device=device,
         )
     x = ttnn.from_device(x)
     x = ttnn.reshape(x, (x.shape[0], -1))
-
     x = ttnn.to_device(x, device)
     x = ttnn.to_layout(x, ttnn.TILE_LAYOUT)
-    x = ttnn.linear(x, parameters.fc1.weight, bias=parameters.fc1.bias, activation="relu")
+    x = ttnn.linear(
+        x,
+        parameters.fc1.weight,
+        bias=parameters.fc1.bias,
+        activation="relu",
+    )
 
-    x = ttnn.linear(x, parameters.fc2.weight, bias=parameters.fc2.bias)
+    x = ttnn.linear(
+        x,
+        parameters.fc2.weight,
+        bias=parameters.fc2.bias,
+    )
 
-    output = torch.softmax(ttnn.to_torch(x), dim=-1)
-    output = ttnn.from_torch(output, device=device, dtype=ttnn.bfloat16)
+    output = torch.softmax(ttnn.to_torch(x, mesh_composer=mesh_composer), dim=-1)
+    output = ttnn.from_torch(output, device=device, dtype=ttnn.bfloat16, mesh_mapper=mesh_mapper)
     return output
 
 
