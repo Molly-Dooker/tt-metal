@@ -779,7 +779,7 @@ void Device::configure_kernel_variant(
             path,
             kernel_core,
             tt::tt_metal::EthernetConfig{
-                .eth_mode = is_active_eth_core ? Eth::SENDER : Eth::IDLE,
+                .eth_mode = is_active_eth_core ? Eth::ACTIVE : Eth::IDLE,
                 .noc = my_noc_index,
                 .compile_args = compile_args,
                 .defines = defines

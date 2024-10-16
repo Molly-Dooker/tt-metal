@@ -24,8 +24,7 @@ enum NOC_MODE : uint8_t {
 };
 
 enum Eth : uint8_t {
-    SENDER = 0,
-    RECEIVER = 1,
+    ACTIVE = 0,
     IDLE = 2,
 };
 

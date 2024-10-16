@@ -597,7 +597,7 @@ bool test_increment_runtime_args_sanity(Device* device, const DummyProgramConfig
                 "tests/tt_metal/tt_metal/test_kernels/misc/increment_runtime_arg.cpp",
                 cr_set,
                 tt::tt_metal::EthernetConfig{
-                    .eth_mode = idle_eth ? Eth::IDLE : Eth::RECEIVER,
+                    .eth_mode = idle_eth ? Eth::IDLE : Eth::ACTIVE,
                     .noc = NOC::NOC_0,
                     .compile_args = compile_args,
                 });

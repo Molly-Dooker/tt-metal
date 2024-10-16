@@ -62,7 +62,7 @@ struct ComputeConfig {
 };
 
 struct EthernetConfig {
-    Eth eth_mode = Eth::SENDER;
+    Eth eth_mode = Eth::ACTIVE;
     NOC noc = NOC::NOC_0;
     std::vector<uint32_t> compile_args;
     // Will cause CompileProgram to emit a file hlk_defines_generated.h

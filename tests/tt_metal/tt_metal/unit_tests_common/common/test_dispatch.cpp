@@ -39,7 +39,7 @@ static void test_sems_across_core_types(CommonFixture *fixture,
                 "tests/tt_metal/tt_metal/test_kernels/dataflow/semaphore_across_core_types.cpp",
                 eth_core,
                 tt::tt_metal::EthernetConfig {
-                    .eth_mode = active_eth ? Eth::RECEIVER : Eth::IDLE,
+                    .eth_mode = active_eth ? Eth::ACTIVE : Eth::IDLE,
                     .noc = NOC::NOC_0,
                     .compile_args = compile_args,
                 });
@@ -103,7 +103,7 @@ TEST_F(CommonFixture, TestEthBlank) {
         CreateKernel(
             program, "tt_metal/kernels/dataflow/blank.cpp", eth_core,
             tt::tt_metal::EthernetConfig {
-                .eth_mode = this->slow_dispatch_ ? Eth::IDLE : Eth::RECEIVER,
+                .eth_mode = this->slow_dispatch_ ? Eth::IDLE : Eth::ACTIVE,
             }
         );
 
@@ -157,7 +157,7 @@ TEST_F(CommonFixture, TestEthInitLocalMemory) {
         CreateKernel(
             program, "tests/tt_metal/tt_metal/test_kernels/misc/local_mem.cpp", eth_core,
             tt::tt_metal::EthernetConfig {
-                .eth_mode = this->slow_dispatch_ ? Eth::IDLE : Eth::RECEIVER
+                .eth_mode = this->slow_dispatch_ ? Eth::IDLE : Eth::ACTIVE
             }
         );
 
@@ -227,7 +227,7 @@ TEST_F(CommonFixture, TestCBsAcrossWorkerEth) {
 
         CreateKernel(
             program, "tt_metal/kernels/dataflow/blank.cpp", core_coord,
-            EthernetConfig{.eth_mode = Eth::RECEIVER, .noc = NOC::NOC_0});
+            EthernetConfig{.eth_mode = Eth::ACTIVE, .noc = NOC::NOC_0});
 
         this->RunProgram(device, program);
 
