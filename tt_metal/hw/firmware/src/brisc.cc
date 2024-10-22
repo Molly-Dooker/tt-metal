@@ -374,7 +374,7 @@ int main() {
                 // For future proofing, the noc_index value is initialized to 0, to ensure an invalid NOC txn is not issued.
                 uint64_t dispatch_addr =
                     NOC_XY_ADDR(NOC_X(mailboxes->go_message.master_x),
-                    NOC_Y(mailboxes->go_message.master_y), DISPATCH_MESSAGE_ADDR);
+                    NOC_Y(mailboxes->go_message.master_y), DISPATCH_MESSAGE_ADDR + mailboxes->go_message.dispatch_message_offset);
                 mailboxes->go_message.signal = RUN_MSG_DONE;
                 // Notify dispatcher that this has been done
                 DEBUG_SANITIZE_NOC_ADDR(noc_index, dispatch_addr, 4);
@@ -453,7 +453,7 @@ int main() {
                 launch_msg_address->kernel_config.enables = 0;
                 uint64_t dispatch_addr =
                     NOC_XY_ADDR(NOC_X(mailboxes->go_message.master_x),
-                        NOC_Y(mailboxes->go_message.master_y), DISPATCH_MESSAGE_ADDR);
+                        NOC_Y(mailboxes->go_message.master_y), DISPATCH_MESSAGE_ADDR + mailboxes->go_message.dispatch_message_offset);
                 DEBUG_SANITIZE_NOC_ADDR(noc_index, dispatch_addr, 4);
                 noc_fast_atomic_increment(
                     noc_index,

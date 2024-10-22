@@ -51,6 +51,7 @@ enum CQDispatchCmdId : uint8_t {
     CQ_DISPATCH_CMD_SEND_GO_SIGNAL = 15,
     CQ_DISPATCH_NOTIFY_SLAVE_GO_SIGNAL = 16,
     CQ_DISPATCH_SET_UNICAST_ONLY_CORES = 17,
+    CQ_DISPATCH_SET_NUM_WORKER_SEMS = 18,
     CQ_DISPATCH_CMD_MAX_COUNT,              // for checking legal IDs
 };
 
@@ -268,9 +269,15 @@ struct CQDispatchGoSignalMcastCmd {
 struct CQDispatchNotifySlaveGoSignalCmd {
     // sends a counter update to dispatch_s when it sees this cmd
     uint8_t wait; // if true, issue a write barrier before sending signal to dispatch_s
-    uint16_t pad2;
+    uint16_t index_bitmask;
     uint32_t pad3;
 } __attribute__((packed));
+
+struct CQDispatchSetNumWorkerSemsCmd {
+    uint8_t pad1;
+    uint16_t pad2;
+    uint32_t num_worker_sems;
+} __attribute__ ((packed));
 
 struct CQDispatchCmd {
     CQDispatchBaseCmd base;
@@ -288,6 +295,7 @@ struct CQDispatchCmd {
         CQDispatchGoSignalMcastCmd mcast;
         CQDispatchSetUnicastOnlyCoresCmd set_unicast_only_cores;
         CQDispatchNotifySlaveGoSignalCmd notify_dispatch_s_go_signal;
+        CQDispatchSetNumWorkerSemsCmd set_num_worker_sems;
     } __attribute__((packed));
 };
 

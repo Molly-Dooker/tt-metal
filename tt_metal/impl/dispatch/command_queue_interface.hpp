@@ -34,8 +34,9 @@ enum class CommandQueueDeviceAddrType : uint8_t {
     // Max of 2 CQs. COMPLETION_Q*_LAST_EVENT_PTR track the last completed event in the respective CQs
     COMPLETION_Q0_LAST_EVENT = 4,
     COMPLETION_Q1_LAST_EVENT = 5,
-    DISPATCH_MESSAGE = 6,
-    UNRESERVED = 7
+    DISPATCH_S_SYNC_SEM = 6,
+    DISPATCH_MESSAGE = 7,
+    UNRESERVED = 8
 };
 
 enum class CommandQueueHostAddrType : uint8_t {
@@ -64,8 +65,12 @@ struct dispatch_constants {
         return *inst;
     }
 
+    using prefetch_q_entry_type = uint16_t;
+
     static constexpr uint8_t MAX_NUM_HW_CQS = 2;
-    typedef uint16_t prefetch_q_entry_type;
+    static constexpr uint32_t DISPATCH_MESSAGE_ENTRIES = 16;
+    static constexpr uint32_t DISPATCH_MESSAGES_MAX_OFFSET = std::numeric_limits<decltype(go_msg_t::dispatch_message_offset)>::max();
+
     static constexpr uint32_t PREFETCH_Q_LOG_MINSIZE = 4;
 
     static constexpr uint32_t LOG_TRANSFER_PAGE_SIZE = 12;
@@ -128,6 +133,12 @@ struct dispatch_constants {
         return tt::utils::underlying_type<CommandQueueHostAddrType>(host_addr) * hal.get_alignment(HalMemType::HOST);
     }
 
+    uint32_t get_dispatch_message_offset(uint32_t index) const {
+        TT_ASSERT(index < DISPATCH_MESSAGE_ENTRIES);
+        uint32_t offset = index * hal.get_alignment(HalMemType::L1);
+        return offset;
+    }
+
    private:
     dispatch_constants(const CoreType &core_type, const uint32_t num_hw_cqs) {
         TT_ASSERT(core_type == CoreType::WORKER or core_type == CoreType::ETH);
@@ -160,6 +171,7 @@ struct dispatch_constants {
         TT_ASSERT(cmddat_q_size_ >= 2 * max_prefetch_command_size_);
         TT_ASSERT(scratch_db_size_ % 2 == 0);
         TT_ASSERT((dispatch_buffer_block_size & (dispatch_buffer_block_size - 1)) == 0);
+        TT_ASSERT(DISPATCH_MESSAGE_ENTRIES <= DISPATCH_MESSAGES_MAX_OFFSET / L1_ALIGNMENT + 1, "Number of dispatch message entries exceeds max representable offset");
 
         uint32_t pcie_alignment = hal.get_alignment(HalMemType::HOST);
         uint32_t l1_alignment = hal.get_alignment(HalMemType::L1);
@@ -171,8 +183,10 @@ struct dispatch_constants {
                 device_cq_addr_sizes_[dev_addr_idx] = sizeof(uint32_t);
             } else if (dev_addr_type == CommandQueueDeviceAddrType::PREFETCH_Q_PCIE_RD) {
                 device_cq_addr_sizes_[dev_addr_idx] = L1_ALIGNMENT - sizeof(uint32_t);
+            } else if (dev_addr_type == CommandQueueDeviceAddrType::DISPATCH_S_SYNC_SEM) {
+                device_cq_addr_sizes_[dev_addr_idx] = DISPATCH_MESSAGE_ENTRIES * L1_ALIGNMENT;
             } else if (dev_addr_type == CommandQueueDeviceAddrType::DISPATCH_MESSAGE) {
-                device_cq_addr_sizes_[dev_addr_idx] = 32; // Should this be 2x L1_ALIGNMENT?
+                device_cq_addr_sizes_[dev_addr_idx] = DISPATCH_MESSAGE_ENTRIES * L1_ALIGNMENT;
             } else {
                 device_cq_addr_sizes_[dev_addr_idx] = L1_ALIGNMENT;
             }
@@ -449,7 +463,7 @@ class SystemMemoryManager {
     std::vector<uint32_t> bypass_buffer;
     uint32_t bypass_buffer_write_offset;
 
-    WorkerConfigBufferMgr config_buffer_mgr;
+    std::array<WorkerConfigBufferMgr, dispatch_constants::DISPATCH_MESSAGE_ENTRIES> config_buffer_mgr;
 
    public:
     SystemMemoryManager(chip_id_t device_id, uint8_t num_hw_cqs) :
@@ -531,11 +545,7 @@ class SystemMemoryManager {
         std::vector<std::mutex> temp_mutexes(num_hw_cqs);
         cq_to_event_locks.swap(temp_mutexes);
 
-        for (uint32_t index = 0; index < hal.get_programmable_core_type_count(); index++) {
-            this->config_buffer_mgr.init_add_core(
-                hal.get_dev_addr(hal.get_programmable_core_type(index), HalL1MemAddrType::KERNEL_CONFIG),
-                hal.get_dev_size(hal.get_programmable_core_type(index), HalL1MemAddrType::KERNEL_CONFIG));
-        }
+        this->reset_config_buffer_mgr(config_buffer_mgr.size());
     }
 
     uint32_t get_next_event(const uint8_t cq_id) {
@@ -845,7 +855,18 @@ class SystemMemoryManager {
         this->prefetch_q_dev_ptrs[cq_id] += sizeof(dispatch_constants::prefetch_q_entry_type);
     }
 
-    WorkerConfigBufferMgr& get_config_buffer_mgr() { return config_buffer_mgr; }
+    WorkerConfigBufferMgr& get_config_buffer_mgr(uint32_t index) { return config_buffer_mgr[index]; }
+
+    void reset_config_buffer_mgr(const uint32_t max_index) {
+        for (uint32_t cfg_index = 0; cfg_index < max_index; cfg_index++) {
+            this->config_buffer_mgr[cfg_index] = WorkerConfigBufferMgr();
+            for (uint32_t index = 0; index < hal.get_programmable_core_type_count(); index++) {
+                this->config_buffer_mgr[cfg_index].init_add_core(
+                    hal.get_dev_addr(hal.get_programmable_core_type(index), HalL1MemAddrType::KERNEL_CONFIG),
+                    hal.get_dev_size(hal.get_programmable_core_type(index), HalL1MemAddrType::KERNEL_CONFIG));
+            }
+        }
+    }
 
 };
 

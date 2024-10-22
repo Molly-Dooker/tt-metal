@@ -138,9 +138,9 @@ class Device {
 
     bool is_inactive_ethernet_core(CoreCoord logical_core) const;
 
-    uint32_t num_eth_worker_cores() const;
+    uint32_t num_eth_worker_cores(uint32_t sub_device_index) const;
 
-    uint32_t num_worker_cores() const;
+    uint32_t num_worker_cores(uint32_t sub_device_index) const;
 
     std::tuple<chip_id_t, CoreCoord> get_connected_ethernet_core(CoreCoord eth_core) const {
         return tt::Cluster::instance().get_connected_ethernet_core(std::make_tuple(this->id_, eth_core));
@@ -157,6 +157,10 @@ class Device {
     void setup_tunnel_for_remote_devices();
 
     void update_workers_build_settings(std::vector<std::vector<std::tuple<tt_cxy_pair, dispatch_worker_build_settings_t>>> &device_worker_variants);
+
+    void reset_num_sub_devices(uint32_t num_sub_devices);
+
+    uint32_t num_sub_devices() const;
 
     uint32_t num_banks(const BufferType &buffer_type) const;
     uint32_t bank_size(const BufferType &buffer_type) const;
@@ -301,14 +305,14 @@ class Device {
     uint32_t worker_thread_core;
     uint32_t completion_queue_reader_core;
     std::unique_ptr<SystemMemoryManager> sysmem_manager_;
-    LaunchMessageRingBufferState worker_launch_message_buffer_state;
+    std::array<LaunchMessageRingBufferState, dispatch_constants::DISPATCH_MESSAGE_ENTRIES> worker_launch_message_buffer_state;
     uint8_t num_hw_cqs_;
 
     std::vector<std::unique_ptr<Program>> command_queue_programs;
     bool using_fast_dispatch;
     program_cache::detail::ProgramCache program_cache;
-    uint32_t num_worker_cores_;
-    uint32_t num_eth_worker_cores_;
+    std::array<uint32_t, dispatch_constants::DISPATCH_MESSAGE_ENTRIES> num_worker_cores_;
+    std::array<uint32_t, dispatch_constants::DISPATCH_MESSAGE_ENTRIES> num_eth_worker_cores_;
     // Program cache interface. Syncrhonize with worker worker threads before querying or
     // modifying this structure, since worker threads use this for compiling ops
     void enable_program_cache() {
@@ -348,6 +352,8 @@ class Device {
     void MarkAllocationsUnsafe();
     void MarkAllocationsSafe();
     std::unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> trace_buffer_pool_;
+    // Temporary until actual sub_device implementation is added
+    uint32_t num_sub_devices_ = 1;
 };
 
 }  // namespace v0

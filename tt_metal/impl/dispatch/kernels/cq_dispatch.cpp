@@ -41,16 +41,17 @@ constexpr uint32_t prefetch_h_noc_xy = get_compile_time_arg_val(16);
 constexpr uint32_t prefetch_h_local_downstream_sem_addr = get_compile_time_arg_val(17);
 constexpr uint32_t prefetch_h_max_credits = get_compile_time_arg_val(18);
 constexpr uint32_t packed_write_max_unicast_sub_cmds = get_compile_time_arg_val(19); // Number of cores in compute grid
-constexpr uint32_t dispatch_s_sem_id = get_compile_time_arg_val(20);
-constexpr uint32_t worker_mcast_grid = get_compile_time_arg_val(21);
-constexpr uint32_t mcast_go_signal_addr = get_compile_time_arg_val(22);
-constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(23);
-constexpr uint32_t distributed_dispatcher = get_compile_time_arg_val(24);
-constexpr uint32_t host_completion_q_wr_ptr = get_compile_time_arg_val(25);
-constexpr uint32_t dev_completion_q_wr_ptr = get_compile_time_arg_val(26);
-constexpr uint32_t dev_completion_q_rd_ptr = get_compile_time_arg_val(27);
-constexpr uint32_t is_d_variant = get_compile_time_arg_val(28);
-constexpr uint32_t is_h_variant = get_compile_time_arg_val(29);
+constexpr uint32_t dispatch_s_sync_sem_base_addr = get_compile_time_arg_val(20);
+constexpr uint32_t max_num_worker_sems = get_compile_time_arg_val(21); // maximum number of worker semaphores
+constexpr uint32_t worker_mcast_grid = get_compile_time_arg_val(22);
+constexpr uint32_t mcast_go_signal_addr = get_compile_time_arg_val(23);
+constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(24);
+constexpr uint32_t distributed_dispatcher = get_compile_time_arg_val(25);
+constexpr uint32_t host_completion_q_wr_ptr = get_compile_time_arg_val(26);
+constexpr uint32_t dev_completion_q_wr_ptr = get_compile_time_arg_val(27);
+constexpr uint32_t dev_completion_q_rd_ptr = get_compile_time_arg_val(28);
+constexpr uint32_t is_d_variant = get_compile_time_arg_val(29);
+constexpr uint32_t is_h_variant = get_compile_time_arg_val(30);
 
 constexpr uint8_t upstream_noc_index = UPSTREAM_NOC_INDEX;
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
@@ -858,14 +859,22 @@ void process_notify_dispatch_s_go_signal_cmd() {
         DPRINT << " DISPATCH_S_NOTIFY BARRIER\n";
         noc_async_write_barrier();
     }
-    if constexpr (distributed_dispatcher) {
-        uint64_t dispatch_s_notify_addr = get_noc_addr_helper(dispatch_s_noc_xy, get_semaphore<fd_core_type>(dispatch_s_sem_id));
-        static uint32_t num_go_signals_safe_to_send = 1;
-        noc_inline_dw_write(dispatch_s_notify_addr, num_go_signals_safe_to_send);
-        num_go_signals_safe_to_send++;
-    } else {
-        tt_l1_ptr uint32_t* notify_ptr = (uint32_t tt_l1_ptr*)(get_semaphore<fd_core_type>(dispatch_s_sem_id));
-        *notify_ptr = (*notify_ptr) + 1;
+    uint16_t index_bitmask = cmd->notify_dispatch_s_go_signal.index_bitmask;
+
+    while(index_bitmask != 0) {
+        uint32_t set_index = __builtin_ctz(index_bitmask);
+        uint32_t dispatch_s_sync_sem_addr = dispatch_s_sync_sem_base_addr + set_index * L1_ALIGNMENT;
+        if constexpr (distributed_dispatcher) {
+            static uint32_t num_go_signals_safe_to_send[max_num_worker_sems] = {0};
+            uint64_t dispatch_s_notify_addr = get_noc_addr_helper(dispatch_s_noc_xy, dispatch_s_sync_sem_addr);
+            num_go_signals_safe_to_send[set_index]++;
+            noc_inline_dw_write(dispatch_s_notify_addr, num_go_signals_safe_to_send[set_index]);
+        } else {
+            tt_l1_ptr uint32_t* notify_ptr = (uint32_t tt_l1_ptr*)(dispatch_s_sync_sem_addr);
+            *notify_ptr = (*notify_ptr) + 1;
+        }
+        // Unset the bit
+        index_bitmask &= index_bitmask - 1;
     }
     cmd_ptr += sizeof(CQDispatchCmd);
 }
@@ -972,6 +981,12 @@ re_run_command:
         case CQ_DISPATCH_SET_UNICAST_ONLY_CORES:
             DPRINT << "cmd_set_unicast_only_cores" << ENDL();
             process_set_unicast_only_cores();
+            break;
+
+        case CQ_DISPATCH_SET_NUM_WORKER_SEMS:
+            DPRINT << "cmd_set_num_worker_sems" << ENDL();
+            // This command is only used by dispatch_s
+            cmd_ptr += sizeof(CQDispatchCmd);
             break;
 
         case CQ_DISPATCH_CMD_SET_WRITE_OFFSET:

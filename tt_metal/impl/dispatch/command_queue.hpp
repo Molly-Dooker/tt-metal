@@ -73,7 +73,7 @@ class EnqueueReadBufferCommand : public Command {
     Device* device;
     uint32_t command_queue_id;
     NOC noc_index;
-    uint32_t expected_num_workers_completed;
+    const std::vector<std::pair<uint32_t, uint32_t>>& expected_num_workers_completed;
     uint32_t src_page_index;
     uint32_t pages_to_read;
 
@@ -86,7 +86,7 @@ class EnqueueReadBufferCommand : public Command {
         Buffer& buffer,
         void* dst,
         SystemMemoryManager& manager,
-        uint32_t expected_num_workers_completed,
+        const std::vector<std::pair<uint32_t, uint32_t>>& expected_num_workers_completed,
         uint32_t src_page_index = 0,
         std::optional<uint32_t> pages_to_read = std::nullopt);
 
@@ -109,7 +109,7 @@ class EnqueueReadInterleavedBufferCommand : public EnqueueReadBufferCommand {
         Buffer& buffer,
         void* dst,
         SystemMemoryManager& manager,
-        uint32_t expected_num_workers_completed,
+        const std::vector<std::pair<uint32_t, uint32_t>>& expected_num_workers_completed,
         uint32_t src_page_index = 0,
         std::optional<uint32_t> pages_to_read = std::nullopt) :
         EnqueueReadBufferCommand(
@@ -138,7 +138,7 @@ class EnqueueReadShardedBufferCommand : public EnqueueReadBufferCommand {
         Buffer& buffer,
         void* dst,
         SystemMemoryManager& manager,
-        uint32_t expected_num_workers_completed,
+        const std::vector<std::pair<uint32_t, uint32_t>>& expected_num_workers_completed,
         const CoreCoord& core,
         uint32_t bank_base_address,
         uint32_t src_page_index = 0,
@@ -173,7 +173,7 @@ class EnqueueWriteBufferCommand : public Command {
     NOC noc_index;
     const void* src;
     const Buffer& buffer;
-    uint32_t expected_num_workers_completed;
+    const std::vector<std::pair<uint32_t, uint32_t>>& expected_num_workers_completed;
     uint32_t bank_base_address;
     uint32_t padded_page_size;
     uint32_t dst_page_index;
@@ -189,7 +189,7 @@ class EnqueueWriteBufferCommand : public Command {
         const void* src,
         SystemMemoryManager& manager,
         bool issue_wait,
-        uint32_t expected_num_workers_completed,
+        const std::vector<std::pair<uint32_t, uint32_t>>& expected_num_workers_completed,
         uint32_t bank_base_address,
         uint32_t padded_page_size,
         uint32_t dst_page_index = 0,
@@ -216,7 +216,7 @@ class EnqueueWriteInterleavedBufferCommand : public EnqueueWriteBufferCommand {
         const void* src,
         SystemMemoryManager& manager,
         bool issue_wait,
-        uint32_t expected_num_workers_completed,
+        const std::vector<std::pair<uint32_t, uint32_t>>& expected_num_workers_completed,
         uint32_t bank_base_address,
         uint32_t padded_page_size,
         uint32_t dst_page_index = 0,
@@ -255,7 +255,7 @@ class EnqueueWriteShardedBufferCommand : public EnqueueWriteBufferCommand {
         const void* src,
         SystemMemoryManager& manager,
         bool issue_wait,
-        uint32_t expected_num_workers_completed,
+        const std::vector<std::pair<uint32_t, uint32_t>>& expected_num_workers_completed,
         uint32_t bank_base_address,
         const std::shared_ptr<const BufferPageMapping>& buffer_page_mapping,
         const CoreCoord& core,
@@ -295,6 +295,8 @@ class EnqueueProgramCommand : public Command {
     uint32_t dispatch_message_addr;
     uint32_t multicast_cores_launch_message_wptr = 0;
     uint32_t unicast_cores_launch_message_wptr = 0;
+    // TODO: There will be multiple ids once programs support spanning multiple sub_devices
+    uint32_t sub_device_id = 0;
 
    public:
 
@@ -307,7 +309,8 @@ class EnqueueProgramCommand : public Command {
         SystemMemoryManager& manager,
         uint32_t expected_num_workers_completed,
         uint32_t multicast_cores_launch_message_wptr,
-        uint32_t unicast_cores_launch_message_wptr);
+        uint32_t unicast_cores_launch_message_wptr,
+        uint32_t sub_device_id);
 
     void assemble_preamble_commands(ProgramCommandSequence& program_command_sequence, std::vector<ConfigBufferEntry>& kernel_config_addrs);
     void assemble_stall_commands(ProgramCommandSequence& program_command_sequence, bool prefetch_stall);
@@ -331,7 +334,7 @@ class EnqueueRecordEventCommand : public Command {
     NOC noc_index;
     SystemMemoryManager& manager;
     uint32_t event_id;
-    uint32_t expected_num_workers_completed;
+    const std::vector<std::pair<uint32_t, uint32_t>>& expected_num_workers_completed;
     bool clear_count;
     bool write_barrier;
 
@@ -342,7 +345,7 @@ class EnqueueRecordEventCommand : public Command {
         NOC noc_index,
         SystemMemoryManager& manager,
         uint32_t event_id,
-        uint32_t expected_num_workers_completed,
+        const std::vector<std::pair<uint32_t, uint32_t>>& expected_num_workers_completed,
         bool clear_count = false,
         bool write_barrier = true);
 
@@ -384,7 +387,7 @@ class EnqueueTraceCommand : public Command {
     Device* device;
     SystemMemoryManager& manager;
     std::shared_ptr<detail::TraceDescriptor>& desc;
-    uint32_t& expected_num_workers_completed;
+    std::array<uint32_t, dispatch_constants::DISPATCH_MESSAGE_ENTRIES>& expected_num_workers_completed;
     bool clear_count;
     NOC noc_index;
     CoreCoord dispatch_core;
@@ -395,7 +398,7 @@ class EnqueueTraceCommand : public Command {
         SystemMemoryManager& manager,
         std::shared_ptr<detail::TraceDescriptor>& desc,
         Buffer& buffer,
-        uint32_t& expected_num_workers_completed,
+        std::array<uint32_t, dispatch_constants::DISPATCH_MESSAGE_ENTRIES>& expected_num_workers_completed,
         NOC noc_index,
         CoreCoord dispatch_core);
 
@@ -496,6 +499,9 @@ class HWCommandQueue {
     void record_begin(const uint32_t tid, std::shared_ptr<detail::TraceDescriptor> ctx);
     void record_end();
     void set_unicast_only_cores_on_dispatch(const std::vector<uint32_t>& unicast_only_noc_encodings);
+    void set_num_worker_sems_on_dispatch(uint32_t num_worker_sems);
+    void reset_worker_state(bool reset_launch_msg_state);
+
    private:
     uint32_t id;
     uint32_t size_B;
@@ -506,7 +512,7 @@ class HWCommandQueue {
     // Expected value of DISPATCH_MESSAGE_ADDR in dispatch core L1
     //  Value in L1 incremented by worker to signal completion to dispatch. Value on host is set on each enqueue program
     //  call
-    uint32_t expected_num_workers_completed;
+    std::array<uint32_t, dispatch_constants::DISPATCH_MESSAGE_ENTRIES> expected_num_workers_completed;
 
     volatile bool exit_condition;
     volatile bool dprint_server_hang = false;

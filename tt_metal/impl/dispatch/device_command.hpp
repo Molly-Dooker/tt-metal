@@ -273,13 +273,14 @@ class DeviceCommand {
         this->cmd_write_offsetB = align(this->cmd_write_offsetB, PCIE_ALIGNMENT);
     }
 
-    void add_notify_dispatch_s_go_signal_cmd(uint8_t wait) {
+    void add_notify_dispatch_s_go_signal_cmd(uint8_t wait, uint16_t index_bitmask) {
         // Command to have dispatch_master send a notification to dispatch_slave
         this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd), DispatcherSelect::DISPATCH_MASTER);
         auto initialize_sem_update_cmd = [&](CQDispatchCmd *sem_update_cmd) {
             *sem_update_cmd = {};
             sem_update_cmd->base.cmd_id = CQ_DISPATCH_NOTIFY_SLAVE_GO_SIGNAL;
             sem_update_cmd->notify_dispatch_s_go_signal.wait = wait;
+            sem_update_cmd->notify_dispatch_s_go_signal.index_bitmask = index_bitmask;
         };
         CQDispatchCmd *dispatch_s_sem_update_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));
         if constexpr (hugepage_write) {
@@ -396,6 +397,23 @@ class DeviceCommand {
         uint32_t data_sizeB = noc_encodings.size() * sizeof(uint32_t);
         uint32_t increment_sizeB = align(data_sizeB, PCIE_ALIGNMENT);
         this->add_data(noc_encodings.data(), data_sizeB, increment_sizeB);
+    }
+
+    void add_dispatch_set_num_worker_sems(const uint32_t num_worker_sems, DispatcherSelect dispatcher_type) {
+        this->add_prefetch_relay_inline(true, sizeof(CQDispatchCmd), dispatcher_type);
+        auto initialize_set_num_worker_sems_cmd = [&] (CQDispatchCmd *set_num_worker_sems_cmd) {
+            set_num_worker_sems_cmd->base.cmd_id = CQ_DISPATCH_SET_NUM_WORKER_SEMS;
+            set_num_worker_sems_cmd->set_num_worker_sems.num_worker_sems = num_worker_sems;
+        };
+        CQDispatchCmd *set_num_worker_sems_cmd_dst = this->reserve_space<CQDispatchCmd *>(sizeof(CQDispatchCmd));
+        if constexpr (hugepage_write) {
+            alignas(MEMCPY_ALIGNMENT) CQDispatchCmd set_num_worker_sems_cmd;
+            initialize_set_num_worker_sems_cmd(&set_num_worker_sems_cmd);
+            this->memcpy(set_num_worker_sems_cmd_dst, &set_num_worker_sems_cmd, sizeof(CQDispatchCmd));
+        } else {
+            initialize_set_num_worker_sems_cmd(set_num_worker_sems_cmd_dst);
+        }
+        this->cmd_write_offsetB = align(this->cmd_write_offsetB, this->pcie_alignment);
     }
 
     void add_dispatch_set_write_offsets(uint32_t write_offset0, uint32_t write_offset1, uint32_t write_offset2) {

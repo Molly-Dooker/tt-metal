@@ -13,7 +13,7 @@
 #include "tt_metal/impl/dispatch/kernels/cq_common.hpp"
 #include "debug/dprint.h"
 
-typedef uint16_t prefetch_q_entry_type;
+using prefetch_q_entry_type = uint16_t;
 
 constexpr uint32_t downstream_cb_base = get_compile_time_arg_val(0);
 constexpr uint32_t downstream_cb_log_page_size = get_compile_time_arg_val(1);

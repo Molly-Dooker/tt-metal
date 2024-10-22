@@ -1432,9 +1432,10 @@ uint32_t detail::Program_::get_sem_base_addr(Device *device, CoreCoord logical_c
     CoreCoord phys_core = device->physical_core_from_logical_core(logical_core, core_type);
     HalProgrammableCoreType programmable_core_type = device->get_programmable_core_type(phys_core);
     uint32_t index = hal.get_programmable_core_type_index(programmable_core_type);
-
+    // TODO: We should determine the meshes used by the program. Hardcoded here for now
+    uint32_t sub_device_id = 0;
     uint32_t base_addr = device->using_fast_dispatch ?
-        device->sysmem_manager().get_config_buffer_mgr().get_last_slot_addr(programmable_core_type) :
+        device->sysmem_manager().get_config_buffer_mgr(sub_device_id).get_last_slot_addr(programmable_core_type) :
         hal.get_dev_addr(programmable_core_type, HalL1MemAddrType::KERNEL_CONFIG);
 
     return base_addr + this->program_configs_[index].sem_offset;
@@ -1449,9 +1450,10 @@ uint32_t detail::Program_::get_cb_base_addr(Device *device, CoreCoord logical_co
     CoreCoord phys_core = device->physical_core_from_logical_core(logical_core, core_type);
     HalProgrammableCoreType programmable_core_type = device->get_programmable_core_type(phys_core);
     uint32_t index = hal.get_programmable_core_type_index(programmable_core_type);
-
+    // TODO: We should determine the meshes used by the program. Hardcoded here for now
+    uint32_t sub_device_id = 0;
     uint32_t base_addr = device->using_fast_dispatch ?
-        device->sysmem_manager().get_config_buffer_mgr().get_last_slot_addr(programmable_core_type) :
+        device->sysmem_manager().get_config_buffer_mgr(sub_device_id).get_last_slot_addr(programmable_core_type) :
         hal.get_dev_addr(programmable_core_type, HalL1MemAddrType::KERNEL_CONFIG);
 
     return base_addr + this->program_configs_[index].cb_offset;

@@ -30,13 +30,14 @@ constexpr uint32_t cb_log_page_size = get_compile_time_arg_val(1);
 constexpr uint32_t cb_size = get_compile_time_arg_val(2);
 constexpr uint32_t my_dispatch_cb_sem_id = get_compile_time_arg_val(3);
 constexpr uint32_t upstream_dispatch_cb_sem_id = get_compile_time_arg_val(4);
-constexpr uint32_t dispatch_s_sync_sem_id = get_compile_time_arg_val(5);
+constexpr uint32_t dispatch_s_sync_sem_base_addr = get_compile_time_arg_val(5);
 constexpr uint32_t worker_mcast_grid = get_compile_time_arg_val(6);
 constexpr uint32_t num_worker_cores_to_mcast = get_compile_time_arg_val(7);
 constexpr uint32_t mcast_go_signal_addr = get_compile_time_arg_val(8);
 constexpr uint32_t unicast_go_signal_addr = get_compile_time_arg_val(9);
 constexpr uint32_t distributed_dispatcher = get_compile_time_arg_val(10); // dispatch_s and dispatch_d running on different cores
-constexpr uint32_t worker_sem_addr = get_compile_time_arg_val(11); // workers update the semaphore at this location to signal completion
+constexpr uint32_t worker_sem_base_addr = get_compile_time_arg_val(11); // workers update the semaphore at this location to signal completion
+constexpr uint32_t max_num_worker_sems = get_compile_time_arg_val(12); // maximum number of worker semaphores
 
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 constexpr uint32_t dispatch_d_noc_xy = uint32_t(NOC_XY_ENCODING(DOWNSTREAM_NOC_X, DOWNSTREAM_NOC_Y));
@@ -56,7 +57,9 @@ static int num_unicast_cores = -1;
 // When dispatch_d and dispatch_s run on separate cores, dispatch_s gets the go signal update from workers.
 // dispatch_s is responsible for sending the latest worker completion count to dispatch_d.
 // To minimize the number of writes from dispatch_s to dispatch_d, locally track dispatch_d's copy.
-static uint32_t worker_count_update_for_dispatch_d = 0;
+static uint32_t worker_count_update_for_dispatch_d[max_num_worker_sems] = {0};
+
+static uint32_t num_worker_sems = 1;
 
 FORCE_INLINE
 void dispatch_s_wr_reg_cmd_buf_init() {
@@ -102,7 +105,8 @@ void dispatch_s_noc_inline_dw_write(uint64_t addr, uint32_t val, uint8_t noc_id,
 
 FORCE_INLINE
 void wait_for_workers(volatile CQDispatchCmd tt_l1_ptr *cmd) {
-    volatile tt_l1_ptr uint32_t* worker_sem = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(worker_sem_addr);
+    uint8_t dispatch_message_offset = *((uint8_t *)&cmd->mcast.go_signal + offsetof(go_msg_t, dispatch_message_offset));
+    volatile tt_l1_ptr uint32_t* worker_sem = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(worker_sem_base_addr + dispatch_message_offset);
     while (wrap_gt(cmd->mcast.wait_count, *worker_sem));
 }
 
@@ -110,12 +114,18 @@ template<bool flush_write = false>
 FORCE_INLINE
 void update_worker_completion_count_on_dispatch_d() {
     if constexpr(distributed_dispatcher) {
-        uint32_t num_workers_signalling_completion = *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(worker_sem_addr);
-        if (num_workers_signalling_completion != worker_count_update_for_dispatch_d) {
-            worker_count_update_for_dispatch_d = num_workers_signalling_completion;
-            uint64_t dispatch_d_dst = get_noc_addr_helper(dispatch_d_noc_xy, worker_sem_addr);
-            dispatch_s_noc_inline_dw_write(dispatch_d_dst, num_workers_signalling_completion, my_noc_index);
-            if constexpr (flush_write) {
+        bool write = false;
+        for (uint32_t i = 0, worker_sem_addr = worker_sem_base_addr; i < num_worker_sems; ++i, worker_sem_addr += L1_ALIGNMENT) {
+            uint32_t num_workers_signalling_completion = *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(worker_sem_addr);
+            if (num_workers_signalling_completion != worker_count_update_for_dispatch_d[i]) {
+                worker_count_update_for_dispatch_d[i] = num_workers_signalling_completion;
+                uint64_t dispatch_d_dst = get_noc_addr_helper(dispatch_d_noc_xy, worker_sem_addr);
+                dispatch_s_noc_inline_dw_write(dispatch_d_dst, num_workers_signalling_completion, my_noc_index);
+                write = true;
+            }
+        }
+        if constexpr (flush_write) {
+            if (write) {
                 noc_async_writes_flushed();
             }
         }
@@ -151,7 +161,7 @@ void process_go_signal_mcast_cmd() {
     volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
     // Get semaphore that will be update by dispatch_d, signalling that it's safe to send a go signal
     volatile tt_l1_ptr uint32_t* sync_sem_addr =
-        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore<fd_core_type>(dispatch_s_sync_sem_id));
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(dispatch_s_sync_sem_base_addr + (cmd->mcast.wait_addr - worker_sem_base_addr));
     // The location of the go signal embedded in the command does not meet NOC alignment requirements.
     // cmd_ptr is guaranteed to meet the alignment requirements, since it is written to by prefetcher over NOC.
     // Copy the go signal from an unaligned location to an aligned (cmd_ptr) location. This is safe as long as we
@@ -200,10 +210,15 @@ void set_go_signal_unicast_only_cores() {
 
 FORCE_INLINE
 void process_dispatch_s_wait_cmd() {
+    static constexpr uint32_t worker_sem_max_addr = worker_sem_base_addr + (max_num_worker_sems - 1) * L1_ALIGNMENT;
+
     volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
     // Limited Usage of Wait CMD: dispatch_s should get a wait command only if it's not on the
     // same core as dispatch_d and is used to clear the worker count
-    ASSERT(cmd->wait.clear_count && (cmd->wait.addr == worker_sem_addr) && distributed_dispatcher);
+    ASSERT(cmd->wait.clear_count && distributed_dispatcher);
+    uint32_t worker_sem_addr = cmd->wait.addr;
+    ASSERT(worker_sem_addr >= worker_sem_base_addr && worker_sem_addr <= worker_sem_max_addr);
+    uint32_t index = (worker_sem_addr - worker_sem_base_addr) / L1_ALIGNMENT;
     volatile tt_l1_ptr uint32_t* worker_sem = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(worker_sem_addr);
     // Wait for workers to complete
     while (wrap_gt(cmd->wait.count, *worker_sem));
@@ -211,7 +226,15 @@ void process_dispatch_s_wait_cmd() {
     // dispatch_d will clear it's own counter
     update_worker_completion_count_on_dispatch_d<true>();
     *worker_sem = 0;
-    worker_count_update_for_dispatch_d = 0; // Local worker count update for dispatch_d should reflect state of worker semaphore on dispatch_s
+    worker_count_update_for_dispatch_d[index] = 0; // Local worker count update for dispatch_d should reflect state of worker semaphore on dispatch_s
+    cmd_ptr += sizeof(CQDispatchCmd);
+}
+
+FORCE_INLINE
+void set_num_worker_sems() {
+    volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
+    num_worker_sems = cmd->set_num_worker_sems.num_worker_sems;
+    ASSERT(num_worker_sems <= max_num_worker_sems);
     cmd_ptr += sizeof(CQDispatchCmd);
 }
 
@@ -233,6 +256,9 @@ void kernel_main() {
                 break;
             case CQ_DISPATCH_SET_UNICAST_ONLY_CORES:
                 set_go_signal_unicast_only_cores();
+                break;
+            case CQ_DISPATCH_SET_NUM_WORKER_SEMS:
+                set_num_worker_sems();
                 break;
             case CQ_DISPATCH_CMD_WAIT:
                 process_dispatch_s_wait_cmd();
