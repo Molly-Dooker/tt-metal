@@ -184,14 +184,14 @@ KernelGroup::KernelGroup(
             if (programmable_core_type_index == hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX)) {
                 // The code below sets the brisc_noc_id for use by the device firmware
                 // Use 0 if neither brisc nor ncrisc specify a noc
-                if (class_id == utils::underlying_type<DataMovementProcessor>(DataMovementProcessor::RISCV_0)) { // weird?
+                if (class_id == utils::underlying_type<DataMovementProcessor>(DataMovementProcessor::RISCV_0)) {
                     // Use brisc's noc if brisc specifies a noc
                     this->launch_msg.kernel_config.brisc_noc_id = std::get<DataMovementConfig>(kernel->config()).noc;
                     // if noc mode is already set to DM_DYNAMIC_NOC then we can't change back to DM_DEDICATED_NOC
                     if (std::get<DataMovementConfig>(kernel->config()).noc_mode == NOC_MODE::DM_DYNAMIC_NOC) {
                         this->launch_msg.kernel_config.brisc_noc_mode = NOC_MODE::DM_DYNAMIC_NOC;
                     }
-                } else if (class_id == utils::underlying_type<DataMovementProcessor>(DataMovementProcessor::RISCV_1)) { // weird?
+                } else if (class_id == utils::underlying_type<DataMovementProcessor>(DataMovementProcessor::RISCV_1)) {
                     // Use 1-ncrisc's noc (the other noc) if ncrisc specifies a noc
                     // If both brisc and ncrisc set the noc, then this is safe due to prior correctness validation
                     this->launch_msg.kernel_config.brisc_noc_id = 1 - std::get<DataMovementConfig>(kernel->config()).noc;
@@ -1045,8 +1045,8 @@ uint32_t Program::finalize_kernel_bins(Device *device, uint32_t programmable_cor
                     }
                 } else {
                     uint32_t binary_packed_size = kernel->get_binary_packed_size(device, 0);
-                    kg.kernel_bin_sizes[0] = binary_packed_size;
-                    kg.launch_msg.kernel_config.kernel_text_offset[0] = offset;
+                    kg.kernel_bin_sizes[class_id] = binary_packed_size;
+                    kg.launch_msg.kernel_config.kernel_text_offset[class_id] = offset;
                     offset += binary_packed_size;
                     offset = align(offset, l1_alignment);
                 }

@@ -35,6 +35,9 @@ ll_api::memory get_risc_binary(string const &path, uint32_t riscv_id, PackSpans 
         MEM_TRISC2_FIRMWARE_BASE,
         eth_l1_mem::address_map::FIRMWARE_BASE,
         MEM_IERISC_FIRMWARE_BASE,
+#ifdef ARCH_BLACKHOLE
+        MEM_SLAVE_IERISC_FIRMWARE_BASE,
+#endif
     };
 
     static struct {
@@ -175,6 +178,7 @@ bool test_load_write_read_risc_binary(ll_api::memory &mem, chip_id_t chip_id, co
         case 4: local_init_addr = MEM_TRISC2_INIT_LOCAL_L1_BASE_SCRATCH; break;
         case 5: local_init_addr = eth_l1_mem::address_map::FIRMWARE_BASE; break;
         case 6: local_init_addr = MEM_IERISC_INIT_LOCAL_L1_BASE_SCRATCH; break;
+        case 7: local_init_addr = MEM_SLAVE_IERISC_INIT_LOCAL_L1_BASE_SCRATCH; break;
     }
 
     log_debug(tt::LogLLRuntime, "hex_vec size = {}, size_in_bytes = {}", mem.size(), mem.size()*sizeof(uint32_t));
