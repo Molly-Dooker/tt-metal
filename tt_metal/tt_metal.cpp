@@ -60,7 +60,7 @@ struct DataMovementConfigStatus {
     bool noc1_in_use;
 };
 
-DataMovementConfigStatus CheckDataMovementConfig(Program &program, const CoreRangeSet &core_ranges) {
+DataMovementConfigStatus CheckDataMovementConfig(const HalProgrammableCoreType &programmable_core, Program &program, const CoreRangeSet &core_ranges) {
     DataMovementConfigStatus data_movement_config_status{
         .riscv0_in_use = false, .riscv1_in_use = false, .noc0_in_use = false, .noc1_in_use = false};
 
@@ -74,30 +74,33 @@ DataMovementConfigStatus CheckDataMovementConfig(Program &program, const CoreRan
         data_movement_config_status.noc1_in_use = local_noc1_usage;
     };
 
+    // TODO (abhullar): Clean this up when brisc/ncrisc are moved to be one processor class with two data movement processor types
+    uint32_t dm0_idx = programmable_core == HalProgrammableCoreType::TENSIX ? DISPATCH_CLASS_TENSIX_DM0 : DISPATCH_CLASS_ETH_DM0;
+    uint32_t dm1_idx = programmable_core == HalProgrammableCoreType::TENSIX ? DISPATCH_CLASS_TENSIX_DM1 : DISPATCH_CLASS_ETH_DM1;
     for (const auto &core_range : core_ranges.ranges()) {
         for (auto x = core_range.start_coord.x; x <= core_range.end_coord.x; x++) {
             for (auto y = core_range.start_coord.y; y <= core_range.end_coord.y; y++) {
                 const KernelGroup *kernel_group = program.kernels_on_core(
-                    CoreCoord(x, y), hal.get_programmable_core_type_index(HalProgrammableCoreType::TENSIX));
+                    CoreCoord(x, y), hal.get_programmable_core_type_index(programmable_core));
                 if (kernel_group != nullptr) {
                     bool local_noc0_in_use = false;
                     bool local_noc1_in_use = false;
-                    if (kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM0].has_value()) {
+                    if (kernel_group->kernel_ids[dm0_idx].has_value()) {
                         data_movement_config_status.riscv0_in_use = true;
                         set_global_and_local_noc_usage(
-                            kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM0].value(),
+                            kernel_group->kernel_ids[dm0_idx].value(),
                             local_noc0_in_use,
                             local_noc1_in_use);
                     }
-                    if (kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM1].has_value()) {
+                    if (kernel_group->kernel_ids[dm1_idx].has_value()) {
                         data_movement_config_status.riscv1_in_use = true;
                         set_global_and_local_noc_usage(
-                            kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM1].value(),
+                            kernel_group->kernel_ids[dm1_idx].value(),
                             local_noc0_in_use,
                             local_noc1_in_use);
                     }
-                    if (kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM0].has_value() and
-                        kernel_group->kernel_ids[DISPATCH_CLASS_TENSIX_DM1].has_value()) {
+                    if (kernel_group->kernel_ids[dm0_idx].has_value() and
+                        kernel_group->kernel_ids[dm1_idx].has_value()) {
                         TT_FATAL(
                             local_noc0_in_use and local_noc1_in_use,
                             "Illegal NOC usage: data movement kernels on logical core {} cannot use the same NOC, "
@@ -889,7 +892,7 @@ KernelHandle CreateDataMovementKernel(
     const KernelSource &kernel_src,
     const CoreRangeSet &core_range_set,
     const DataMovementConfig &config) {
-    const DataMovementConfigStatus &data_movement_config_status = CheckDataMovementConfig(program, core_range_set);
+    const DataMovementConfigStatus &data_movement_config_status = CheckDataMovementConfig(HalProgrammableCoreType::TENSIX, program, core_range_set);
     const bool are_both_riscv_in_use =
         data_movement_config_status.riscv0_in_use && data_movement_config_status.riscv1_in_use;
     const bool are_both_noc_in_use = data_movement_config_status.noc0_in_use && data_movement_config_status.noc1_in_use;
@@ -929,13 +932,34 @@ KernelHandle CreateEthernetKernel(
     const CoreRangeSet &core_range_set,
     const EthernetConfig &config) {
     KernelHandle kernel_handle;
+    HalProgrammableCoreType eth_core_type = config.eth_mode == Eth::IDLE ? HalProgrammableCoreType::IDLE_ETH : HalProgrammableCoreType::ACTIVE_ETH;
+    const DataMovementConfigStatus &data_movement_config_status = CheckDataMovementConfig(eth_core_type, program, core_range_set);
+    const bool are_both_riscv_in_use = config.riscv0_in_use && config.riscv1_in_use;
+    const bool are_both_noc_in_use = config.noc0_in_use && config.noc1_in_use;
+
     std::shared_ptr<Kernel> kernel = std::make_shared<EthernetKernel>(kernel_src, core_range_set, config);
-    if (config.eth_mode == Eth::IDLE) {
-        kernel_handle = detail::AddKernel(program, kernel, HalProgrammableCoreType::IDLE_ETH);
-    } else {
-        kernel_handle = detail::AddKernel(program, kernel, HalProgrammableCoreType::ACTIVE_ETH);
-    }
-    return kernel_handle;
+
+    TT_FATAL(
+        utils::underlying_type<DataMovementProcessor>(config.processor)
+            < hal.get_processor_types_count(eth_core_type, magic_enum::enum_integer(HalProcessorClassType::DM)),
+        "EthernetKernel creation failure: {} kernel cannot target processor {} because Ethernet core only has {} processors. "
+        "Update DataMovementProcessor in the config.",
+        kernel->name(),
+        magic_enum::enum_name(config.processor),
+        hal.get_processor_types_count(eth_core_type, magic_enum::enum_integer(HalProcessorClassType::DM)));
+    TT_FATAL(
+        !(are_both_riscv_in_use),
+        "EthernetKernel creation failure: Cannot create data movement kernel for {} across specified "
+        "cores because both data movement processors are in use!",
+        kernel_name);
+    TT_FATAL(
+        !(are_both_noc_in_use),
+        "EthernetKernel creation failure: Cannot create data movement kernels for {} across specified "
+        "cores because both NOCs are in use!",
+        kernel_name);
+
+
+    return detail::AddKernel(program, kernel, eth_core_type);
 }
 
 KernelHandle CreateKernel(

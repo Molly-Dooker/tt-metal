@@ -332,7 +332,8 @@ void EthernetKernel::generate_binaries(Device *device, JitBuildOptions &build_op
         this->config_.eth_mode == Eth::IDLE ? HalProgrammableCoreType::IDLE_ETH : HalProgrammableCoreType::ACTIVE_ETH
     );
     uint32_t dm_class_idx = magic_enum::enum_integer(HalProcessorClassType::DM);
-    jit_build(device->build_kernel_state(erisc_core_type, dm_class_idx, 0), this);
+    int erisc_id = magic_enum::enum_integer(this->config_.processor);
+    jit_build(device->build_kernel_state(erisc_core_type, dm_class_idx, erisc_id), this);
 }
 
 void ComputeKernel::generate_binaries(Device *device, JitBuildOptions &build_options) const {
@@ -377,7 +378,7 @@ void EthernetKernel::read_binaries(Device *device) {
     );
     uint32_t dm_class_idx = magic_enum::enum_integer(HalProcessorClassType::DM);
     const JitBuildState &build_state = device->build_kernel_state(erisc_core_type, dm_class_idx, 0);
-    int erisc_id = this->config_.eth_mode == Eth::IDLE ? 1 : 0;
+    int erisc_id = magic_enum::enum_integer(this->config_.processor) + (this->config_.eth_mode == Eth::IDLE ? 1 : 0);
     ll_api::memory binary_mem = llrt::get_risc_binary(build_state.get_target_out_path(this->kernel_full_name_), erisc_id + 5, llrt::PackSpans::PACK);
     binaries.push_back(binary_mem);
     uint32_t binary_size = binary_mem.get_packed_size();
@@ -442,7 +443,7 @@ bool EthernetKernel::configure(Device *device, const CoreCoord &logical_core) co
     auto device_id = device->id();
     auto ethernet_core = device->ethernet_core_from_logical_core(logical_core);
     ll_api::memory binary_mem = this->binaries(device->build_key()).at(0);
-    int riscv_id = this->config_.eth_mode == Eth::IDLE ? 6 : 5;
+    int riscv_id = magic_enum::enum_integer(this->config_.processor) + (this->config_.eth_mode == Eth::IDLE ? 6 : 5);
     pass &= tt::llrt::test_load_write_read_risc_binary(binary_mem, device_id, ethernet_core, riscv_id);
     return pass;
 }
