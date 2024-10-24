@@ -89,12 +89,6 @@ SECTIONS
    . += 4;
   } > REGION_LDM
 
-  l1_memory :
-  {
-    *(l1_memory)
-    *(l1_memory_const) /* gcc complains about const and non-const data in the same segment. */
-  } > ETH_L1
-
   /* Stabs debugging sections.  */
   .stab          0 : { *(.stab) }
   .stabstr       0 : { *(.stabstr) }
