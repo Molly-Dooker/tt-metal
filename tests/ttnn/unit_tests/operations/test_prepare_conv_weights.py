@@ -153,17 +153,15 @@ def test_prepare_conv_weights(
         "conv_config": conv_config,
     }
 
-    tt_weight_tensor_formatted = ttnn.prepare_conv_weights_for_ttnn(
+    tt_weight_tensor_formatted = ttnn.prepare_conv_weights(
         weight_tensor=tt_weight_tensor, weights_format="OIHW", **conv_kwargs
     )
-    tt_bias_tensor_formatted = (
-        ttnn.prepare_conv_bias_for_ttnn(bias_tensor=tt_bias_tensor, **conv_kwargs) if has_bias else None
-    )
+    tt_bias_tensor_formatted = ttnn.prepare_conv_bias(bias_tensor=tt_bias_tensor, **conv_kwargs) if has_bias else None
 
     tt_weight_tensor_formatted = ttnn.to_device(tt_weight_tensor_formatted, device)
     tt_bias_tensor_formatted = ttnn.to_device(tt_bias_tensor_formatted, device) if has_bias else None
 
-    tt_output_tensor_on_device = ttnn.conv2d_device_weights(
+    tt_output_tensor_on_device = ttnn.conv2d(
         input_tensor=tt_input_tensor,
         weight_tensor=tt_weight_tensor_formatted,
         bias_tensor=tt_bias_tensor_formatted,
