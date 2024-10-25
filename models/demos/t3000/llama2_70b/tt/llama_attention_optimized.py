@@ -8,6 +8,7 @@ import torch
 import ttnn
 from ttnn import ShardTensorToMesh
 from models.demos.t3000.falcon40b.tt.model_utils import matmul_2d_config_from_tensor_shapes
+from models.demos.t3000.llama2_70b.tt.llama_rope import TtLlamaRotary
 
 
 class TtLlamaAttention_optimized:
@@ -56,6 +57,16 @@ class TtLlamaAttention_optimized:
         self.transformation_mats = transformation_mats
 
         self.kv_dtype = ttnn.bfloat8_b
+
+        # Set up rotary embeddings
+        self.rope_decode = TtLlamaRotary(
+            mesh_device,
+            self.max_batch_size,
+            self.head_dim,
+            self.max_seq_len,
+            "decode",
+            datatype=ttnn.bfloat16,
+        )
 
         self.load_weights()
         if not vllm:
@@ -206,28 +217,29 @@ class TtLlamaAttention_optimized:
         page_table=None,
         kv_cache=None,
         mode="decode",
+        position_ids=None,
     ):
         # Decode should have input tensor of shape (seqlen=1, 1, batch, hidden_size)
         if mode == "decode":
-            return self.decode_forward(xs, rot_mats, start_pos, cache_idxs, page_table=page_table, kv_cache=kv_cache)
+            return self.decode_forward(
+                xs, rot_mats, start_pos, cache_idxs, page_table=page_table, kv_cache=kv_cache, position_ids=position_ids
+            )
         # Prefill should have input tensor of shape (1, batch=1, seqlen, hidden_size)
         elif mode == "prefill":
             return self.prefill_forward(xs, rot_mats, user_id, page_table=page_table, kv_cache=kv_cache)
         else:
             raise ValueError(f"Unknown llm_mode: {mode}")
 
-    def decode_forward(self, xs, rot_mats, start_pos: int, cache_idxs, page_table=None, kv_cache=None):
-        query_layer, key_layer, value_layer = self.attn_qkv(xs, rot_mats)
+    def decode_forward(
+        self, xs, rot_mats, start_pos: int, cache_idxs, page_table=None, kv_cache=None, position_ids=None
+    ):
+        query_layer, key_layer, value_layer = self.attn_qkv(xs, cache_idxs, position_ids)
         attn_outputs = self.attn_mqa(
             query_layer, key_layer, value_layer, start_pos, cache_idxs, page_table=page_table, kv_cache=kv_cache
         )
         return self.attn_selfout(attn_outputs)
 
-    def attn_qkv(
-        self,
-        xs,
-        rot_mats,
-    ):
+    def attn_qkv(self, xs, cache_idxs, postion_idxs):
         # Fused QKV
         fused_query_key_value = ttnn.matmul(
             xs,
@@ -260,23 +272,8 @@ class TtLlamaAttention_optimized:
         fused_query_key_value.deallocate(True)
 
         # ROTARY EMBEDDINGS
-        # Q Rotary Embeddings
-        query_layer = ttnn.matmul(
-            query_layer,
-            rot_mats,
-            program_config=self.model_config["ROT_MAT_MM_PROGCFG"],
-            memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
-            compute_kernel_config=self.model_config["ROT_MAT_COMPUTE_KERNEL_CONFIG"],
-            # [seqlen, n_heads, bsz, head_dim]  # [1, 1, head_dim, head_dim]  => [seqlen, n_heads, bsz, head_dim]
-        )
-
-        key_layer = ttnn.matmul(
-            key_layer,
-            rot_mats,
-            program_config=self.model_config["ROT_MAT_MM_PROGCFG"],
-            memory_config=ttnn.L1_HEIGHT_SHARDED_MEMORY_CONFIG,
-            compute_kernel_config=self.model_config["ROT_MAT_COMPUTE_KERNEL_CONFIG"],
-        )
+        cos, sin = self.rope_decode.prepare_cos_sin(position_ids=position_ids)
+        query_layer, key_layer = self.rope_decode(query_layer, key_layer, cos, sin)
 
         return query_layer, key_layer, value_layer
 

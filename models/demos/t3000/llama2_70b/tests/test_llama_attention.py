@@ -331,6 +331,20 @@ def run_test_LlamaAttention_inference(
         attention_input, start_pos, rot_mat, cache_idxs = tt_llama_attention_prepare_inputs(
             tt_LlamaAttention_model, tt_input, start_pos, mode
         )
+
+        if mode == "decode":
+            position_ids = ttnn.to_torch(cache_idxs, mesh_composer=ttnn.ConcatMeshToTensor(t3k_mesh_device, dim=-1))[
+                max_batch_size
+            ]
+            position_ids = position_ids.unsqueeze(-1)  # [batch, 1]
+            position_ids = ttnn.from_torch(
+                position_ids,
+                device=t3k_device_mesh,
+                layout=ttnn.ROW_MAJOR_LAYOUT,
+                dtype=ttnn.uint32,
+                mesh_mapper=ReplicateTensorToMesh(t3k_device_mesh),
+            )
+
         tt_out = tt_LlamaAttention_model(
             attention_input,
             rot_mat,
@@ -338,6 +352,7 @@ def run_test_LlamaAttention_inference(
             cache_idxs=cache_idxs if mode == "decode" else None,
             page_table=page_table_tt,
             mode=mode,
+            position_ids=position_ids if mode == "decode" else None,
         )
 
         tt_out = ttnn.from_device(tt_out)
