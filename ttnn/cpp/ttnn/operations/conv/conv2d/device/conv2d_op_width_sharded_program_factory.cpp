@@ -151,7 +151,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_width_sharded_v2_impl(
     CoreRangeSet input_cores = a.memory_config().shard_spec.value().grid;
     CoreRangeSet output_cores = output.memory_config().shard_spec.value().grid;
     CoreRangeSet all_cores = output.memory_config().shard_spec.value().grid;
-    if(input_cores.num_cores()>output_cores.num_cores()) {
+    if(input_cores.num_cores() > output_cores.num_cores()) {
         all_cores = input_cores;
     }
     auto input_num_cores = input_cores.num_cores();
@@ -257,18 +257,18 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_width_sharded_v2_impl(
     uint32_t act_matrix_height_ntiles = act_matrix_height / TILE_HEIGHT;
     uint32_t act_matrix_width_ntiles = act_matrix_width / TILE_WIDTH;
 
-    TT_FATAL(act_matrix_height_ntiles % act_block_h_ntiles == 0, "Error");
-    TT_FATAL(act_matrix_width_ntiles % act_block_w_ntiles == 0, "Error");
-    TT_FATAL(weight_matrix_width_ntiles % weight_block_w_ntiles == 0, "Error");
-    TT_FATAL(act_matrix_height_ntiles % out_block_h_ntiles == 0, "Error");
+    TT_FATAL(act_matrix_height_ntiles % act_block_h_ntiles == 0, "act_matrix_height_ntiles {} should be divisible by act_block_h_ntiles {}", act_matrix_height_ntiles, act_block_h_ntiles);
+    TT_FATAL(act_matrix_width_ntiles % act_block_w_ntiles == 0, "act_matrix_width_ntiles {} should be divisible by act_block_w_ntiles {}", act_matrix_width_ntiles, act_block_w_ntiles);
+    TT_FATAL(weight_matrix_width_ntiles % weight_block_w_ntiles == 0, "weight_+matrix_width_ntiles {} should be divisible by weight_block_w_ntiles {}", weight_matrix_width_ntiles, weight_block_w_ntiles);
+    TT_FATAL(act_matrix_height_ntiles % out_block_h_ntiles == 0, "act_matrix_height_ntiles {} should be divisible by out_block_h_ntiles {}", act_matrix_height_ntiles, out_block_h_ntiles);
 
     uint32_t num_blocks_act_h = act_matrix_height_ntiles / act_block_h_ntiles;
     uint32_t num_blocks_out_h = act_matrix_height_ntiles / out_block_h_ntiles;
     uint32_t num_blocks_act_w = act_matrix_width_ntiles / act_block_w_ntiles;
     uint32_t num_blocks_weight_w = weight_matrix_width_ntiles / weight_block_w_ntiles;
 
-    TT_FATAL(num_blocks_act_w%input_num_cores==0, "{} {}", num_blocks_act_w, input_num_cores);
-    uint32_t per_core_num_blocks_act_w = num_blocks_act_w/input_num_cores;
+    TT_FATAL(num_blocks_act_w % input_num_cores == 0, "Number of Act Blocks along the Width {} should be divisible by the number of cores {}", num_blocks_act_w, input_num_cores);
+    uint32_t per_core_num_blocks_act_w = num_blocks_act_w / input_num_cores;
 
 
     // act block info
@@ -311,29 +311,29 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_width_sharded_v2_impl(
 
     // weight block info
     uint32_t weight_block_w_datums = weight_matrix_width / num_blocks_weight_w;
-    TT_FATAL(weight_block_w_ntiles % out_subblock_w_ntiles == 0, "Error");
+    TT_FATAL(weight_block_w_ntiles % out_subblock_w_ntiles == 0, "weight_block_w_ntiles {} should be divisible by out_subblock_w_ntiles {}", weight_block_w_ntiles, out_subblock_w_ntiles);
     uint32_t weight_num_subblocks = weight_block_w_ntiles / out_subblock_w_ntiles;
     uint32_t weight_block_h_ntiles = act_block_w_ntiles;
     uint32_t weight_block_num_tiles = weight_block_w_ntiles * weight_block_h_ntiles;
     uint32_t weight_block_in_channels_ntiles = input_channels_padded/(32 * input_num_cores * per_core_num_blocks_act_w);
-    TT_FATAL(input_channels_padded>=(TILE_HEIGHT * input_num_cores), "Error");
-    TT_FATAL(input_channels_padded%(TILE_HEIGHT * input_num_cores)==0, "Error");
+    TT_FATAL(input_channels_padded >= (TILE_HEIGHT * input_num_cores), "input_channels_padded {} should be greater than or equal to TILE_HEIGHT * input_num_cores {}", input_channels_padded, TILE_HEIGHT * input_num_cores);
+    TT_FATAL(input_channels_padded % (TILE_HEIGHT * input_num_cores) == 0, "input_channels_padded {} should be divisible by TILE_HEIGHT * input_num_cores {}", input_channels_padded, TILE_HEIGHT * input_num_cores);
 
     uint32_t num_groups = num_blocks_act_h * num_blocks_act_w * num_blocks_weight_w;
     // writer of conv op partially removes padding on the width
     // it removes the padding done for block width but it doesn't remove padding done for tiled width
     uint32_t output_channels_padded_to_tile_width = round_up(output_channels, TILE_WIDTH);
-    TT_FATAL(output_channels_padded_to_tile_width <= weight_matrix_width, "Error");
+    TT_FATAL(output_channels_padded_to_tile_width <= weight_matrix_width, "output_channels_padded_to_tile_width {} should be less than or equal to weight_matrix_width {}", output_channels_padded_to_tile_width, weight_matrix_width);
     uint32_t output_width_num_tiles = output_channels_padded_to_tile_width / TILE_WIDTH;
     uint32_t num_blocks_output_w =
         (uint32_t) std::ceil((double)output_channels_padded_to_tile_width / (double)weight_block_w_datums);
     uint32_t last_block_width_datums = (output_channels_padded_to_tile_width % weight_block_w_datums == 0)
                                            ? weight_block_w_datums
                                            : (output_channels_padded_to_tile_width % weight_block_w_datums);
-    TT_FATAL(last_block_width_datums % TILE_WIDTH == 0, "Error");
+    TT_FATAL(last_block_width_datums % TILE_WIDTH == 0, "last_block_width_datums {} should be divisible by TILE_WIDTH {}", last_block_width_datums, TILE_WIDTH);
 
     // sanity check
-    TT_FATAL(num_blocks_output_w == num_blocks_weight_w, "Error");
+    TT_FATAL(num_blocks_output_w == num_blocks_weight_w, "num_blocks_output_w {} should be equal to num_blocks_weight_w {}", num_blocks_output_w, num_blocks_weight_w);
 
     uint32_t out_block_h_datums = out_block_h_ntiles * TILE_HEIGHT;
 
@@ -354,8 +354,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_width_sharded_v2_impl(
     uint32_t act_noc_x = act_dram_noc_xy.x;
     uint32_t act_noc_y = act_dram_noc_xy.y;
 
-    TT_FATAL(act_matrix_width_ntiles % act_block_w_ntiles == 0, "Error");
-    TT_FATAL(act_block_h_ntiles % out_subblock_h_ntiles == 0, "Error");
+    TT_FATAL(act_block_h_ntiles % out_subblock_h_ntiles == 0, "act_block_h_ntiles {} should be divisible by out_subblock_h_ntiles {}", act_block_h_ntiles, out_subblock_h_ntiles);
     // TT_FATAL(out_block_h_ntiles % out_subblock_h_ntiles == 0, "Error");
     uint32_t act_num_subblocks = act_block_h_ntiles / out_subblock_h_ntiles;
     uint32_t act_block_num_tiles = act_block_h_ntiles * act_block_w_ntiles;
@@ -395,7 +394,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_width_sharded_v2_impl(
 
     uint32_t output_height_padded_to_tile_height = round_up(act_matrix_height_unpadded, TILE_HEIGHT);
     uint32_t output_height_num_tiles = output_height_padded_to_tile_height / TILE_HEIGHT;
-    TT_FATAL(output_height_num_tiles <= act_matrix_height_ntiles, "Error");
+    TT_FATAL(output_height_num_tiles <= act_matrix_height_ntiles, "output_height_num_tiles {} should be less than or equal to act_matrix_height_ntiles {}", output_height_num_tiles, act_matrix_height_ntiles);
 
     uint32_t src_dram_act_buffer_size_bytes = src0_dram_buffer->size();
     uint32_t src_dram_weight_buffer_size_bytes = src1_dram_buffer->size();
