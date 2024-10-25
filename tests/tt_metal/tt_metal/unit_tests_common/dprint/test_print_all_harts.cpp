@@ -188,7 +188,7 @@ static void RunTest(DPrintFixture* fixture, Device* device) {
     );
 }
 
-TEST_F(DPrintFixture, TestPrintFromAllHarts) {
+TEST_F(DPrintFixture, TensixTestPrintFromAllHarts) {
     for (Device* device : this->devices_) {
         this->RunTestOnDevice(RunTest, device);
     }

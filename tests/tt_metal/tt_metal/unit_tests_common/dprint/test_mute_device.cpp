@@ -73,7 +73,7 @@ static void RunTest(DPrintFixture* fixture, Device* device) {
     EXPECT_TRUE(log_file.peek() == std::ifstream::traits_type::eof());
 }
 
-TEST_F(DPrintFixtureDisableDevices, TestPrintMuteDevice) {
+TEST_F(DPrintFixtureDisableDevices, TensixTestPrintMuteDevice) {
     for (Device* device : this->devices_) {
         this->RunTestOnDevice(RunTest, device);
     }

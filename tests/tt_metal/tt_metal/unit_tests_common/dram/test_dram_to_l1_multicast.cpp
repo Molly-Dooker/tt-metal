@@ -102,7 +102,7 @@ bool dram_to_l1_multicast(CommonFixture* fixture, tt_metal::Device *device, cons
 }
 }
 
-TEST_F(CommonFixture, DRAMtoL1Multicast){
+TEST_F(CommonFixture, TensixDRAMtoL1Multicast){
     if (!getenv("TT_METAL_SLOW_DISPATCH_MODE")){
         tt::log_info(tt::LogTest, "This test is only supported in slow dispatch mode");
         GTEST_SKIP();
@@ -116,7 +116,7 @@ TEST_F(CommonFixture, DRAMtoL1Multicast){
         ASSERT_TRUE(unit_tests_common::dram::test_dram_to_l1_multicast::dram_to_l1_multicast(this, devices_.at(id), test_config));
     }
 }
-TEST_F(CommonFixture, DRAMtoL1MulticastLoopbackSrc){
+TEST_F(CommonFixture, TensixDRAMtoL1MulticastLoopbackSrc){
     if (!getenv("TT_METAL_SLOW_DISPATCH_MODE")){
         tt::log_info(tt::LogTest, "This test is only supported in slow dispatch mode");
         GTEST_SKIP();

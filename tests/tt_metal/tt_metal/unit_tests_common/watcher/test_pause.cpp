@@ -130,7 +130,7 @@ static void RunTest(WatcherFixture* fixture, Device* device) {
     // EXPECT_TRUE(FileContainsAllStrings(fixture->log_file_name, expected_strings));
 }
 
-TEST_F(WatcherFixture, TestWatcherPause) {
+TEST_F(WatcherFixture, TensixTestWatcherPause) {
     for (Device* device : this->devices_) {
         this->RunTestOnDevice(RunTest, device);
     }
