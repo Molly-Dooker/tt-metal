@@ -71,7 +71,7 @@ struct OptimizedConvNew {
     const uint32_t groups;
     bool untilize_out, has_bias, fuse_relu;
     MathFidelity math_fidelity;
-    MemoryConfig out_memory_config;
+    MemoryConfig memory_config;
     const DataType dtype;
     std::array<std::uint32_t, 4> input_tensor_shape; // For sharded input, input tensor shape is nonsense
     bool use_shallow_conv_variant;
@@ -86,7 +86,7 @@ struct OptimizedConvNew {
         bool has_bias, bool fuse_relu,
         MathFidelity mfidelity, const OptimizedConvParallelizationConfig& p_config,
         const OptimizedConvBlockConfig& b_config,
-        MemoryConfig out_mem_config,
+        MemoryConfig memory_config,
         DataType dtype,
         std::array<std::uint32_t, 4> input_tensor_shape, bool use_shallow_conv_variant,
         const DeviceComputeKernelConfig compute_kernel_config, bool enable_act_double_buffer, bool enable_split_reader, bool enable_subblock_padding, bool use_non_tile_height) :
@@ -99,7 +99,7 @@ struct OptimizedConvNew {
             math_fidelity(mfidelity),
             parallelization_config(p_config),
             block_config(b_config),
-            out_memory_config(out_mem_config),
+            memory_config(memory_config),
             dtype(dtype), input_tensor_shape(input_tensor_shape),
             use_shallow_conv_variant(use_shallow_conv_variant),
             compute_kernel_config(compute_kernel_config),
@@ -156,7 +156,7 @@ Tensor optimized_conv_new(const Tensor& a, const Tensor &b, std::optional<const 
     bool untilize_out, bool fuse_relu, MathFidelity math_fidelity,
     const OptimizedConvParallelizationConfig& parallelization_config,
     const OptimizedConvBlockConfig& block_config,
-    MemoryConfig out_memory_config,
+    MemoryConfig memory_config,
     DataType dtype,
     std::array<std::uint32_t, 4> input_tensor_shape,
     bool use_shallow_conv_variant,
