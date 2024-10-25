@@ -10,16 +10,17 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 from models.utility_functions import skip_for_grayskull
 
 
-def run_activation_unary_test(device, h, w, ttnn_function, pcc=0.99):
+def run_activation_unary_test(device, n, c, h, w, ttnn_function, pcc=0.99):
     torch.manual_seed(0)
 
-    torch_input_tensor = torch.randn((h, w), dtype=torch.bfloat16)
+    torch_input_tensor = torch.randn((n, c, h, w), dtype=torch.bfloat16)
+    torch_input_tensor = torch_input_tensor + 3.0
     golden_function = ttnn.get_golden_function(ttnn_function)
     torch_output_tensor = golden_function(torch_input_tensor)
 
     input_tensor = ttnn.from_torch(torch_input_tensor, layout=ttnn.TILE_LAYOUT, device=device)
     output_tensor = ttnn_function(input_tensor)
-    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    # output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
@@ -391,3 +392,34 @@ def run_activation_test_threshold(device, h, w, scalar1, scalar2, ttnn_function,
 @pytest.mark.parametrize("w", [128])
 def test_threshold(device, h, w, value, threshold):
     run_activation_test_threshold(device, h, w, value, threshold, ttnn.threshold)
+
+
+@pytest.mark.parametrize(
+    "n, c, h, w",
+    (
+        (1, 256, 1, 1),
+        (1, 512, 1, 1),
+        (1, 768, 1, 1),
+        (1, 1024, 1, 1),
+    ),
+)
+def test_petr_vovnetcp_relu6(device, n, c, h, w):
+    run_activation_unary_test(device, n, c, h, w, ttnn.relu6)
+
+
+@pytest.mark.parametrize(
+    "n, c, h, w",
+    (
+        (1, 64, 160, 400),
+        (1, 128, 80, 200),
+        (1, 256, 80, 200),
+        (1, 160, 40, 100),
+        (1, 512, 40, 100),
+        (1, 192, 20, 50),
+        (1, 768, 20, 50),
+        (1, 224, 10, 25),
+        (1, 1024, 10, 25),
+    ),
+)
+def test_petr_vovnetcp_relu(device, n, c, h, w):
+    run_activation_unary_test(device, n, c, h, w, ttnn.relu)

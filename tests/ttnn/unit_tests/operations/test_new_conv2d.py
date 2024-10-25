@@ -2417,3 +2417,143 @@ def test_non_tile_multiple_height_conv_wh(
         has_bias=has_bias,
         output_layout=ttnn.ROW_MAJOR_LAYOUT,
     )
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (1, 64, 3, 320, 800, 3, 3, 2, 2, 1, 1, True, None, False),  # Passed
+        (1, 64, 64, 160, 400, 3, 3, 1, 1, 1, 1, True, None, False),  # Passed
+        (1, 128, 64, 160, 400, 3, 3, 2, 2, 1, 1, True, None, False),  # Passed
+        (1, 128, 128, 80, 200, 3, 3, 1, 1, 1, 1, True, None, False),  # Passed
+        (1, 256, 768, 80, 200, 1, 1, 1, 1, 0, 0, True, None, False),  # Passed
+        (1, 256, 256, 1, 1, 1, 1, 1, 1, 0, 0, True, None, False),  # Passed
+        (1, 160, 256, 40, 100, 3, 3, 1, 1, 1, 1, True, None, False),  # Passed
+        (1, 160, 160, 40, 100, 3, 3, 1, 1, 1, 1, True, None, False),  # Passed
+        (1, 512, 1056, 40, 100, 1, 1, 1, 1, 0, 0, True, None, False),  # Passed
+        (1, 512, 512, 1, 1, 1, 1, 1, 1, 0, 0, True, None, False),  # Passed
+        (1, 512, 1312, 40, 100, 1, 1, 1, 1, 0, 0, True, None, False),  # Passed
+        (1, 192, 512, 20, 50, 3, 3, 1, 1, 1, 1, True, None, False),  # Passed
+        (1, 192, 192, 20, 50, 3, 3, 1, 1, 1, 1, True, None, False),  # Passed
+        (1, 768, 1472, 20, 50, 1, 1, 1, 1, 0, 0, True, None, False),  # Passed
+        (1, 768, 768, 1, 1, 1, 1, 1, 1, 0, 0, True, None, False),  # Passed
+        (1, 192, 768, 20, 50, 3, 3, 1, 1, 1, 1, True, None, False),  # Passed
+        (1, 768, 1728, 20, 50, 1, 1, 1, 1, 0, 0, False, None, False),  # Passed
+        (1, 224, 768, 10, 25, 3, 3, 1, 1, 1, 1, True, None, False),  # Passed
+        (1, 224, 224, 10, 25, 3, 3, 1, 1, 1, 1, True, None, False),  # Passed
+        (1, 1024, 1024, 1, 1, 1, 1, 1, 1, 0, 0, True, None, False),  # Passed
+        (1, 224, 1024, 10, 25, 3, 3, 1, 1, 1, 1, True, None, False),  # Passed
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+def test_petr_vovnetcp(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+):
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+    )
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
+    (
+        (1, 160, 512, 40, 100, 3, 3, 1, 1, 1, 1, True, None),  # Passed
+        (1, 1024, 1888, 10, 25, 1, 1, 1, 1, 0, 0, True, None),  # Passed
+        (1, 1024, 2144, 10, 25, 1, 1, 1, 1, 0, 0, True, None),  # Passed
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+def test_petr_vovnetcp_split_conv(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+):
+    run_conv_with_split(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+    )

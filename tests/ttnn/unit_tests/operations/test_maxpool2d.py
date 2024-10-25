@@ -693,3 +693,46 @@ def test_pool_core_nondivis(
     assert isclose
     if dtype == ttnn.bfloat16:
         assert isequal
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
+@pytest.mark.parametrize(
+    "act_shape, kernel_size, stride, padding, dilation",  ## NCHW
+    (
+        (
+            (
+                [1, 256, 80, 200],
+                (3, 3),
+                (2, 2),
+                (0, 0),
+                (1, 1),
+            ),  # Skipped: kernel size and padding combination not supported
+            (
+                [1, 512, 40, 100],
+                (3, 3),
+                (2, 2),
+                (0, 0),
+                (1, 1),
+            ),  # Skipped: kernel size and padding combination not supported
+            (
+                [1, 768, 20, 50],
+                (3, 3),
+                (2, 2),
+                (0, 0),
+                (1, 1),
+            ),  # Skipped: kernel size and padding combination not supported
+        )
+    ),
+)
+@pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
+def test_petr_vovnetcp(
+    act_shape,
+    kernel_size,
+    padding,
+    stride,
+    dilation,
+    device,
+    dtype,
+    use_program_cache,
+):
+    run_max_pool(act_shape, kernel_size, padding, stride, dilation, device, dtype)
