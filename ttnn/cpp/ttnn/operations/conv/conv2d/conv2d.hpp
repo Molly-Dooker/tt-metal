@@ -44,23 +44,6 @@ struct Conv2dConfig {
     bool enable_act_double_buffer = false;
     bool enable_split_reader = false;
     bool enable_subblock_padding = false;
-    static constexpr auto attribute_names = std::make_tuple(
-        "dtype",
-        "weights_dtype",
-        "activation",
-        "input_channels_alignment",
-        "deallocate_activation",
-        "reallocate_halo_output",
-        "act_block_div",
-        "reshard_if_not_optimal",
-        "override_sharding_config",
-        "shard_layout",
-        "core_grid",
-        "transpose_shards",
-        "output_layout",
-        "enable_act_double_buffer",
-        "enable_split_reader",
-        "enable_subblock_padding");
     const auto attribute_values() const {
         return std::make_tuple(
             std::cref(this->dtype),
