@@ -19,7 +19,6 @@ MorehGetItemOperation::MorehGetItemRmFactory::cached_program_t MorehGetItemOpera
     tensor_return_value_t &output_tensor) {
     using namespace tt;
     using namespace tt::tt_metal;
-    using namespace tt::operations::primary;
 
     auto input = tensor_args.input;
     auto index_tensors = tensor_args.index_tensors;

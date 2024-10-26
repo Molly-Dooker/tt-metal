@@ -18,27 +18,27 @@ MorehAdamWDeviceOperation::program_factory_t MorehAdamWDeviceOperation::select_p
 
 void MorehAdamWDeviceOperation::validate_inputs(
     const operation_attributes_t& attributes, const tensor_args_t& tensor_args) {
-    tt::operations::primary::check_tensor(tensor_args.param_in, "moreh_adamw", "param_in");
-    tt::operations::primary::check_tensor(tensor_args.grad, "moreh_adamw", "grad");
-    tt::operations::primary::check_tensor(tensor_args.exp_avg_in, "moreh_adamw", "exp_avg_in");
-    tt::operations::primary::check_tensor(tensor_args.exp_avg_sq_in, "moreh_adamw", "exp_avg_sq_in");
+    check_tensor(tensor_args.param_in, "moreh_adamw", "param_in");
+    check_tensor(tensor_args.grad, "moreh_adamw", "grad");
+    check_tensor(tensor_args.exp_avg_in, "moreh_adamw", "exp_avg_in");
+    check_tensor(tensor_args.exp_avg_sq_in, "moreh_adamw", "exp_avg_sq_in");
 
     if (tensor_args.max_exp_avg_sq_in.has_value()) {
-        tt::operations::primary::check_tensor(
+        check_tensor(
             tensor_args.max_exp_avg_sq_in.value(), "moreh_adamw", "max_exp_avg_sq_in");
     }
 
     if (tensor_args.param_out.has_value()) {
-        tt::operations::primary::check_tensor(tensor_args.param_out.value(), "moreh_adamw", "param_out");
+        check_tensor(tensor_args.param_out.value(), "moreh_adamw", "param_out");
     }
     if (tensor_args.exp_avg_out.has_value()) {
-        tt::operations::primary::check_tensor(tensor_args.exp_avg_out.value(), "moreh_adamw", "exp_avg_out");
+        check_tensor(tensor_args.exp_avg_out.value(), "moreh_adamw", "exp_avg_out");
     }
     if (tensor_args.exp_avg_sq_out.has_value()) {
-        tt::operations::primary::check_tensor(tensor_args.exp_avg_sq_out.value(), "moreh_adamw", "exp_avg_sq_out");
+        check_tensor(tensor_args.exp_avg_sq_out.value(), "moreh_adamw", "exp_avg_sq_out");
     }
     if (tensor_args.max_exp_avg_sq_out.has_value()) {
-        tt::operations::primary::check_tensor(
+        check_tensor(
             tensor_args.max_exp_avg_sq_out.value(), "moreh_adamw", "max_exp_avg_sq_out");
     }
 }

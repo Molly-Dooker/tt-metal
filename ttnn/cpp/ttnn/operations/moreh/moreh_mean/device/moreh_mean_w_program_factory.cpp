@@ -19,7 +19,6 @@ MorehMeanOperation::MorehMeanWFactory::cached_program_t MorehMeanOperation::More
     tensor_return_value_t& output) {
     using namespace tt;
     using namespace tt::tt_metal;
-    using namespace tt::operations::primary;
 
     auto input = tensor_args.input;
     auto compute_kernel_config =

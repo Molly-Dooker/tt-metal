@@ -9,11 +9,12 @@
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/common/work_split.hpp"
 
-namespace tt {
+namespace ttnn {
 namespace operations {
-namespace primary {
 
-using namespace constants;
+using namespace tt;
+using namespace tt::tt_metal;
+using namespace tt::constants;
 
 std::tuple<CoreRangeSet, CoreRangeSet, CoreRangeSet> add_core_offset(
     CoreRangeSet all_cores,
@@ -474,6 +475,5 @@ std::tuple<uint32_t, uint32_t, uint32_t, uint32_t> extract_and_scale_spatial_dim
     return { Wt, Ht, inner_tile_size, reduce_tile_size};
 }
 
-}  // namespace primary
 }  // namespace operations
 }  // namespace tt

@@ -19,7 +19,6 @@ MorehMeanOperation::MorehMeanNCFactory::cached_program_t MorehMeanOperation::Mor
     tensor_return_value_t& output) {
     using namespace tt;
     using namespace tt::tt_metal;
-    using namespace tt::operations::primary;
 
     auto input = tensor_args.input;
     auto dim = operation_attributes.dim;

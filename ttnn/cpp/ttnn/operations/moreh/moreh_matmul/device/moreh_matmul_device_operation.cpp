@@ -23,10 +23,10 @@ void MorehMatmulOperation::validate_inputs(
     const auto &output = tensor_args.output;
 
     // validate tensor
-    tt::operations::primary::check_tensor(input, "moreh_matmul", "input");
-    tt::operations::primary::check_tensor(other, "moreh_matmul", "other");
-    tt::operations::primary::check_tensor(output, "moreh_matmul", "output");
-    tt::operations::primary::check_tensor(bias, "moreh_matmul", "bias");
+    check_tensor(input, "moreh_matmul", "input");
+    check_tensor(other, "moreh_matmul", "other");
+    check_tensor(output, "moreh_matmul", "output");
+    check_tensor(bias, "moreh_matmul", "bias");
 
     // check matrix dims
     const auto &input_shape = input.get_shape().value.without_padding();

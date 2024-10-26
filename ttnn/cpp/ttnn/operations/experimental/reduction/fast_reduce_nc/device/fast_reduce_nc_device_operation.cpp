@@ -46,12 +46,14 @@ Tensor _fast_reduce_nc(
 
 void FastReduceNCDeviceOperation::validate_with_output_tensors(
     const std::vector<Tensor>& input_tensors, const std::vector<std::optional<Tensor>>& output_tensors) const {
+    using namespace ttnn::operations;
+
     const auto& input = input_tensors.at(0);
     auto& output = output_tensors.at(0);
 
     // validate tensor
-    tt::operations::primary::check_tensor(input, "FastReduceNC", "input", {DataType::BFLOAT16, DataType::BFLOAT8_B});
-    tt::operations::primary::check_tensor(output, "FastReduceNC", "output", {DataType::BFLOAT16, DataType::BFLOAT8_B});
+    check_tensor(input, "FastReduceNC", "input", {DataType::BFLOAT16, DataType::BFLOAT8_B});
+    check_tensor(output, "FastReduceNC", "output", {DataType::BFLOAT16, DataType::BFLOAT8_B});
 
     // validate input dim
     const auto input_rank = input.get_logical_shape().rank();
