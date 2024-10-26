@@ -98,7 +98,7 @@ MorehGroupNormOperation::MorehGroupNormFactory::cached_program_t MorehGroupNormO
          core_group_1,
          core_group_2,
          num_rows_per_core_group_1,
-         num_rows_per_core_group_2] = tt_metal::split_work_to_cores(grid, num_rows);
+         num_rows_per_core_group_2] = split_work_to_cores(grid, num_rows);
 
     log_debug(LogTest, "num_cores_to_be_used: {}", num_cores_to_be_used);
     log_debug(LogTest, "num_rows_per_core_group_1: {}", num_rows_per_core_group_1);

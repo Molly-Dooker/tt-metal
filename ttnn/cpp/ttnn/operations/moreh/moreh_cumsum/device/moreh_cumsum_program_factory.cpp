@@ -72,7 +72,7 @@ MorehCumsumDeviceOperation::ProgramFactory::cached_program_t MorehCumsumDeviceOp
 
     const auto
         [num_cores, all_cores, core_group_1, core_group_2, num_cols_per_core_group_1, num_cols_per_core_group_2] =
-            tt::tt_metal::split_work_to_cores(grid, num_tiles_per_chip);
+            split_work_to_cores(grid, num_tiles_per_chip);
 
     ////////////////////////////////////////////////////////////////////////////
     //                         CircularBuffer Setup

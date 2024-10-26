@@ -84,7 +84,7 @@ MorehLayerNormBackwardGammaBetaGradOperation::ProgramFactory::create(
 
     const auto
         [num_cores, all_cores, core_group_1, core_group_2, num_cols_per_core_group_1, num_cols_per_core_group_2] =
-            tt::tt_metal::split_work_to_cores(grid, num_inner);
+            split_work_to_cores(grid, num_inner);
 
     auto arch = input.device()->arch();
     auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc, dst_full_sync_en] =

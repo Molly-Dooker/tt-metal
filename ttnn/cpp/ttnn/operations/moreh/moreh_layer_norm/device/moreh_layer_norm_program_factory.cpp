@@ -109,7 +109,7 @@ MorehLayerNormOperation::ProgramFactory::cached_program_t MorehLayerNormOperatio
     // core_group_2[(x=0, y=0), (x=0, y=1)] works for 2 rows. Others work for 1 row.
     const auto
         [num_cores, all_cores, core_group_1, core_group_2, num_rows_per_core_group_1, num_rows_per_core_group_2] =
-            tt::tt_metal::split_work_to_cores(grid, num_outer);
+            split_work_to_cores(grid, num_outer);
 
     auto arch = input.device()->arch();
     auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc, dst_full_sync_en] =

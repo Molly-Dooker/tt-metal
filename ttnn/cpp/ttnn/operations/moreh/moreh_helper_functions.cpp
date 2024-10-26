@@ -52,9 +52,7 @@ std::tuple<CoreRangeSet, CoreRangeSet, CoreRangeSet> add_core_offset(
     return std::make_tuple(new_all_cores, new_core_group_1, new_core_group_2);
 }
 
-// TODO(hyungsuk.choi): change function name. This function name duplicates a function in `tt::tt_metal` and causes
-// ambiguous behavior due to the `CoreCoord` constructor in `CoreRange`.
-std::tuple<uint32_t, CoreRangeSet, CoreRangeSet, CoreRangeSet, uint32_t, uint32_t> split_work_to_cores(
+std::tuple<uint32_t, CoreRangeSet, CoreRangeSet, CoreRangeSet, uint32_t, uint32_t> split_work_to_cores_wt_core_range(
     CoreRange core_range, uint32_t units_to_divide) {
     uint32_t core_w = core_range.end_coord.x - core_range.start_coord.x + 1;
     uint32_t core_h = core_range.end_coord.y - core_range.start_coord.y + 1;

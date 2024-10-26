@@ -34,7 +34,7 @@ MorehSoftmaxOperation::MorehSoftmaxHSmallFactory::create(
     uint32_t core_h = core_range.end_coord.y - core_range.start_coord.y + 1;
 
     auto [num_cores, all_cores, core_group_1, core_group_2, num_tiles_per_core_group_1, num_tiles_per_core_group_2] =
-        split_work_to_cores(core_range, num_cols_tiles);
+        split_work_to_cores_wt_core_range(core_range, num_cols_tiles);
 
     auto arch = input.device()->arch();
     auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc, dst_full_sync_en] =

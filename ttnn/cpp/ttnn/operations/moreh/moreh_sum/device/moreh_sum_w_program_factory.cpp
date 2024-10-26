@@ -75,7 +75,7 @@ MorehSumOperation::MorehSumWFactory::cached_program_t MorehSumOperation::MorehSu
         {0, 0}, {compute_with_storage_grid_size.x - 1, compute_with_storage_grid_size.y - 1});
 
     auto [num_cores, all_cores, core_group_1, core_group_2, num_rows_per_core_group_1, num_rows_per_core_group_2] =
-        split_work_to_cores(all_core_range, num_rows);
+        split_work_to_cores_wt_core_range(all_core_range, num_rows);
 
     string compute_kernel_name =
         "ttnn/cpp/ttnn/operations/moreh/moreh_sum/device/moreh_sum_w_impl_kernels/moreh_sum_w.cpp";

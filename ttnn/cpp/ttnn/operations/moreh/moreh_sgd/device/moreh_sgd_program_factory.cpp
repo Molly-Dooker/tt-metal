@@ -14,6 +14,9 @@ MorehSgdOperation::ProgramFactory::cached_program_t MorehSgdOperation::ProgramFa
     const operation_attributes_t& operation_attributes,
     const tensor_args_t& tensor_args,
     tensor_return_value_t& output_tensor) {
+    using namespace tt;
+    using namespace tt::tt_metal;
+
     auto& param_in = tensor_args.param_in;
     auto& grad = tensor_args.grad;
     const std::optional<Tensor>& momentum_buffer_in = tensor_args.momentum_buffer_in;
@@ -52,7 +55,7 @@ MorehSgdOperation::ProgramFactory::cached_program_t MorehSgdOperation::ProgramFa
     uint32_t core_h = grid.y;
 
     auto [num_cores, all_cores, core_group_1, core_group_2, num_tiles_per_core_group_1, num_tiles_per_core_group_2] =
-        tt::tt_metal::split_work_to_cores(grid, units_to_divide);
+        split_work_to_cores(grid, units_to_divide);
 
     auto arch = param_in.device()->arch();
     auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc, dst_full_sync_en] =

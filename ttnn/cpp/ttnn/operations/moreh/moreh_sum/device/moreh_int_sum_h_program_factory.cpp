@@ -14,6 +14,9 @@ MorehSumOperation::MorehSumHIntFactory::cached_program_t MorehSumOperation::More
     const operation_attributes_t& operation_attributes,
     const tensor_args_t& tensor_args,
     tensor_return_value_t& output_tensor) {
+    using namespace tt;
+    using namespace tt::tt_metal;
+
     auto input = tensor_args.input;
     auto output = output_tensor;
 
@@ -67,7 +70,7 @@ MorehSumOperation::MorehSumHIntFactory::cached_program_t MorehSumOperation::More
     const uint32_t out0_t{2};       // output
     const auto
         [num_cores, all_cores, core_group_1, core_group_2, num_cols_per_core_group_1, num_cols_per_core_group_2] =
-            tt::tt_metal::split_work_to_cores(grid, num_cols);
+            split_work_to_cores(grid, num_cols);
 
     log_debug(
         tt::LogOp,

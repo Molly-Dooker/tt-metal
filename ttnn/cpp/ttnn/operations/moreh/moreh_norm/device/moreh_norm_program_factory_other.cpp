@@ -12,6 +12,9 @@ MorehNormOperation::ProgramFactoryOther::cached_program_t MorehNormOperation::Pr
     const operation_attributes_t& operation_attributes,
     const tensor_args_t& tensor_args,
     tensor_return_value_t& output) {
+    using namespace tt;
+    using namespace tt::tt_metal;
+
     const auto& input = tensor_args.input;
     const auto p = operation_attributes.p;
     const auto dim = operation_attributes.dim;
@@ -68,7 +71,7 @@ MorehNormOperation::ProgramFactoryOther::cached_program_t MorehNormOperation::Pr
          core_group_1,
          core_group_2,
          num_units_per_core_group_1,
-         num_units_per_core_group_2] = tt::tt_metal::split_work_to_cores(grid, num_output_tiles);
+         num_units_per_core_group_2] = split_work_to_cores(grid, num_output_tiles);
 
     ////////////////////////////////////////////////////////////////////////////
     //                         CircularBuffer Setup

@@ -82,7 +82,7 @@ MorehGetItemOperation::MorehGetItemRmFactory::cached_program_t MorehGetItemOpera
     uint32_t core_h = core_range.end_coord.y - core_range.start_coord.y + 1;
 
     auto [num_cores, all_cores, core_group_1, core_group_2, num_units_per_core_group_1, num_units_per_core_group_2] =
-        split_work_to_cores(core_range, num_units);
+        split_work_to_cores_wt_core_range(core_range, num_units);
 
     Program program = Program();
 
