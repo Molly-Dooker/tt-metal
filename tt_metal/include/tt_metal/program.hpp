@@ -9,6 +9,7 @@
 
 #include "tt_metal/impl/kernels/kernel_types.hpp"
 #include "tt_metal/impl/buffers/circular_buffer_types.hpp"
+#include "tt_metal/tt_stl/span.hpp"
 
 //==================================================
 //                  PROGRAM MANAGEMENT
@@ -22,7 +23,7 @@ namespace v1 {
  *
  * @return Program handle to the created program.
  */
-Program CreateProgram();
+ProgramHandle CreateProgram();
 
 
 /**
@@ -35,7 +36,7 @@ Program CreateProgram();
  * @return KernelHandle representing the kernel ID.
  */
 KernelHandle CreateKernel(
-    Program program,
+    ProgramHandle &program,
     std::string_view file_name,
     const CoreRangeSet &core_spec,
     const DataMovementConfig &config);
@@ -50,7 +51,7 @@ KernelHandle CreateKernel(
  * @return KernelHandle representing the kernel ID.
  */
 KernelHandle CreateKernel(
-    Program program,
+    ProgramHandle &program,
     std::string_view file_name,
     const CoreRangeSet &core_spec,
     const ComputeConfig &config);
@@ -65,7 +66,7 @@ KernelHandle CreateKernel(
  * @return KernelHandle representing the kernel ID.
  */
 KernelHandle CreateKernel(
-    Program program,
+    ProgramHandle &program,
     std::string_view file_name,
     const CoreRangeSet &core_spec,
     const EthernetConfig &config);
@@ -81,9 +82,9 @@ KernelHandle CreateKernel(
  * @return Semaphore address as a uint32_t.
  */
 uint32_t CreateSemaphore(
-    Program program,
+    ProgramHandle &program,
     const CoreRangeSet &core_spec,
-    uint32_t initial_value,
+    std::uint32_t initial_value,
     CoreType core_type = CoreType::WORKER);
 
 
@@ -95,8 +96,8 @@ uint32_t CreateSemaphore(
  * @param config Configuration for the circular buffer.
  * @return CBHandle representing the Circular Buffer ID.
  */
-CBHandle CreateCircularBuffer(
-    Program program,
+CircularBufferHandle CreateCircularBuffer(
+    ProgramHandle &program,
     const CoreRangeSet &core_spec,
     const CircularBufferConfig &config);
 
@@ -107,7 +108,7 @@ CBHandle CreateCircularBuffer(
  * @param cb_handle Handle of the circular buffer.
  * @return Reference to the CircularBufferConfig.
  */
-const CircularBufferConfig &GetCircularBufferConfig(Program program, CBHandle cb_handle);
+const CircularBufferConfig &GetCircularBufferConfig(ProgramHandle &program, CircularBufferHandle cb_handle);
 
 /**
  * @brief Retrieves the circular buffers associated with the program.
@@ -115,7 +116,7 @@ const CircularBufferConfig &GetCircularBufferConfig(Program program, CBHandle cb
  * @param program The program to query.
  * @return Reference to a vector of shared pointers to CircularBuffer objects.
  */
-const std::vector<CircularBuffer> &GetCircularBuffers(Program program);
+stl::Span<const std::shared_ptr<CircularBuffer>> GetCircularBuffers(ProgramHandle &program);
 
 /**
  * @brief Retrieves the circular buffers associated with the program on a specific core range.
@@ -124,7 +125,7 @@ const std::vector<CircularBuffer> &GetCircularBuffers(Program program);
  * @param cr The core range to consider.
  * @return Vector of shared pointers to CircularBuffer objects on the core range.
  */
-std::vector<CircularBuffer> GetCircularBuffersOnCoreRange(Program program, const CoreRange &cr);
+std::vector<std::shared_ptr<CircularBuffer>> GetCircularBuffersOnCoreRange(ProgramHandle &program, CoreRange cr);
 
 
 //==================================================
@@ -138,7 +139,7 @@ std::vector<CircularBuffer> GetCircularBuffersOnCoreRange(Program program, const
  * @param cb_handle Handle of the circular buffer.
  * @param total_size New total size of the circular buffer in bytes.
  */
-void UpdateCircularBufferTotalSize(Program program, CBHandle cb_handle, uint32_t total_size);
+void UpdateCircularBufferTotalSize(ProgramHandle &program, CircularBufferHandle cb_handle, std::uint32_t total_size);
 
 /**
  * @brief Updates the address of a dynamic circular buffer.
@@ -147,7 +148,7 @@ void UpdateCircularBufferTotalSize(Program program, CBHandle cb_handle, uint32_t
  * @param cb_handle Handle of the circular buffer.
  * @param buffer Dynamically allocated L1 buffer that shares address space with the circular buffer.
  */
-void UpdateDynamicCircularBufferAddress(Program program, CBHandle cb_handle, const Buffer buffer);
+void UpdateDynamicCircularBufferAddress(ProgramHandle &program, CircularBufferHandle cb_handle, BufferHandle buffer);
 
 
 /**
@@ -155,7 +156,7 @@ void UpdateDynamicCircularBufferAddress(Program program, CBHandle cb_handle, con
  *
  * @param program The program to modify.
  */
-void CaptureMultiDeviceDependencies(Program program);
+void CaptureMultiDeviceDependencies(ProgramHandle &program);
 
 
 } // namespace v1
