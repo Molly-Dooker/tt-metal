@@ -258,6 +258,14 @@ OptimizedConvBlockConfig determine_per_core_conv_block_config(
                                ? round_up(padded_in_channels * window_w, 32)
                                : padded_in_channels;
 
+    //Set to minimum possible act_block size
+    if(act_block_div == 0) {
+        if (parallel_config.shard_scheme == TensorMemoryLayout::WIDTH_SHARDED) {
+            act_block_div = padded_in_channels * window_h * window_w / parallel_config.grid.num_cores();
+        } else {
+            act_block_div = act_block_h_ntiles;
+        }
+    }
 
     if (parallel_config.shard_scheme == TensorMemoryLayout::WIDTH_SHARDED) {
         uint32_t full_act_block_w = padded_in_channels * window_h * window_w;
@@ -394,10 +402,8 @@ std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool, bool> get_conv_padded_input_sh
         (!input_tensor_on_device || input_tensor_.is_sharded()) || conv_config.shard_layout.has_value(),
         "Tesor must be sharded or shard_layout must be set.");
 
-    TensorMemoryLayout shard_layout;
-    if (conv_config.shard_layout.has_value()) {
-        shard_layout = conv_config.shard_layout.value();
-    }
+    TT_FATAL(conv_config.shard_layout.has_value(),"Expects conv_config.shard_layout to be set.");
+    TensorMemoryLayout shard_layout = conv_config.shard_layout.value();
 
     bool use_non_tile_height = shard_layout == TensorMemoryLayout::HEIGHT_SHARDED && out_channels <= 256 && conv_config.act_block_div == 1 &&
         conv_config.dtype == DataType::BFLOAT16 && conv_config.output_layout == Layout::ROW_MAJOR;
@@ -775,7 +781,7 @@ static void adjust_conv_op_config_for_auto_shard(
         stride,
         compute_grid_size);
 
-    if (conv_config.act_block_h_override == 0 && conv_config.shard_layout != TensorMemoryLayout::WIDTH_SHARDED) {
+    if (conv_config.act_block_div == 1 && conv_config.shard_layout != TensorMemoryLayout::WIDTH_SHARDED) {
         if (in_channels <= constants::TILE_WIDTH / 2 && conv_config.input_channels_alignment == constants::TILE_WIDTH &&
             !is_mm_conv && conv_config.shard_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
             log_debug(LogOp, "Auto shard, enable shallow conv");
@@ -786,7 +792,7 @@ static void adjust_conv_op_config_for_auto_shard(
 
         // Set act_block_h_override to min value to
         // be conservative with L1 memory usage.
-        conv_config.act_block_h_override = constants::TILE_HEIGHT;
+        conv_config.act_block_div = -1;
     }
 }
 
@@ -833,8 +839,7 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
     }
 
     WormholeComputeKernelConfig compute_config = compute_config_.value_or(WormholeComputeKernelConfig());
-    uint32_t output_height = ((input_height - kernel_size[0] - ((kernel_size[0] - 1 ) * (dilation[0] - 1)) + 2 * padding[0]) / stride[0]) + 1;
-    uint32_t output_width = ((input_width - kernel_size[1] - ((kernel_size[0] - 1 ) * (dilation[0] - 1)) + 2 * padding[1]) / stride[1]) + 1;
+
     auto [input_tensor_post_tm, parallel_config, tensor_manipulated, use_non_tile_height] = shard_or_reshard_tensor_if_required(
         device, input_tensor, conv_config, batch_size, output_height, output_width, in_channels, out_channels, mm_conv);
     if (tensor_manipulated) {

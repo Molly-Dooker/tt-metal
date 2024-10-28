@@ -1135,7 +1135,7 @@ def test_resnet50_conv_wh_fp32(
         (1, 1280, 1280, 16, 16, 3, 3, 2, 2, 1, 1, False, None),  # bfloat16 doesnt fit.
         (1, 1280, 1280, 8, 8, 3, 3, 1, 1, 1, 1, False, None),  # bfloat16 weights doesnt fit
         # (1, 1280, 1280, 32, 32, 3, 3, 1, 1, 1, 1, False, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
-        (1, 640, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_div": 4}),
+        (1, 640, 640, 64, 64, 3, 3, 1, 1, 1, 1, False, {"act_block_div": 16}),
         # (1, 1280, 2560, 8, 8, 3, 3, 1, 1, 1, 1, False, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
         # (1, 1280, 2560, 16, 16, 3, 3, 1, 1, 1, 1, False, None), IndexError: vector::_M_range_check: __n (which is 1) >= this->size() (which is 1)
         # sd convs with HxW=64x64 with batch size=2
