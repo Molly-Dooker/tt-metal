@@ -542,6 +542,7 @@ def run_entry_command(entry, screen_lock, output_entries, screen_needs_update):
         "model": "pytest models/demos/llama3/tests/test_llama_model.py -k full",
         "model-quick": "pytest models/demos/llama3/tests/test_llama_model.py -k quick",
         "model-prefill": "pytest models/demos/llama3/tests/test_llama_model_prefill.py",
+        "perf": "pytest models/demos/llama3/tests/test_llama_perf.py -k 1024",
     }
 
     # Check if the command is a shortcut and replace it if necessary
