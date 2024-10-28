@@ -6,8 +6,6 @@
 
 set -euo pipefail
 
-sudo apt install -y patchelf
-
 cd tt_metal/third_party/umd
 git clean -xffd
 cmake -B build -G Ninja -DTT_UMD_BUILD_TESTS=ON -DBUILD_SHARED_LIBS=OFF

@@ -157,7 +157,7 @@ jobs:
         with:
           name: TTMetal_build_${{ matrix.arch }}${{ (inputs.tracy && '_profiler') || '' }}
           path: ttm_${{ matrix.arch }}.tar
-  umd-unit-tests:
+  build-umd-artifact:
     needs: build-docker-image
     if: always()
     timeout-minutes: 5
