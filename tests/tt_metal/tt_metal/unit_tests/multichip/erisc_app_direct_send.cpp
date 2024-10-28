@@ -135,7 +135,7 @@ bool send_over_eth(
 
 }  // namespace unit_tests::erisc::direct_send
 
-TEST_F(N300DeviceFixture, SingleEthCoreDirectSendChip0ToChip1) {
+TEST_F(N300DeviceFixture, EthSingleCoreDirectSendChip0ToChip1) {
     GTEST_SKIP();
     ASSERT_TRUE(this->num_devices_ == 2);
     const auto& device_0 = devices_.at(0);
@@ -164,7 +164,7 @@ TEST_F(N300DeviceFixture, SingleEthCoreDirectSendChip0ToChip1) {
         device_0, device_1, sender_core_1, receiver_core_1, WORD_SIZE * MAX_NUM_WORDS));
 }
 
-TEST_F(N300DeviceFixture, SingleEthCoreDirectSendChip1ToChip0) {
+TEST_F(N300DeviceFixture, EthSingleCoreDirectSendChip1ToChip0) {
     GTEST_SKIP();
     ASSERT_TRUE(this->num_devices_ == 2);
     const auto& device_0 = devices_.at(0);
@@ -193,7 +193,7 @@ TEST_F(N300DeviceFixture, SingleEthCoreDirectSendChip1ToChip0) {
         device_1, device_0, sender_core_1, receiver_core_1, WORD_SIZE * MAX_NUM_WORDS));
 }
 
-TEST_F(N300DeviceFixture, BidirectionalEthCoreDirectSend) {
+TEST_F(N300DeviceFixture, EthBidirectionalCoreDirectSend) {
     GTEST_SKIP();
     ASSERT_TRUE(this->num_devices_ == 2);
     const auto& device_0 = devices_.at(0);
@@ -238,7 +238,7 @@ TEST_F(N300DeviceFixture, BidirectionalEthCoreDirectSend) {
         device_1, device_0, receiver_core_1, sender_core_1, WORD_SIZE * MAX_NUM_WORDS));
 }
 
-TEST_F(N300DeviceFixture, RandomDirectSendTests) {
+TEST_F(N300DeviceFixture, EthRandomDirectSendTests) {
     GTEST_SKIP();
     srand(0);
     ASSERT_TRUE(this->num_devices_ == 2);
