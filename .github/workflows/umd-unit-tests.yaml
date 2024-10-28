@@ -69,4 +69,7 @@ jobs:
           name: umd_${{ inputs.arch }}
       - name: Run UMD unit tests
         timeout-minutes: ${{ inputs.timeout }}
+        env:
+          # Unfortunately need this still
+          LD_LIBRARY_PATH: ${{ github.workspace }}/_umd/lib
         run: ldd _umd/${{ inputs.arch }}/unit_tests
