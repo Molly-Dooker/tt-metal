@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-apt install patchelf
+sudo apt install -y patchelf
 
 cd tt_metal/third_party/umd
 git clean -xffd
