@@ -8,7 +8,6 @@ import torch
 import ttnn
 from ttnn import ShardTensorToMesh
 from models.demos.t3000.falcon40b.tt.model_utils import matmul_2d_config_from_tensor_shapes
-from models.demos.t3000.llama2_70b.tt.llama_rope import TtLlamaRotary
 
 
 class TtLlamaAttention_optimized:
@@ -57,16 +56,6 @@ class TtLlamaAttention_optimized:
         self.transformation_mats = transformation_mats
 
         self.kv_dtype = ttnn.bfloat8_b
-
-        # Set up rotary embeddings
-        self.rope_decode = TtLlamaRotary(
-            mesh_device,
-            self.max_batch_size,
-            self.head_dim,
-            self.max_seq_len,
-            "decode",
-            datatype=ttnn.bfloat16,
-        )
 
         self.load_weights()
         if not vllm:
@@ -217,12 +206,16 @@ class TtLlamaAttention_optimized:
         page_table=None,
         kv_cache=None,
         mode="decode",
-        position_ids=None,
     ):
         # Decode should have input tensor of shape (seqlen=1, 1, batch, hidden_size)
         if mode == "decode":
             return self.decode_forward(
-                xs, rot_mats, start_pos, cache_idxs, page_table=page_table, kv_cache=kv_cache, position_ids=position_ids
+                xs,
+                rot_mats,
+                start_pos,
+                cache_idxs,
+                page_table=page_table,
+                kv_cache=kv_cache,
             )
         # Prefill should have input tensor of shape (1, batch=1, seqlen, hidden_size)
         elif mode == "prefill":
@@ -230,16 +223,14 @@ class TtLlamaAttention_optimized:
         else:
             raise ValueError(f"Unknown llm_mode: {mode}")
 
-    def decode_forward(
-        self, xs, rot_mats, start_pos: int, cache_idxs, page_table=None, kv_cache=None, position_ids=None
-    ):
-        query_layer, key_layer, value_layer = self.attn_qkv(xs, cache_idxs, position_ids)
+    def decode_forward(self, xs, rot_mats, start_pos: int, cache_idxs, page_table=None, kv_cache=None):
+        query_layer, key_layer, value_layer = self.attn_qkv(xs, rot_mats, cache_idxs)
         attn_outputs = self.attn_mqa(
             query_layer, key_layer, value_layer, start_pos, cache_idxs, page_table=page_table, kv_cache=kv_cache
         )
         return self.attn_selfout(attn_outputs)
 
-    def attn_qkv(self, xs, cache_idxs, postion_idxs):
+    def attn_qkv(self, xs, rot_mats, cache_idxs):
         # Fused QKV
         fused_query_key_value = ttnn.matmul(
             xs,
@@ -271,11 +262,19 @@ class TtLlamaAttention_optimized:
 
         fused_query_key_value.deallocate(True)
 
-        # ROTARY EMBEDDINGS
-        cos, sin = self.rope_decode.prepare_cos_sin(position_ids=position_ids)
-        query_layer, key_layer = self.rope_decode(query_layer, key_layer, cos, sin)
+        # Q ROTARY EMBEDDINGS
+        query_layer_ret = ttnn.experimental.rotary_embedding_llama(
+            query_layer, rot_mats[0], rot_mats[1], self.transformation_mats["decode"]
+        )
+        query_layer.deallocate(True)
 
-        return query_layer, key_layer, value_layer
+        # K Rotary Embeddings
+        key_layer_ret = ttnn.experimental.rotary_embedding_llama(
+            key_layer, rot_mats[0], rot_mats[1], self.transformation_mats["decode"]
+        )
+        key_layer.deallocate(True)
+
+        return query_layer_ret, key_layer_ret, value_layer
 
     def attn_mqa(self, query_layer, key_layer, value_layer, start_pos: int, cache_idxs, page_table=None, kv_cache=None):
         # K CACHE UPDATE
@@ -413,14 +412,14 @@ class TtLlamaAttention_optimized:
         # Q Rotary Embeddings
         # query_layer: ttnn.Shape([1, 8, seq_len, 128]) -> [bsz, n_local_heads, seq_len, head_dim]
         query_layer_ret = ttnn.experimental.rotary_embedding_llama(
-            query_layer, rot_mats[0], rot_mats[1], self.transformation_mats
+            query_layer, rot_mats[0], rot_mats[1], self.transformation_mats["prefill"]
         )
         query_layer.deallocate(True)
 
         # K Rotary Embeddings
         # key_layer: ttnn.Shape([1, 1, seq_len, 128]) -> [bsz, n_local_kv_heads, seq_len, head_dim]
         key_layer_ret = ttnn.experimental.rotary_embedding_llama(
-            key_layer, rot_mats[0], rot_mats[1], self.transformation_mats
+            key_layer, rot_mats[0], rot_mats[1], self.transformation_mats["prefill"]
         )
         key_layer.deallocate(True)
 

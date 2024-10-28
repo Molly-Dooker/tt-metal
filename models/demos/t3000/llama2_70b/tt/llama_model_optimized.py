@@ -21,6 +21,7 @@ from models.demos.t3000.llama2_70b.tt.llama_common import (
     get_rot_transformation_mat,
 )
 from models.demos.t3000.falcon40b.tt.model_utils import matmul_2d_config
+from models.demos.t3000.llama2_70b.tt.llama_rope import TtLlamaRotarySetup
 
 
 class TtLlamaModel_optimized:
@@ -59,7 +60,7 @@ class TtLlamaModel_optimized:
         self.cache_path = cache_path
         # Transformation matrix for rotary embeddings
         transformation_mat_torch = get_rot_transformation_mat(32)  # 32 for tile size
-        transformation_mats = ttnn.as_tensor(
+        transformation_mats_prefill = ttnn.as_tensor(
             transformation_mat_torch,
             dtype=ttnn.bfloat16,
             layout=ttnn.TILE_LAYOUT,
@@ -67,7 +68,13 @@ class TtLlamaModel_optimized:
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             mesh_mapper=ReplicateTensorToMesh(mesh_device),
         )
-        transformation_mats = ttnn.to_device(transformation_mats, mesh_device)
+        transformation_mats_prefill = ttnn.to_device(transformation_mats_prefill, mesh_device)
+
+        # Transformation matrix for rotary embeddings (decode)
+        self.rope_setup_decode = TtLlamaRotarySetup(self.mesh_device, self.head_dim, self.max_seq_len, self.rope_theta)
+        transformation_mats_decode = self.rope_setup_decode.get_trans_mats()
+
+        transformation_mats = {"prefill": transformation_mats_prefill, "decode": transformation_mats_decode}
 
         logger.info("Creating Layers")
         self.layers = [
@@ -265,25 +272,14 @@ class TtLlamaModel_optimized:
             else:
                 cache_idxs = start_pos.to(dtype=torch.int64)
 
-            rot_cache_idxs = torch.maximum(
-                cache_idxs, torch.tensor(0, dtype=torch.int64)
-            )  # Ensure position indices are non-negative
-            rot_mat = get_rotation_mat(self.rot_emb, rot_cache_idxs, seq_len, batch=batch)
-            assert rot_mat.size() == (1, batch, self.head_dim, self.head_dim)
-
-            rot_mats = ttnn.as_tensor(
-                rot_mat,
-                dtype=ttnn.bfloat16,
-                layout=ttnn.ROW_MAJOR_LAYOUT,
-                mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
-            )
-
             cache_idxs_tt = ttnn.as_tensor(
                 cache_idxs,
                 dtype=ttnn.int32,
                 layout=ttnn.ROW_MAJOR_LAYOUT,
                 mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
             )
+
+            rot_mats = self.rope_setup_decode.get_rot_mats(cache_idxs)
 
             if isinstance(page_table, torch.Tensor):
                 # Support vLLM tensor page_table input
@@ -304,7 +300,6 @@ class TtLlamaModel_optimized:
         mode="decode",
         page_table=None,
         return_tokens=False,  # if true, return tokens for decode mode
-        return_rot_mat_rm=False,  # if true, also return rot_mat in row-major layout for decode
     ):
         tt_inp, start_pos, rot_mat, cache_idxs_tt, tt_page_table = self.prepare_inputs(
             tokens, start_pos, valid_seq_len=valid_seq_len, mode=mode, page_table=page_table
@@ -314,9 +309,6 @@ class TtLlamaModel_optimized:
             tt_inp = ttnn.to_device(tt_inp, self.mesh_device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
             tt_inp_emb = self.tt_embd(tt_inp)
             tt_inp_emb = ttnn.interleaved_to_sharded(tt_inp_emb, self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"])
-            rot_mat_rm = ttnn.to_device(rot_mat, self.mesh_device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-            rot_mat = ttnn.to_layout(rot_mat_rm, ttnn.TILE_LAYOUT)
-            rot_mat = ttnn.interleaved_to_sharded(rot_mat, self.model_config["ROT_MAT_MM_IN1_MEMCFG"])
             cache_idxs_tt = ttnn.to_device(cache_idxs_tt, self.mesh_device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
             if tt_page_table is not None:
                 tt_page_table = ttnn.to_device(tt_page_table, self.mesh_device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
@@ -327,8 +319,6 @@ class TtLlamaModel_optimized:
         if mode == "decode":
             if return_tokens:
                 return_out.append(tt_inp)
-            if return_rot_mat_rm:
-                return_out.append(rot_mat_rm)
         return tuple(return_out)
 
     def __call__(
