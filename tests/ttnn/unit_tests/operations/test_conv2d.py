@@ -799,7 +799,7 @@ def test_resnet50_conv_gs(
         # unique convs in rn50 (complete list)
         # first conv post folding and input_channels padding to tile width
         # (8, 64, 16, 115, 115, 4, 4, 1, 1, 0, 0, True, None), HANGS!!
-        (16, 64, 16, 115, 115, 4, 4, 1, 1, 0, 0, True, {"act_block_div": 4}),
+        (16, 64, 16, 115, 115, 4, 4, 1, 1, 0, 0, True, {"act_block_div": 2}),
         # (20, 64, 16, 115, 115, 4, 4, 1, 1, 0, 0, True, {"act_block_div": 4}),  Out of Memory!!
         # rn50 layer1
         (8, 64, 64, 56, 56, 3, 3, 1, 1, 1, 1, True, None),
@@ -808,7 +808,7 @@ def test_resnet50_conv_gs(
         # rn50 layer2
         (8, 128, 128, 56, 56, 3, 3, 2, 2, 1, 1, True, None),
         (16, 128, 128, 56, 56, 3, 3, 2, 2, 1, 1, True, None),
-        (20, 128, 128, 56, 56, 3, 3, 2, 2, 1, 1, True, {"act_block_div": 4}),
+        (20, 128, 128, 56, 56, 3, 3, 2, 2, 1, 1, True, {"act_block_div": 2}),
         (8, 128, 128, 28, 28, 3, 3, 1, 1, 1, 1, True, None),
         (16, 128, 128, 28, 28, 3, 3, 1, 1, 1, 1, True, None),
         (20, 128, 128, 28, 28, 3, 3, 1, 1, 1, 1, True, None),
