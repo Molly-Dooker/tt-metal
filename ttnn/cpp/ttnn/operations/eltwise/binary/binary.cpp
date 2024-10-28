@@ -17,7 +17,7 @@ namespace detail {
 constexpr bool is_associative(BinaryOpType op) {
     return op == BinaryOpType::ADD || op == BinaryOpType::MUL || op == BinaryOpType::EQ || op == BinaryOpType::NE ||
            op == BinaryOpType::LOGICAL_AND || op == BinaryOpType::LOGICAL_OR || op == BinaryOpType::LOGADDEXP ||
-           op == BinaryOpType::LOGADDEXP2;
+           op == BinaryOpType::LOGADDEXP2 || op == BinaryOpType::LOGICAL_XOR;
 }
 
 // Tensor - Scalar
@@ -382,6 +382,7 @@ template struct BinaryOperation<BinaryOpType::MUL>;
 template struct InplaceBinaryOperation<BinaryOpType::MUL>;
 template struct BinaryOperation<BinaryOpType::LOGICAL_AND>;
 template struct BinaryOperation<BinaryOpType::LOGICAL_OR>;
+template struct BinaryOperation<BinaryOpType::LOGICAL_XOR>;
 template struct BinaryOperation<BinaryOpType::LDEXP>;
 template struct BinaryOperation<BinaryOpType::LOGADDEXP>;
 template struct BinaryOperation<BinaryOpType::LOGADDEXP2>;
@@ -406,5 +407,7 @@ template struct InplaceRelationalBinary<BinaryOpType::NE>;
 
 template struct InplaceLogicalBinary<BinaryOpType::LOGICAL_AND>;
 template struct InplaceLogicalBinary<BinaryOpType::LOGICAL_OR>;
+template struct InplaceLogicalBinary<BinaryOpType::LOGICAL_XOR>;
+
 
 }  // namespace ttnn::operations::binary
