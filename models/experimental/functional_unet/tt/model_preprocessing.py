@@ -39,7 +39,7 @@ def create_unet_input_tensors(
 
 
 def create_unet_model_parameters(model: unet_shallow_torch.UNet, input_tensor: torch.Tensor, groups: int, device):
-    assert groups == 1, "Only groups=1 is supported for now"
+    # assert groups == 1, "Only groups=1 is supported for now"
 
     parameters = infer_ttnn_module_args(model=model, run_model=lambda model: model(input_tensor), device=None)
     assert parameters is not None

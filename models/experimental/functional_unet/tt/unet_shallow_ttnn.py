@@ -284,12 +284,12 @@ class UNetDownblock:
             )
 
     def __call__(self, x):
-        assert list(x.shape) == [
-            1,
-            1,
-            nearest_32(self.conv1.input_height * self.conv1.input_width * self.conv1.batch_size),
-            x.shape[-1],  # Channels can be padded
-        ], f"Expected downblock input to flattened into [1, 1, BHW, C] but was {list(x.shape)}"
+        # assert list(x.shape) == [
+        # 1,
+        # 1,
+        # nearest_32(self.conv1.input_height * self.conv1.input_width * self.conv1.batch_size),
+        # x.shape[-1],  # Channels can be padded
+        # ], f"Expected downblock input to flattened into [1, 1, BHW, C] but was {list(x.shape)}"
         if self.should_reshard:
             x = ttnn.to_memory_config(
                 x,

@@ -19,7 +19,7 @@ from models.experimental.functional_unet.tests.common import (
 )
 
 
-@pytest.mark.parametrize("batch, groups", [(2, 1)])
+@pytest.mark.parametrize("batch, groups", [(1, 2)])
 @pytest.mark.parametrize(
     "block_name, input_channels, input_height, input_width",
     [
@@ -41,7 +41,7 @@ def test_unet_downblock(
     reset_seeds,
 ):
     torch_input, ttnn_input = create_unet_input_tensors(device, batch, groups, pad_input=False)
-    model = unet_shallow_torch.UNet.from_random_weights(groups=1)
+    model = unet_shallow_torch.UNet.from_random_weights(groups=groups)
 
     parameters = create_unet_model_parameters(model, torch_input, groups=groups, device=device)
     ttnn_model = unet_shallow_ttnn.UNet(parameters, device)
