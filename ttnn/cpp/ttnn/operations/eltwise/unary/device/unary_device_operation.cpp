@@ -30,8 +30,8 @@ void validate_supported_arch_dtype(
         case UnaryOpType::FILL:
            if(arch == tt::ARCH::GRAYSKULL){
                 TT_FATAL(
-                    input_datatype == DataType::BFLOAT16,
-                    "Supported input data type '{}' for UnaryOpType '{}' on Grayskull.",
+                    (input_datatype == DataType::BFLOAT16 || input_datatype == DataType::BFLOAT8_B),
+                    "Unsupported input data type '{}' for UnaryOpType '{}' on Grayskull.",
                     static_cast<int>(input_datatype),
                     static_cast<int>(op_type));
                 }
