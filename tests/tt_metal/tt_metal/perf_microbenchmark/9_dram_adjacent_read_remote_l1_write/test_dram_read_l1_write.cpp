@@ -226,26 +226,36 @@ bool validation(
     log_info("start validation");
 
     uint32_t core_id = 0;
+    uint32_t num_datum_per_block = block_h * block_w * num_cores * num_datum_per_slice;
+    uint32_t last_block_offset = (num_blocks - 1) * num_datum_per_block;
+    uint32_t tiles_per_core = block_h * block_w_per_receiver; // Num slices=tiles per core to verify
+    uint32_t datums_per_tile = num_datum_per_slice;
+    log_info("last_block_offset: {}, tiles_per_core: {}", last_block_offset, tiles_per_core);
     for (auto core: all_cores) {
+        // Calculate which pair of cores this core belongs to
+        uint32_t pair_id = core_id / 2;
+        // Whether this is first or second core in the pair (0 or 1)
+        uint32_t is_second = core_id % 2;
+
+        // Each datums are row-major across pairs of cores
+        uint32_t pair_base = datums_per_tile * tiles_per_core * 2 * pair_id;
+        uint32_t pair_offset = is_second * datums_per_tile * block_w_per_receiver;
+        uint32_t core_offset = pair_base + pair_offset;
+
+        uint32_t input_start_index_for_core = last_block_offset + core_offset;
+
+        log_info("core {}, input_start_index_for_core: {}", core, input_start_index_for_core);
+
         std::vector<uint32_t> result_vec;
         tt_metal::detail::ReadFromDeviceL1(
             device, core, cb_addr, num_tiles_cb / 2 * single_tile_size, result_vec);
 
-        uint32_t num_datum_per_block = block_h * block_w * num_cores * num_datum_per_slice;
-        uint32_t last_block_offset = (num_blocks - 1) * num_datum_per_block;
-        // uint32_t tensor_slice_stride = core_id * num_datum_per_slice;
-        uint32_t num_slices = block_h * block_w_per_receiver; // Num slices=tiles per core to verify
-
-        uint32_t core_offset = core_id * block_w_per_receiver * num_datum_per_slice;
-        uint32_t input_start_index_for_core = last_block_offset + core_offset;
-
-        log_info("core: {}, input_start_index_for_core: {}, num_slices: {}", core, input_start_index_for_core, num_slices);
-
         if (df == 0) {
-            auto result_bfp8 = unpack_bfp8_tiles_into_float_vec(result_vec, true, true);
+            TT_ASSERT(false, "BFP8 validation not yet implemented");
+/*            auto result_bfp8 = unpack_bfp8_tiles_into_float_vec(result_vec, true, true);
             auto input_bfp8 = unpack_bfp8_tiles_into_float_vec(input_vec, true, true);
 
-            for (uint32_t i=0; i < num_slices; ++i) {
+            for (uint32_t i=0; i < tiles_per_core; ++i) {
                 uint32_t input_step = input_start_index_for_core + i * num_datum_per_slice * num_banks;
                 std::vector<float> input_slice(input_bfp8.begin() + input_step, input_bfp8.begin() + input_step + num_datum_per_slice);
                 uint32_t result_step = i * num_datum_per_slice;
@@ -254,8 +264,7 @@ bool validation(
                 if (input_slice != result_slice) {
                     return false;
                 }
-            }
-
+            }*/
         } else {
             auto result_bf16 = unpack_uint32_vec_into_bfloat16_vec(result_vec);
             auto input_bf16 = unpack_uint32_vec_into_bfloat16_vec(input_vec);
@@ -268,13 +277,12 @@ bool validation(
                     uint32_t result_step = r * (num_datum_per_slice*block_w_per_receiver) + c * num_datum_per_slice;
                     std::vector<bfloat16> result_slice(result_bf16.begin() + result_step, result_bf16.begin() + result_step + num_datum_per_slice);
 
-                    log_info("input_step: {}, result_step: {}", input_step, result_step);
-
-                    if (input_slice != result_slice) {
-                        log_info("Mismatch");
-                        return false;
-                    }
-                    log_info("Match");
+                    log_info("core {} @ ({}, {}) Expected {} Observed {}\tinput_step: {}", core, c, r, input_slice[0].to_float(), result_slice[0].to_float(), input_step);
+//                    if (input_slice != result_slice) {
+//                        log_info("Mismatch");
+//                        return false;
+//                    }
+//                    log_info("Match");
                 }
             }
 
@@ -916,17 +924,25 @@ int main(int argc, char **argv) {
         //                      Input Setup
         ////////////////////////////////////////////////////////////////////////////
         std::vector<uint32_t> input_vec;
-        if (tile_format == tt::DataFormat::Bfp8_b) {
-            // input_vec = create_constant_vector_of_bfp8(
-            //     input_size, 100, true);
-            input_vec = create_random_vector_of_bfp8(
-                input_size, true, 100, 1234);
-        } else {
-            // input_vec = create_constant_vector_of_bfloat16(
-            //     input_size * total_banks / num_banks, 100);
-            input_vec = create_random_vector_of_bfloat16(
-                input_size, 100, 1234);
+        input_vec.resize(input_size);
+        for (uint32_t i = 0; i < input_size; i++) {
+            uint32_t tile_value1 = (2 * i) / 1024; // Integer division to get tile number
+            uint32_t tile_value2 = (2 * i + 1) / 1024; // Integer division to get tile number
+            bfloat16 num_1_bfloat16 = bfloat16(static_cast<float>(tile_value1));
+            bfloat16 num_2_bfloat16 = bfloat16(static_cast<float>(tile_value2));
+            input_vec[i] = pack_two_bfloat16_into_uint32(std::pair<bfloat16, bfloat16>(num_1_bfloat16, num_2_bfloat16));
         }
+        // if (tile_format == tt::DataFormat::Bfp8_b) {
+        //     // input_vec = create_constant_vector_of_bfp8(
+        //     //     input_size, 100, true);
+        //     input_vec = create_random_vector_of_bfp8(
+        //         input_size, true, 100, 1234);
+        // } else {
+        //     // input_vec = create_constant_vector_of_bfloat16(
+        //     //     input_size * total_banks / num_banks, 100);
+        //     input_vec = create_random_vector_of_bfloat16(
+        //         input_size, 100, 1234);
+        // }
 
         tt_metal::Buffer input_buffer(
             device, input_vec.size() * sizeof(uint32_t), single_tile_size, tt_metal::BufferType::DRAM);

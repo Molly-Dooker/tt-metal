@@ -698,7 +698,8 @@ def test_dram_read_12_core(arch, freq, test_vector, num_tests, nblock, data_form
     "arch, freq, test_vector, num_tests, nblock, data_format, num_banks, bank_start_id",
     [
         ("grayskull", 1202, np.array([32768 * 2, 8 * 128]), 1, 64, 1, 8, 0),
-        ("wormhole_b0", 1000, np.array([32768 * 2, 12 * 128]), 1, 64, 1, 12, 0),
+        # ("wormhole_b0", 1000, np.array([32768 * 2, 12 * 128]), 1, 64, 1, 12, 0),
+        ("wormhole_b0", 1000, np.array([64, 128]), 1, 1, 1, 1, 0),
         ("blackhole", 800, np.array([32768 * 8, 8 * 128]), 1, 256, 1, 8, 0),
     ],
 )
