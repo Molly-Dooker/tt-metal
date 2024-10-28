@@ -12,7 +12,11 @@ on:
       timeout:
         required: false
         type: number
-        default: 15
+        default: 5
+      build-artifact:
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       arch:
@@ -33,28 +37,36 @@ on:
       timeout:
         required: false
         type: number
-        default: 15
+        default: 5
+      build-artifact:
+        required: false
+        type: boolean
+        default: true
 
 jobs:
+  build-artifact:
+    uses: ./.github/workflows/build-artifact.yaml
+    if: ${{ inputs.build-artifact }}
+    secrets: inherit
+    with:
+      build-docker: true
+      arch: '["${{ inputs.arch }}"]'
   umd-unit-tests:
     name: ${{ inputs.arch }} ${{ inputs.runner-label }}
+    needs: build-artifact
+    if: always()
     runs-on:
       - ${{ inputs.runner-label }}
       - cloud-virtual-machine
       - in-service
     env:
-      TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
       ARCH_NAME: ${{ inputs.arch }}
       LOGURU_LEVEL: INFO
     steps:
       - uses: tenstorrent-metal/metal-workflows/.github/actions/checkout-with-submodule-lfs@v2.0.0
-      - name: Set up dynamic env vars for build
-        run: |
-          echo "TT_METAL_HOME=$(pwd)" >> $GITHUB_ENV
-      - name: Build UMD device and tests
-        run: |
-          cmake -B build -G Ninja -DTT_UMD_BUILD_TESTS=ON
-          cmake --build build --target umd_tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: umd_${{ inputs.arch }}
       - name: Run UMD unit tests
         timeout-minutes: ${{ inputs.timeout }}
-        run: build/test/umd/${{ inputs.arch }}/unit_tests
+        run: ldd _umd/${{ inputs.arch }}/unit_tests

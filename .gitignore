@@ -11,7 +11,7 @@ test_hlk_args_init_gen
 tt_build
 tt_debug
 build
-build_*
+/build_*
 /python_env/
 
 /llk_out/
