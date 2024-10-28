@@ -58,7 +58,7 @@ void py_bind_conv2d(py::module& module) {
                 uint32_t groups,
                 std::optional<const ttnn::Tensor> bias_tensor,
                 std::optional<const Conv2dConfig> conv_config,
-                std::optional<const DeviceComputeKernelConfig> compute_config,
+                std::optional<const WormholeComputeKernelConfig> compute_config,
                 const std::optional<const MemoryConfig> memory_config,
                 const uint8_t& queue_id) -> std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::Tensor>> {
                 return self(queue_id, input_tensor, weight_tensor, device, in_channels, out_channels, batch_size, input_height, input_width, kernel_size, stride, padding, dilation, groups, bias_tensor, conv_config, compute_config, memory_config);
@@ -99,7 +99,7 @@ void py_bind_conv2d(py::module& module) {
                 uint32_t groups,
                 std::optional<const ttnn::Tensor> bias_tensor,
                 std::optional<const Conv2dConfig> conv_config,
-                std::optional<const DeviceComputeKernelConfig> compute_config,
+                std::optional<const WormholeComputeKernelConfig> compute_config,
                 const std::optional<const MemoryConfig> memory_config,
                 const uint8_t& queue_id) -> std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::Tensor>> {
                 return self(queue_id, input_tensor, weight_tensor, device, in_channels, out_channels, batch_size, input_height, input_width, kernel_size, stride, padding, dilation, groups, bias_tensor, conv_config, compute_config, memory_config);

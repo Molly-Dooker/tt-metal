@@ -55,7 +55,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_new(const T
     DataType dtype,
     std::array<std::uint32_t, 4> input_tensor_shape,
     bool use_shallow_conv_variant,
-    std::optional<const DeviceComputeKernelConfig> compute_kernel_config,
+    std::optional<const WormholeComputeKernelConfig> compute_kernel_config,
     Tensor& output,
     bool enable_act_double_buffer,
     bool enable_split_reader,
@@ -75,7 +75,7 @@ struct OptimizedConvNew {
     const DataType dtype;
     std::array<std::uint32_t, 4> input_tensor_shape; // For sharded input, input tensor shape is nonsense
     bool use_shallow_conv_variant;
-    const DeviceComputeKernelConfig compute_kernel_config;
+    const WormholeComputeKernelConfig compute_kernel_config;
     bool enable_act_double_buffer;
     bool enable_split_reader;
     bool enable_subblock_padding;
@@ -89,7 +89,7 @@ struct OptimizedConvNew {
         MemoryConfig out_mem_config,
         DataType dtype,
         std::array<std::uint32_t, 4> input_tensor_shape, bool use_shallow_conv_variant,
-        const DeviceComputeKernelConfig compute_kernel_config, bool enable_act_double_buffer, bool enable_split_reader, bool enable_subblock_padding, bool use_non_tile_height) :
+        const WormholeComputeKernelConfig compute_kernel_config, bool enable_act_double_buffer, bool enable_split_reader, bool enable_subblock_padding, bool use_non_tile_height) :
             output_channels(output_channels),
             groups(groups),
             sliding_window_config(sliding_window_config),
@@ -160,7 +160,7 @@ Tensor optimized_conv_new(const Tensor& a, const Tensor &b, std::optional<const 
     DataType dtype,
     std::array<std::uint32_t, 4> input_tensor_shape,
     bool use_shallow_conv_variant,
-    std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt,
+    const WormholeComputeKernelConfig compute_kernel_config,
     bool enable_act_double_buffer = false,
     bool enable_split_reader = false,
     bool enable_subblock_padding = false,

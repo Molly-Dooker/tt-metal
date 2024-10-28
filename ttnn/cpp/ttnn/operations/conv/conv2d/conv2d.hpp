@@ -164,7 +164,7 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
     uint32_t groups,
     std::optional<const ttnn::Tensor> bias_tensor = std::nullopt,
     std::optional<const Conv2dConfig> conv_config_ = std::nullopt,
-    std::optional<const DeviceComputeKernelConfig> compute_config_ = std::nullopt,
+    std::optional<const WormholeComputeKernelConfig> compute_config_ = std::nullopt,
     const std::optional<const MemoryConfig> memory_config = std::nullopt);
 
 
@@ -186,7 +186,7 @@ struct Conv2dOperation{
         uint32_t groups,
         std::optional<const ttnn::Tensor> bias_tensor = std::nullopt,
         std::optional<const Conv2dConfig> conv_config_ = std::nullopt,
-        std::optional<const DeviceComputeKernelConfig> compute_config_ = std::nullopt,
+        std::optional<const WormholeComputeKernelConfig> compute_config_ = std::nullopt,
         const std::optional<const MemoryConfig> memory_config = std::nullopt){
         return conv2d(input_tensor, weight_tensor, device, in_channels, out_channels, batch_size, input_height, input_width, kernel_size, stride, padding, dilation, groups, bias_tensor, conv_config_, compute_config_, memory_config);
     }
@@ -208,7 +208,7 @@ struct Conv2dOperation{
         uint32_t groups,
         std::optional<const ttnn::Tensor> bias_tensor = std::nullopt,
         std::optional<const Conv2dConfig> conv_config_ = std::nullopt,
-        std::optional<const DeviceComputeKernelConfig> compute_config_ = std::nullopt,
+        std::optional<const WormholeComputeKernelConfig> compute_config_ = std::nullopt,
         const std::optional<const MemoryConfig> memory_config = std::nullopt) {
         return conv2d(input_tensor, weight_tensor, device, in_channels, out_channels, batch_size, input_height, input_width, kernel_size, stride, padding, dilation, groups, bias_tensor, conv_config_, compute_config_, memory_config);
     }

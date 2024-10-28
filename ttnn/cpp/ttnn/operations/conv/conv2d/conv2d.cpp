@@ -399,6 +399,10 @@ std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool, bool> get_conv_padded_input_sh
         shard_layout = conv_config.shard_layout.value();
     }
 
+    bool use_non_tile_height = shard_layout == TensorMemoryLayout::HEIGHT_SHARDED && out_channels <= 256 && conv_config.act_block_div == 1 &&
+        conv_config.dtype == DataType::BFLOAT16 && conv_config.output_layout == Layout::ROW_MAJOR;
+    use_non_tile_height = use_non_tile_height && conv_config.input_channels_alignment != 16; //shalow conv varient
+
     ParallelConfig input_tensor_parallel_config;
     if (!input_tensor_on_device) {
         needs_shard_or_reshard = true;
@@ -440,10 +444,6 @@ std::tuple<ttnn::Shape, ttnn::MemoryConfig, bool, bool> get_conv_padded_input_sh
             }
         }
     }
-
-    bool use_non_tile_height = shard_layout == TensorMemoryLayout::HEIGHT_SHARDED && out_channels <= 256 && conv_config.act_block_h_override == 0 &&
-        conv_config.dtype == DataType::BFLOAT16 && conv_config.output_layout == Layout::ROW_MAJOR;
-    use_non_tile_height = use_non_tile_height && conv_config.input_channels_alignment != 16;  // shalow conv varient
 
     ParallelConfig parallel_config = input_tensor_parallel_config;
     if (conv_config.reshard_if_not_optimal || needs_shard_or_reshard) {
@@ -807,7 +807,7 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
     uint32_t groups,
     std::optional<const ttnn::Tensor> bias_tensor,
     std::optional<const Conv2dConfig> conv_config_,
-    std::optional<const DeviceComputeKernelConfig> compute_config_,
+    std::optional<const WormholeComputeKernelConfig> compute_config_,
     const std::optional<const MemoryConfig> memory_config) {
     const bool mm_conv = use_matmul_for_1x1_conv(kernel_size, stride, padding, dilation, groups);
     const uint32_t output_height = ((input_height - kernel_size[0] - ((kernel_size[0] - 1 ) * (dilation[0] - 1)) + 2 * padding[0]) / stride[0]) + 1;
@@ -832,7 +832,7 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
             conv_config);
     }
 
-    DeviceComputeKernelConfig compute_config = compute_config_.value_or(DeviceComputeKernelConfig());
+    WormholeComputeKernelConfig compute_config = compute_config_.value_or(WormholeComputeKernelConfig());
     uint32_t output_height = ((input_height - kernel_size[0] - ((kernel_size[0] - 1 ) * (dilation[0] - 1)) + 2 * padding[0]) / stride[0]) + 1;
     uint32_t output_width = ((input_width - kernel_size[1] - ((kernel_size[0] - 1 ) * (dilation[0] - 1)) + 2 * padding[1]) / stride[1]) + 1;
     auto [input_tensor_post_tm, parallel_config, tensor_manipulated, use_non_tile_height] = shard_or_reshard_tensor_if_required(
@@ -1108,7 +1108,7 @@ template std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optiona
     uint32_t groups,
     std::optional<const ttnn::Tensor> bias_tensor,
     std::optional<const Conv2dConfig> conv_config_,
-    std::optional<const DeviceComputeKernelConfig> compute_config_,
+    std::optional<const WormholeComputeKernelConfig> compute_config_,
     const std::optional<const MemoryConfig> memory_config);
 
 template std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::Tensor>> conv2d<MeshDevice>(
@@ -1127,7 +1127,7 @@ template std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optiona
     uint32_t groups,
     std::optional<const ttnn::Tensor> bias_tensor,
     std::optional<const Conv2dConfig> conv_config_,
-    std::optional<const DeviceComputeKernelConfig> compute_config_,
+    std::optional<const WormholeComputeKernelConfig> compute_config_,
     const std::optional<const MemoryConfig> memory_config);
 
 }  // namespace conv2d

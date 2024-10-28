@@ -134,18 +134,11 @@ def run_conv(
         enable_subblock_padding=False,
         output_layout=output_layout,
     )
-    compute_config = None
-    if is_wormhole_b0() or is_blackhole():
-        compute_config = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=math_fidelity,
-            fp32_dest_acc_en=fp32_accum,
-            packer_l1_acc=packer_l1_acc,
-        )
-    else:
-        compute_config = ttnn.GrayskullComputeKernelConfig(
-            math_fidelity=math_fidelity,
-        )
-
+    compute_config = ttnn.WormholeComputeKernelConfig(
+        math_fidelity=math_fidelity,
+        fp32_dest_acc_en=fp32_accum,
+        packer_l1_acc=packer_l1_acc,
+    )
     if config_override:
         if "act_block_w_div" in config_override:
             conv_config.act_block_div = config_override["act_block_w_div"]

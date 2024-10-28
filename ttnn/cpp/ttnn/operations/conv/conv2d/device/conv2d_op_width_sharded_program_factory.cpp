@@ -50,7 +50,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_width_sharded_v2_impl(
     bool use_shallow_conv_variant,
     bool transpose_mcast,
     Tensor& output,
-    DeviceComputeKernelConfig compute_kernel_config,
+    WormholeComputeKernelConfig compute_kernel_config,
     bool enable_act_double_buffer,
     bool enable_split_reader,
     bool enable_subblock_padding) {
