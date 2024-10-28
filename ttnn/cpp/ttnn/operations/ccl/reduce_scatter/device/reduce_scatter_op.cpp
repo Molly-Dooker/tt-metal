@@ -8,6 +8,8 @@
 #include <cstdint>
 
 namespace ttnn {
+namespace ccl{
+namespace reduce_scatter_detail{
 
 ReduceScatter create_reduce_scatter_struct (
     const Tensor& input_tensor,
@@ -57,6 +59,8 @@ ReduceScatter create_reduce_scatter_struct (
                     user_defined_num_workers,
                     user_defined_num_buffers_per_channel};
 }
+} // namespace reduce_scatter_detail
+} // namespace ccl
 
 void ReduceScatter::validate(const std::vector<Tensor>& input_tensors) const {
     for (auto const& t : input_tensors) {
@@ -129,6 +133,7 @@ Tensor reduce_scatter(
     ttnn::ccl::Topology ccl_topology = topology;
     auto devices = input_tensor.get_workers();
     uint32_t num_devices = devices.size();
+    TT_FATAL(num_devices > 1, "reduce_scatter op will only work for num_devices > 1, but has {}", num_devices);
     if (num_devices == 2){
         ccl_topology = ttnn::ccl::Topology::Linear;
     }
@@ -142,7 +147,7 @@ Tensor reduce_scatter(
 
             const auto& input_tensor = input_tensors.at(0);
             return operation::run(
-                create_reduce_scatter_struct(
+                ttnn::ccl::reduce_scatter_detail::create_reduce_scatter_struct(
                     input_tensor,
                     binary_op_type,
                     scatter_dim,
