@@ -289,7 +289,6 @@ target_include_directories(
     metal_header_directories
     SYSTEM
     INTERFACE
-        ${reflect_SOURCE_DIR}
         ${flatbuffers_include_dir}
         ${nng_include_dir}
 )

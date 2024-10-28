@@ -26,6 +26,8 @@ target_link_libraries(
     tt_metal
     PUBLIC
         metal_header_directories
+        impl
+        Metalium::Metal::stl
         umd_device
         metal_common_libs
         magic_enum
@@ -69,6 +71,8 @@ set_target_properties(
         ADDITIONAL_CLEAN_FILES
             "${PROJECT_BINARY_DIR}/lib;${PROJECT_BINARY_DIR}/obj"
 )
+
+add_subdirectory(tt_stl)
 
 if(BUILD_PROGRAMMING_EXAMPLES)
     add_subdirectory(programming_examples)
