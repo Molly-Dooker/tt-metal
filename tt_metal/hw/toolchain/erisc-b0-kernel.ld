@@ -51,20 +51,26 @@ SECTIONS
     ASSERT(SIZEOF(.init.fini) == 0, ".init/.fini sections present");
   } > REGION_APP_KERNEL_CODE :text
 
-  .rodata         : { *(.rodata .rodata.* .gnu.linkonce.r.*) } > REGION_APP_KERNEL_CODE :text
-  .rodata1        : { *(.rodata1) } > REGION_APP_KERNEL_CODE :text
+  .rodata         : {
+    *(.rodata .rodata.* .gnu.linkonce.r.*)
+  } > REGION_APP_KERNEL_CODE :text
+  .rodata1        : {
+    *(.rodata1)
+  } > REGION_APP_KERNEL_CODE :text
 
-  .sdata2         :
-  {
+  .sdata2 : {
     *(.sdata2 .sdata2.* .gnu.linkonce.s2.*)
   } > REGION_APP_KERNEL_DATA :data
-  .sbss2          : { *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*) } > REGION_APP_KERNEL_DATA :data
-  /* Adjust the address for the data segment.  We want to adjust up to
-     the same address within the page on the next page up.  */
-  .data.rel.ro : { *(.data.rel.ro.local* .gnu.linkonce.d.rel.ro.local.*) *(.data.rel.ro .data.rel.ro.* .gnu.linkonce.d.rel.ro.*) } > REGION_APP_KERNEL_DATA :data
-  .dynamic        : { *(.dynamic) } > REGION_APP_KERNEL_DATA :data
-  .data           :
-  {
+  .sbss2 : {
+    *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*)
+  } > REGION_APP_KERNEL_DATA :data
+  .data.rel.ro : {
+    *(.data.rel.ro.local* .gnu.linkonce.d.rel.ro.local.*) *(.data.rel.ro .data.rel.ro.* .gnu.linkonce.d.rel.ro.*)
+  } > REGION_APP_KERNEL_DATA :data
+  .dynamic : {
+    *(.dynamic)
+  } > REGION_APP_KERNEL_DATA :data
+  .data : {
     . = ALIGN(16);
     *(.data .data.* .gnu.linkonce.d.*)
     *(.srodata.cst16) *(.srodata.cst8) *(.srodata.cst4) *(.srodata.cst2) *(.srodata .srodata.*)
@@ -73,8 +79,7 @@ SECTIONS
 
   . = ALIGN(4); /* startup code will use word writes to zero bss */
   __l1_bss_start = .;
-  .sbss           :
-  {
+  .sbss : {
     *(.dynsbss)
     *(.sbss .sbss.* .gnu.linkonce.sb.*)
     *(.scommon)
@@ -82,8 +87,7 @@ SECTIONS
   . = ALIGN(4);
   __l1_bss_end = .;
 
-  .bss            :
-  {
+  .bss : {
    __ldm_bss_start = .;
    *(.dynbss)
    *(.bss .bss.* .gnu.linkonce.b.*)
