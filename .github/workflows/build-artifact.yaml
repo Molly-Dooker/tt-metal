@@ -219,3 +219,5 @@ jobs:
           name: umd_${{ matrix.arch }}
           path: _umd/
           if-no-files-found: error
+          # We may build multiple times for different cards - that's ok
+          overwrite: true
