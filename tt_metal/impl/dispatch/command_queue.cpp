@@ -1461,9 +1461,9 @@ void EnqueueProgramCommand::write_program_command_sequence(const ProgramCommandS
 
 void EnqueueProgramCommand::process() {
 
-    bool is_finalized = program.is_finalized();
+    bool is_finalized = program.is_finalized(this->device);
     if (not is_finalized) {
-        program.finalize(device);
+        program.finalize(this->device);
     }
 
     const std::pair<ConfigBufferSync, std::vector<ConfigBufferEntry>&> reservation =
@@ -2233,7 +2233,7 @@ void HWCommandQueue::enqueue_write_buffer(Buffer& buffer, const void* src, bool 
 
 void HWCommandQueue::enqueue_program(Program& program, bool blocking) {
     ZoneScopedN("HWCommandQueue_enqueue_program");
-    if (not program.is_finalized()) {
+    if (not program.is_finalized(this->device)) {
         TT_FATAL(!this->manager.get_bypass_mode(), "Tracing should only be used when programs have been cached");
         if (const auto &kernels_buffer = program.get_kernels_buffer()) {
             this->enqueue_write_buffer(

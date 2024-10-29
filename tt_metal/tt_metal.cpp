@@ -635,7 +635,7 @@ void LaunchProgram(Device *device, Program &program, bool wait_until_cores_done)
         ZoneScoped;
         detail::DispatchStateCheck(false);
         detail::CompileProgram(device, program);
-        if (!program.is_finalized()) {
+        if (!program.is_finalized(device)) {
             program.finalize(device);
         }
 

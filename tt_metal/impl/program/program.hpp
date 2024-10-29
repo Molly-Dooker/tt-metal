@@ -131,7 +131,7 @@ class Program {
 
     void allocate_circular_buffers(const Device *device);
 
-    bool is_finalized() const;
+    bool is_finalized(Device* device) const;
     void finalize(Device *device);
     std::shared_ptr<Kernel> get_kernel(KernelHandle kernel_id) const;
 

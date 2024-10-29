@@ -123,7 +123,7 @@ class Program_ {
 
     void allocate_circular_buffers(const Device *device);
 
-    bool is_finalized() const;
+    bool is_finalized(Device* device) const;
     void finalize(Device *device);
     std::shared_ptr<Kernel> get_kernel(KernelHandle kernel_id) const;
 
@@ -136,6 +136,7 @@ class Program_ {
     uint32_t get_cb_size(Device *device, CoreCoord logical_core, CoreType core_type) const;
 
    private:
+    void clear_stale_dispatch_data();
     void populate_dispatch_data(Device *device);
 
     // Buffers temporarily owned by the program
@@ -145,7 +146,7 @@ class Program_ {
     std::shared_ptr<Buffer> kernels_buffer = nullptr;
     ProgramTransferInfo program_transfer_info;
 
-    bool finalized_;
+    std::unordered_set<uint32_t> finalized_;
 
     struct CircularBufferAllocator {
         CircularBufferAllocator(const CoreRange &core_range_) : core_range(core_range_) {}
@@ -275,7 +276,7 @@ detail::Program_::Program_() :
     id(program_counter++),
     runtime_id(0),
     local_circular_buffer_allocation_needed_(false),
-    finalized_(false) {
+    finalized_({}) {
     uint32_t programmable_core_count = hal.get_programmable_core_type_count();
     for (uint32_t i = 0; i < programmable_core_count; i++) {
         kernels_.push_back({});
@@ -845,6 +846,10 @@ void detail::Program_::set_cb_tile_dims(Device *device, const std::vector<CoreRa
     }
 }
 
+void detail::Program_::clear_stale_dispatch_data() {
+    this->program_transfer_info = ProgramTransferInfo();
+}
+
 void detail::Program_::populate_dispatch_data(Device *device) {
     static const uint32_t processor_to_firmware_base[] = {
         MEM_BRISC_FIRMWARE_BASE,
@@ -1304,7 +1309,7 @@ void detail::Program_::finalize(Device *device) {
     // The sem offsets cross programmable_core_types so must be set after the loop above
     this->set_launch_msg_sem_offsets();
 
-    finalized_ = true;
+    finalized_.insert(device->id());
 }
 
 void Program::finalize(Device *device) { pimpl_->finalize(device); }
@@ -1407,6 +1412,7 @@ void detail::Program_::compile(Device *device, bool fd_bootloader_mode) {
     sync_build_step(events);
 
     if (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr) {
+        this->clear_stale_dispatch_data();
         this->populate_dispatch_data(device);  // TODO: maybe rename
     }
 
@@ -1557,9 +1563,9 @@ std::vector<std::reference_wrapper<const Semaphore>> Program::semaphores_on_core
     return pimpl_->semaphores_on_core(core);
 }
 
-bool detail::Program_::is_finalized() const { return this->finalized_; }
+bool detail::Program_::is_finalized(Device* device) const { return this->finalized_.find(device->id()) != this->finalized_.end(); }
 
-bool Program::is_finalized() const { return pimpl_->is_finalized(); }
+bool Program::is_finalized(Device* device) const { return pimpl_->is_finalized(device); }
 
 const ProgramTransferInfo &Program::get_program_transfer_info() const noexcept { return pimpl_->program_transfer_info; }
 
