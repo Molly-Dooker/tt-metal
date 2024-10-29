@@ -29,13 +29,7 @@ Note the current compatability matrix:
 ### Step 2. System-level dependencies
 
 ```sh
-sudo apt update
-sudo apt install software-properties-common=0.99.9.12 build-essential=12.8ubuntu1.1 python3.8-venv libhwloc-dev graphviz cmake=3.16.3-1ubuntu1.20.04.1 ninja-build
-
-wget https://apt.llvm.org/llvm.sh
-chmod u+x llvm.sh
-sudo ./llvm.sh 17
-sudo apt install libc++-17-dev libc++abi-17-dev
+sudo ./install_dependencies.sh
 ```
 
 ---
