@@ -377,9 +377,10 @@ void EthernetKernel::read_binaries(Device *device) {
         this->config_.eth_mode == Eth::IDLE ? HalProgrammableCoreType::IDLE_ETH : HalProgrammableCoreType::ACTIVE_ETH
     );
     uint32_t dm_class_idx = magic_enum::enum_integer(HalProcessorClassType::DM);
-    const JitBuildState &build_state = device->build_kernel_state(erisc_core_type, dm_class_idx, 0);
-    int erisc_id = magic_enum::enum_integer(this->config_.processor) + (this->config_.eth_mode == Eth::IDLE ? 1 : 0);
-    ll_api::memory binary_mem = llrt::get_risc_binary(build_state.get_target_out_path(this->kernel_full_name_), erisc_id + 5, llrt::PackSpans::PACK);
+    int erisc_id = magic_enum::enum_integer(this->config_.processor);
+    const JitBuildState &build_state = device->build_kernel_state(erisc_core_type, dm_class_idx, erisc_id);
+    int risc_id = erisc_id + (this->config_.eth_mode == Eth::IDLE ? 6 : 5); // TODO (abhullar): clean this up when llrt helpers use HAL
+    ll_api::memory binary_mem = llrt::get_risc_binary(build_state.get_target_out_path(this->kernel_full_name_), risc_id, llrt::PackSpans::PACK);
     binaries.push_back(binary_mem);
     uint32_t binary_size = binary_mem.get_packed_size();
     log_debug(LogLoader, "ERISC {} kernel binary size: {} in bytes", erisc_id, binary_size);

@@ -66,8 +66,18 @@ DataMovementConfigStatus CheckDataMovementConfig(const HalProgrammableCoreType &
 
     auto set_global_and_local_noc_usage = [&](KernelHandle kernel_id, bool &local_noc0_usage, bool &local_noc1_usage) {
         const auto kernel = detail::GetKernel(program, kernel_id);
-        auto kernel_config = std::get<DataMovementConfig>(kernel->config());
-        auto noc_value = magic_enum::enum_integer(kernel_config.noc);
+        int noc_value;
+        switch (programmable_core) {
+            case HalProgrammableCoreType::TENSIX:
+                noc_value = magic_enum::enum_integer(std::get<DataMovementConfig>(kernel->config()).noc);
+            break;
+            case HalProgrammableCoreType::ACTIVE_ETH:
+            case HalProgrammableCoreType::IDLE_ETH:
+                noc_value = magic_enum::enum_integer(std::get<EthernetConfig>(kernel->config()).noc);
+            break;
+            default:
+                TT_THROW("Checking NoC and DataMovementProcessor is unsupported for programmable core {}", magic_enum::enum_name(programmable_core));
+        }
         local_noc0_usage = noc_value == 0;
         local_noc1_usage = noc_value == 1;
         data_movement_config_status.noc0_in_use = local_noc0_usage;
@@ -934,29 +944,29 @@ KernelHandle CreateEthernetKernel(
     KernelHandle kernel_handle;
     HalProgrammableCoreType eth_core_type = config.eth_mode == Eth::IDLE ? HalProgrammableCoreType::IDLE_ETH : HalProgrammableCoreType::ACTIVE_ETH;
     const DataMovementConfigStatus &data_movement_config_status = CheckDataMovementConfig(eth_core_type, program, core_range_set);
-    const bool are_both_riscv_in_use = config.riscv0_in_use && config.riscv1_in_use;
-    const bool are_both_noc_in_use = config.noc0_in_use && config.noc1_in_use;
+    const bool are_both_riscv_in_use = data_movement_config_status.riscv0_in_use && data_movement_config_status.riscv1_in_use;
+    const bool are_both_noc_in_use = data_movement_config_status.noc0_in_use && data_movement_config_status.noc1_in_use;
 
     std::shared_ptr<Kernel> kernel = std::make_shared<EthernetKernel>(kernel_src, core_range_set, config);
 
     TT_FATAL(
         utils::underlying_type<DataMovementProcessor>(config.processor)
-            < hal.get_processor_types_count(eth_core_type, magic_enum::enum_integer(HalProcessorClassType::DM)),
+            < hal.get_processor_classes_count(eth_core_type),
         "EthernetKernel creation failure: {} kernel cannot target processor {} because Ethernet core only has {} processors. "
         "Update DataMovementProcessor in the config.",
         kernel->name(),
         magic_enum::enum_name(config.processor),
-        hal.get_processor_types_count(eth_core_type, magic_enum::enum_integer(HalProcessorClassType::DM)));
+        hal.get_processor_classes_count(eth_core_type));
     TT_FATAL(
         !(are_both_riscv_in_use),
         "EthernetKernel creation failure: Cannot create data movement kernel for {} across specified "
         "cores because both data movement processors are in use!",
-        kernel_name);
+        kernel->name());
     TT_FATAL(
         !(are_both_noc_in_use),
         "EthernetKernel creation failure: Cannot create data movement kernels for {} across specified "
         "cores because both NOCs are in use!",
-        kernel_name);
+        kernel->name());
 
 
     return detail::AddKernel(program, kernel, eth_core_type);
