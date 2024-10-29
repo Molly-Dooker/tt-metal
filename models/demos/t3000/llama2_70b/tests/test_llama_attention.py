@@ -109,7 +109,7 @@ class PytorchLlamaAttentionModel(torch.nn.Module):
         return result
 
 
-def tt_llama_attention_prepare_inputs(llama_attention_model, x, start_pos, mode, rope_setup=None):
+def tt_llama_attention_prepare_inputs(llama_attention_model, x, start_pos, mode, rope_theta, rope_setup=None):
     assert len(x.size()) == 3
     batch, seq_len, _ = x.shape
 
@@ -132,7 +132,7 @@ def tt_llama_attention_prepare_inputs(llama_attention_model, x, start_pos, mode,
         )
         xs = ttnn.to_device(xs, llama_attention_model.mesh_device)
 
-        cos, sin = precompute_freqs(llama_attention_model.head_dim, llama_attention_model.max_seq_len * 2)
+        cos, sin = precompute_freqs(llama_attention_model.head_dim, llama_attention_model.max_seq_len * 2, rope_theta)
         cos_gathered, sin_gathered = gather_cos_sin(torch.arange(start_pos, start_pos + seq_len), cos, sin)
         assert cos_gathered.size() == (1, 1, seq_len, llama_attention_model.head_dim)
         assert sin_gathered.size() == (1, 1, seq_len, llama_attention_model.head_dim)
@@ -326,7 +326,12 @@ def run_test_LlamaAttention_inference(
 
         # TT hardware execution -------------------------------------------------------------
         attention_input, start_pos, rot_mat, cache_idxs = tt_llama_attention_prepare_inputs(
-            tt_LlamaAttention_model, tt_input, start_pos, mode, rope_setup=rope_setup if mode == "decode" else None
+            tt_LlamaAttention_model,
+            tt_input,
+            start_pos,
+            mode,
+            configuration.rope_theta,
+            rope_setup=rope_setup if mode == "decode" else None,
         )
 
         tt_out = tt_LlamaAttention_model(

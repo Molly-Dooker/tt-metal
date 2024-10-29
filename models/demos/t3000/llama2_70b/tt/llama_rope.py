@@ -70,13 +70,19 @@ class TtLlamaRotarySetup(LightweightModule):
             orientation=ttnn.ShardOrientation.ROW_MAJOR,
         )
         self.transformation_mat = ttnn.from_torch(
-            trans_mat, device=device, layout=ttnn.TILE_LAYOUT, dtype=datatype, memory_config=trans_mat_mem_config
+            trans_mat,
+            device=device,
+            layout=ttnn.TILE_LAYOUT,
+            dtype=datatype,
+            memory_config=trans_mat_mem_config,
+            mesh_mapper=ReplicateTensorToMesh(device),
         )
 
     def get_trans_mats(self):
+        assert self.transformation_mat is not None, "Transformation matrix not initialized"
         return self.transformation_mat
 
-    def get_rot_mats(self, position_idxs):
+    def get_rot_idxs(self, position_idxs):
         assert isinstance(position_idxs, torch.Tensor), "Position ids must be a torch tensor"
 
         batch = position_idxs.shape[0]
@@ -84,17 +90,37 @@ class TtLlamaRotarySetup(LightweightModule):
         assert position_idxs.shape == (batch, 1, 1), "position idxs must be a [batch, 1] tensor"
         assert torch.min(position_idxs) >= 0, "position idxs must be non-negative"
 
-        position_idxs = ttnn.as_tensor(
+        rot_idxs = ttnn.as_tensor(
             position_idxs,
             dtype=ttnn.uint32,
             layout=ttnn.ROW_MAJOR_LAYOUT,
-            device=self.device,
-            memory_config=ttnn.DRAM_MEMORY_CONFIG,
             mesh_mapper=ReplicateTensorToMesh(self.device),
         )
 
-        cos = ttnn.embedding(position_idxs, self.cos_matrix)  # [batch, head_dim, head_dim]
-        sin = ttnn.embedding(position_idxs, self.sin_matrix)  # [batch, head_dim, head_dim]
+        return rot_idxs
+
+    def get_rot_mats(self, position_idxs, device=None):
+        device = self.device if device is None else device
+
+        # If position_idxs is a torch tensor, get the TTNN version of it
+        if isinstance(position_idxs, torch.Tensor):
+            rot_idxs = self.get_rot_idxs(position_idxs)
+        else:
+            rot_idxs = position_idxs
+            assert (
+                len(rot_idxs.shape) == 3 and rot_idxs.shape[1] == 1 and rot_idxs.shape[2] == 1
+            ), "rot_idxs must be a [batch, 1, 1] tensor"
+
+        # Send the idxs to device
+        if rot_idxs.device != device:
+            rot_idxs = ttnn.to_device(rot_idxs, device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        batch = position_idxs.shape[0]
+
+        cos = ttnn.embedding(rot_idxs, self.cos_matrix)  # [batch, head_dim, head_dim]
+        sin = ttnn.embedding(rot_idxs, self.sin_matrix)  # [batch, head_dim, head_dim]
+
+        cos = ttnn.reshape(cos, [1, rot_idxs.shape[0], 1, self.head_dim])  # [1, batch, 1, head_dim]
+        sin = ttnn.reshape(sin, [1, rot_idxs.shape[0], 1, self.head_dim])  # [1, batch, 1, head_dim]
 
         cos = ttnn.to_layout(cos, ttnn.TILE_LAYOUT)
         sin = ttnn.to_layout(sin, ttnn.TILE_LAYOUT)

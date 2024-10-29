@@ -99,7 +99,6 @@ class TtLlamaModel_optimized:
         self.cos, self.sin = precompute_freqs(
             self.head_dim, self.max_seq_len * 2, self.rope_theta, self.use_scaled_rope
         )  # for prefill
-        self.rot_emb = freqs_to_rotation_matrix(self.cos, self.sin)  # for decode
         # Embedding
         self.tt_embd = TtLlamaEmbedding(
             mesh_device,
@@ -191,8 +190,10 @@ class TtLlamaModel_optimized:
         returns:
         xs: [(seq, batch, hidden_dim)] * num_devices
         start_pos: int
-        rot_mats: [(1, 1, head_dim, head_dim)] * num_devices  for decode
+        rot_mats: None  for decode
                   [(1, 1, seq, head_dim), (1, 1, seq, head_dim)] * num_devices  for prefill
+        rot_idx_tt: [(batch, 1, 1)] * num_devices  for decode
+                    None  for prefill
         """
         self.validate_input_shape(inp_ids, mode)
         batch, seq_len = inp_ids.shape
@@ -250,6 +251,7 @@ class TtLlamaModel_optimized:
             sin_gathereds = ttnn.to_device(sin_gathereds, self.mesh_device)
             rot_mats = [cos_gathereds, sin_gathereds]
 
+            rot_idxs_tt = None  # unused in prefill mode
             cache_idxs_tt = None  # unused in prefill mode
 
             if isinstance(page_table, torch.Tensor):
@@ -279,7 +281,8 @@ class TtLlamaModel_optimized:
                 mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
             )
 
-            rot_mats = self.rope_setup_decode.get_rot_mats(cache_idxs)
+            rot_mats = None  # Created in prepare_device_inputs
+            rot_idxs_tt = self.rope_setup_decode.get_rot_idxs(cache_idxs)
 
             if isinstance(page_table, torch.Tensor):
                 # Support vLLM tensor page_table input
@@ -290,7 +293,7 @@ class TtLlamaModel_optimized:
                     mesh_mapper=ReplicateTensorToMesh(self.mesh_device),
                 )
 
-        return (xs, start_pos, rot_mats, cache_idxs_tt, page_table)
+        return (xs, start_pos, rot_mats, rot_idxs_tt, cache_idxs_tt, page_table)
 
     def prepare_device_inputs(
         self,
@@ -300,8 +303,9 @@ class TtLlamaModel_optimized:
         mode="decode",
         page_table=None,
         return_tokens=False,  # if true, return tokens for decode mode
+        return_rot_idxs=False,  # if true, return rot_idxs for decode mode
     ):
-        tt_inp, start_pos, rot_mat, cache_idxs_tt, tt_page_table = self.prepare_inputs(
+        tt_inp, start_pos, rot_mat, rot_idxs_tt, cache_idxs_tt, tt_page_table = self.prepare_inputs(
             tokens, start_pos, valid_seq_len=valid_seq_len, mode=mode, page_table=page_table
         )
 
@@ -310,6 +314,7 @@ class TtLlamaModel_optimized:
             tt_inp_emb = self.tt_embd(tt_inp)
             tt_inp_emb = ttnn.interleaved_to_sharded(tt_inp_emb, self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"])
             cache_idxs_tt = ttnn.to_device(cache_idxs_tt, self.mesh_device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+            rot_mat = self.rope_setup_decode.get_rot_mats(rot_idxs_tt, self.mesh_device)
             if tt_page_table is not None:
                 tt_page_table = ttnn.to_device(tt_page_table, self.mesh_device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
         else:
@@ -319,6 +324,8 @@ class TtLlamaModel_optimized:
         if mode == "decode":
             if return_tokens:
                 return_out.append(tt_inp)
+            if return_rot_idxs:
+                return_out.append(rot_idxs_tt)
         return tuple(return_out)
 
     def __call__(
