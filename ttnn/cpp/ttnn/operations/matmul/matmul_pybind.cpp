@@ -341,6 +341,77 @@ void py_module(py::module& module) {
             py::arg("compute_kernel_config") = std::nullopt,
             py::arg("core_grid") = std::nullopt,
         });
+
+    bind_registered_operation(
+        module,
+        ::ttnn::linearadd,
+        R"doc(
+    linearadd(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, *, bias: Optional[ttnn.Tensor] = None, memory_config: Optional[ttnn.MemoryConfig] = None, dtype: Optional[ttnn.DataType] = None, core_grid: Optional[ttnn.CoreGrid] = None, program_config: Optional[MatmulProgramConfig] = None, activation: Optional[str] = None, compute_kernel_config: Optional[ttnn.DeviceComputeKernelConfig] = None, transpose_a[boolean] = False, transpose_b[boolean] = False) -> ttnn.Tensor
+
+    Returns the linearadd transformation of the inputs
+
+    Arguments:
+        * :attr:`input_tensor_a` (ttnn.Tensor): the first tensor to be multiplied. Needs to be on the device.
+        * :attr:`input_tensor_b` (ttnn.Tensor): the second tensor to be multiplied. Needs to be on the device.
+
+    Keyword Arguments:
+        * :attr:`bias` (Optional[ttnn.Tensor]): the bias tensor to be added. If specified, needs to be on the device. Defaults to None
+        * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): the memory configuration of the output tensor. Defaults to None, which will result in using ttnn.DRAM_MEMORY_CONFIG
+        * :attr:`dtype` (Optional[ttnn.DataType]): the data type of the output tensor. Defaults to None
+        * :attr:`core_grid` (Optional[ttnn.CoreGrid]): the grid on which to distribute the sharded tensor on (writes to the cores L1s). Defaults to None
+        * :attr:`program_config` (Optional[MatmulProgramConfig]): the program configuration for the matmul operation. Defaults to None
+        * :attr:`activation` (Optional[str]): the activation function to be applied. Defaults to None
+        * :attr:`compute_kernel_config` (Optional[ttnn.DeviceComputeKernelConfig]): the compute kernel configuration for the matmul operation. Defaults to None
+
+    Example::
+        >>> # batched matrix x broadcasted matrix
+        >>> activations = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
+        >>> weight = ttnn.to_device(ttnn.from_torch(torch.randn((32, 128), dtype=torch.bfloat16)), device)
+        >>> bias = ttnn.to_device(ttnn.from_torch(torch.randn((128,), dtype=torch.bfloat16)), device)
+        >>> output = ttnn.linearadd(activations, weight, bias=bias)
+        >>> print(output.shape)
+        [10, 64, 128]
+        )doc",
+        ttnn::pybind_overload_t{
+            [](decltype(::ttnn::linearadd)& self,
+               const ttnn::Tensor& input_tensor_a,
+               const ttnn::Tensor& input_tensor_b,
+               const std::optional<const ttnn::Tensor>& bias,
+               const bool transpose_a,
+               const bool transpose_b,
+               const std::optional<const ttnn::MemoryConfig> memory_config,
+               const std::optional<const DataType> dtype,
+               const std::optional<const MatmulProgramConfig> program_config,
+               const std::optional<const std::string>& activation,
+               const std::optional<const DeviceComputeKernelConfig> compute_kernel_config,
+               const std::optional<const ttnn::CoreGrid> core_grid) -> ttnn::Tensor {
+                return self(
+                    input_tensor_a,
+                    input_tensor_b,
+                    bias,
+                    transpose_a,
+                    transpose_b,
+                    memory_config,
+                    dtype,
+                    program_config,
+                    activation,
+                    compute_kernel_config,
+                    core_grid);
+            },
+            py::arg("input_tensor_a"),
+            py::arg("input_tensor_b"),
+            py::kw_only(),
+            py::arg("bias") = std::nullopt,
+            py::arg("transpose_a") = false,
+            py::arg("transpose_b") = false,
+            py::arg("memory_config") = std::nullopt,
+            py::arg("dtype") = std::nullopt,
+            py::arg("program_config") = std::nullopt,
+            py::arg("activation") = std::nullopt,
+            py::arg("compute_kernel_config") = std::nullopt,
+            py::arg("core_grid") = std::nullopt,
+        });
+
 }
 
 }  // namespace matmul
