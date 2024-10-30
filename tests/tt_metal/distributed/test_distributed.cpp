@@ -92,7 +92,7 @@ bool test_mesh_workload_with_sems(std::shared_ptr<MeshDevice> mesh_device, uint8
     for (auto device : mesh_device->get_devices()) {
         for (const CoreRange& core_range : program_config.cr_set.ranges())
         {
-            const std::vector<uint32_t>& expected_semaphore_vals_for_core = expected_semaphore_vals
+            const std::vector<uint32_t>& expected_semaphore_vals_for_core = expected_semaphore_vals;
             TT_ASSERT(expected_semaphore_vals_for_core.size() == program_config.num_sems);
             for (const CoreCoord& core_coord : core_range)
             {

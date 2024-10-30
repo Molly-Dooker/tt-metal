@@ -448,7 +448,8 @@ void generate_runtime_args_cmds(
     const uint32_t max_prefetch_command_size,
     const uint32_t packed_write_max_unicast_sub_cmds,
     bool no_stride,
-    enum DispatchWriteOffsets write_offset_index) {
+    enum DispatchWriteOffsets write_offset_index,
+    std::vector<std::pair<CoreCoord, uint32_t*>>& noc_encoding_update_md) {
     static_assert(
         std::is_same<PackedSubCmd, CQDispatchWritePackedUnicastSubCmd>::value or
         std::is_same<PackedSubCmd, CQDispatchWritePackedMulticastSubCmd>::value);
@@ -471,7 +472,17 @@ void generate_runtime_args_cmds(
             uint32_t dispatch_cmd_sizeB = sizeof(CQDispatchCmd) + align(num_packed_cmds * sub_cmd_sizeB, l1_alignment);
             return sizeof(CQPrefetchCmd) + dispatch_cmd_sizeB;
         };
-
+    thread_local static auto get_phys_coords_offsets = [] (uint32_t num_packed_cmds, bool is_unicast) {
+        std::vector<uint32_t> rta_phys_coord_offsets = {};
+        uint32_t base_offset = sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd);
+        uint32_t noc_encoding_offset = is_unicast ? offsetof(CQDispatchWritePackedUnicastSubCmd, noc_xy_addr) : offsetof(CQDispatchWritePackedMulticastSubCmd, noc_xy_addr);
+        for (auto cmd_idx = 0; cmd_idx < num_packed_cmds; cmd_idx++) {
+            uint32_t sub_cmd_sizeB =
+                is_unicast ? sizeof(CQDispatchWritePackedUnicastSubCmd) : sizeof(CQDispatchWritePackedMulticastSubCmd);
+            rta_phys_coord_offsets.push_back(base_offset + cmd_idx * sub_cmd_sizeB + noc_encoding_offset);
+        }
+        return rta_phys_coord_offsets;
+    };
     constexpr bool unicast = std::is_same<PackedSubCmd, CQDispatchWritePackedUnicastSubCmd>::value;
 
     uint32_t num_packed_cmds_in_seq = sub_cmds.size();
@@ -487,6 +498,7 @@ void generate_runtime_args_cmds(
     }
     uint32_t pcie_alignment = hal.get_alignment(HalMemType::HOST);
     uint32_t l1_alignment = hal.get_alignment(HalMemType::L1);
+    uint32_t noc_encoding_offset = 0;
     while (num_packed_cmds_in_seq != 0) {
         // Generate the device command
         uint32_t num_packed_cmds = std::min(num_packed_cmds_in_seq, max_packed_cmds);
@@ -509,6 +521,11 @@ void generate_runtime_args_cmds(
         // Update kernel RTA pointers to point into the generated command
         // Future RTA updates through the API will update the command sequence directly
         uint32_t data_offset = (uint32_t)get_runtime_args_data_offset(num_packed_cmds, max_runtime_args_len, unicast);
+        auto phys_coord_offsets = get_phys_coords_offsets(num_packed_cmds, unicast);
+        for (auto offset : phys_coord_offsets) {
+            noc_encoding_update_md[noc_encoding_offset].second = (uint32_t*)((char*)runtime_args_command_sequences.back().data() + offset);
+            noc_encoding_offset++;
+        }
         const uint32_t data_inc = align(max_runtime_args_len * sizeof(uint32_t), l1_alignment);
         uint32_t num_data_copies = no_stride ? 1 : num_packed_cmds;
         for (uint32_t i = offset_idx; i < offset_idx + num_data_copies; ++i) {
@@ -561,7 +578,7 @@ void EnqueueProgramCommand::assemble_runtime_args_commands(ProgramCommandSequenc
             }
         }
     }
-
+    std::vector<std::pair<CoreCoord, uint32_t*>> noc_encoding_update_md {};
     program_command_sequence.runtime_args_command_sequences.reserve(command_count);
     // Unique Runtime Args (Unicast)
     for (uint32_t index = 0; index < hal.get_programmable_core_type_count(); index++) {
@@ -575,6 +592,7 @@ void EnqueueProgramCommand::assemble_runtime_args_commands(ProgramCommandSequenc
 
         for (auto& kg : program.get_kernel_groups(index)) {
             if (kg.total_rta_size != 0) {
+                // std::cout << "0 ------------------" << std::endl;
                 for (const CoreRange& core_range : kg.core_ranges.ranges()) {
                     for (auto x = core_range.start_coord.x; x <= core_range.end_coord.x; x++) {
                         for (auto y = core_range.start_coord.y; y <= core_range.end_coord.y; y++) {
@@ -601,6 +619,8 @@ void EnqueueProgramCommand::assemble_runtime_args_commands(ProgramCommandSequenc
                             }
 
                             CoreCoord physical_core = device->physical_core_from_logical_core(core_coord, core_type);
+                            // std::cout << core_coord.str() << " " << this->device->get_noc_unicast_encoding(this->noc_index, physical_core) << std::endl;
+                            noc_encoding_update_md.push_back(std::make_pair(core_coord, nullptr));
                             unique_sub_cmds.emplace_back(CQDispatchWritePackedUnicastSubCmd{
                                 .noc_xy_addr = this->device->get_noc_unicast_encoding(this->noc_index, physical_core)});
                         }
@@ -618,7 +638,8 @@ void EnqueueProgramCommand::assemble_runtime_args_commands(ProgramCommandSequenc
                     packed_write_max_unicast_sub_cmds,
                     false,
                     core_type == CoreType::WORKER ? DISPATCH_WRITE_OFFSET_TENSIX_L1_CONFIG_BASE
-                                                  : DISPATCH_WRITE_OFFSET_ETH_L1_CONFIG_BASE);
+                                                  : DISPATCH_WRITE_OFFSET_ETH_L1_CONFIG_BASE,
+                    noc_encoding_update_md);
                 for (auto& data_per_kernel : unique_rt_data_and_sizes) {
                     for (auto& data_and_sizes : data_per_kernel) {
                         RecordDispatchData(program, DISPATCH_DATA_RTARGS, std::get<1>(data_and_sizes));
@@ -629,7 +650,10 @@ void EnqueueProgramCommand::assemble_runtime_args_commands(ProgramCommandSequenc
                 unique_rt_args_data.clear();
             }
         }
-
+        // std::cout << "1 ------------------" << std::endl;
+        // for (auto pair : noc_encoding_update_md) {
+        //     std::cout << pair.first.str() << " " << *(pair.second) << std::endl;
+        // }
         for (int dispatch_class = 0; dispatch_class < processor_classes; dispatch_class++) {
             uint32_t common_size = program.get_program_config(index).crta_sizes[dispatch_class];
             for (size_t kernel_id = 0; kernel_id < program.num_kernels(); kernel_id++) {
@@ -701,7 +725,8 @@ void EnqueueProgramCommand::assemble_runtime_args_commands(ProgramCommandSequenc
                             packed_write_max_unicast_sub_cmds,
                             true,
                             core_type == CoreType::WORKER ? DISPATCH_WRITE_OFFSET_TENSIX_L1_CONFIG_BASE
-                                                          : DISPATCH_WRITE_OFFSET_ETH_L1_CONFIG_BASE);
+                                                          : DISPATCH_WRITE_OFFSET_ETH_L1_CONFIG_BASE,
+                            noc_encoding_update_md);
                         sub_cmds.clear();
                     },
                     common_sub_cmds);
@@ -1493,6 +1518,7 @@ void EnqueueProgramCommand::process() {
     auto cached_cmd_iter = cached_program_command_sequences.find(command_hash);
     bool is_cached = is_finalized && cached_cmd_iter != cached_program_command_sequences.end();
 
+    auto runtime_args_command_sequence = program.get_cached_runtime_args_command_sequence();
     // Calculate all commands size and determine how many fetch q entries to use
     // Preamble, some waits and stalls
     // can be written directly to the issue queue
@@ -1501,7 +1527,9 @@ void EnqueueProgramCommand::process() {
         this->assemble_preamble_commands(program_command_sequence, kernel_config_addrs);
         this->assemble_stall_commands(program_command_sequence, true);
         // Runtime Args Command Sequence
-        this->assemble_runtime_args_commands(program_command_sequence);
+        // if (runtime_args_command_sequence) -> update (was previously created and needs to be updated for non cached program)
+        // else: generate
+        this->assemble_runtime_args_commands(runtime_args_command_sequence);
 
         // Record kernel groups in this program, only need to do it once.
         for (uint32_t index = 0; index < hal.get_programmable_core_type_count(); index++) {
@@ -1509,7 +1537,7 @@ void EnqueueProgramCommand::process() {
             RecordKernelGroups(program, core_type, program.get_kernel_groups(index));
         }
         this->assemble_device_commands(program_command_sequence, kernel_config_addrs);
-        this->write_program_command_sequence(program_command_sequence, stall_first);
+        this->write_program_command_sequence(program_command_sequence, stall_first); // need to write runtime args explicitly as well
         this->assemble_stall_commands(program_command_sequence, false);
         cached_program_command_sequences.insert({command_hash, std::move(program_command_sequence)});
     } else {
@@ -1534,8 +1562,9 @@ void EnqueueProgramCommand::process() {
                 &kernel_config_addrs[hal.get_programmable_core_type_index(HalProgrammableCoreType::ACTIVE_ETH)],
                 sizeof(uint32_t));
         }
+        // update RTAs here, if needed
         this->update_device_commands(cached_program_command_sequence, kernel_config_addrs);
-        this->write_program_command_sequence(cached_program_command_sequence, stall_first);
+        this->write_program_command_sequence(cached_program_command_sequence, stall_first); // write RTAs explicitly
     }
 }
 

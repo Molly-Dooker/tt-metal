@@ -171,6 +171,7 @@ class Program {
     const std::shared_ptr<Buffer> &get_kernels_buffer() const noexcept;
     const std::vector<uint32_t> &get_program_config_sizes() const noexcept;
     std::unordered_map<uint64_t, ProgramCommandSequence> &get_cached_program_command_sequences() noexcept;
+
 };
 
 }  // namespace v0

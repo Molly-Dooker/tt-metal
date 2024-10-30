@@ -203,7 +203,8 @@ class Program_ {
     std::vector<uint32_t> program_config_sizes_;
 
     std::unordered_map<uint64_t, ProgramCommandSequence> cached_program_command_sequences_;
-
+    std::vector<HostMemDeviceCommand> cached_runtime_args_command_sequence_;
+    std::vector<std::pair<CoreCoord, uint32_t*>> rtas_noc_encoding_update_md {};
     friend std::shared_ptr<CircularBuffer> GetCircularBuffer(const Program &program, CBHandle id);
     friend void ValidateCircularBufferRegion(const Program &program, const Device *device);
 
