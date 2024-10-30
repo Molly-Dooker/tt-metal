@@ -195,24 +195,6 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
     auto in_tiled_cb = tt::tt_metal::CreateCircularBuffer(program, all_cores, in_tiled_cb_config);
     log_debug(tt::LogOp, "CB {} :: PS = {}, NP = {}", in_tiled_cb_id, in_tiled_cb_pagesize, in_tiled_cb_npages);
 
-    if (is_large_kernel) {
-        uint32_t max_pool_partials_cb_id = tt::CB::c_intermed1;  // max_pool partials
-        uint32_t max_pool_partials_cb_pagesize = in_cb_sz;
-        uint32_t max_pool_partials_cb_npages = nblocks;
-        printf("max_pool_partials_cb_pagesize: %d\n", max_pool_partials_cb_pagesize);
-        printf("max_pool_partials_cb_npages: %d\n", max_pool_partials_cb_npages);
-        CircularBufferConfig max_pool_partials_cb_config =
-            CircularBufferConfig(
-                max_pool_partials_cb_npages * max_pool_partials_cb_pagesize, {{max_pool_partials_cb_id, in_df}})
-                .set_page_size(max_pool_partials_cb_id, max_pool_partials_cb_pagesize);
-        auto max_pool_partials_cb = tt::tt_metal::CreateCircularBuffer(program, all_cores, max_pool_partials_cb_config);
-        log_debug(
-            tt::LogOp,
-            "CB {} :: PS = {}, NP = {}",
-            max_pool_partials_cb_id,
-            max_pool_partials_cb_pagesize,
-            max_pool_partials_cb_npages);
-    }
 
     // output of reduce == writer to write
     uint32_t out_cb_id = tt::CB::c_out0;  // output rows in RM
@@ -226,6 +208,24 @@ MaxPool2D::MultiCore::cached_program_t max_pool_2d_multi_core_sharded_with_halo_
     auto cb_out = tt::tt_metal::CreateCircularBuffer(program, all_cores, cb_out_config);
     log_debug(tt::LogOp, "CB {} :: PS = {}, NP = {}", out_cb_id, out_cb_pagesize, out_cb_npages);
 
+    if (is_large_kernel) {
+        uint32_t max_pool_partials_cb_id = tt::CB::c_intermed1;  // max_pool partials
+        uint32_t max_pool_partials_cb_pagesize = out_cb_pagesize;
+        uint32_t max_pool_partials_cb_npages = nblocks;
+        printf("max_pool_partials_cb_pagesize: %d\n", max_pool_partials_cb_pagesize);
+        printf("max_pool_partials_cb_npages: %d\n", max_pool_partials_cb_npages);
+        CircularBufferConfig max_pool_partials_cb_config =
+            CircularBufferConfig(
+                max_pool_partials_cb_npages * max_pool_partials_cb_pagesize, {{max_pool_partials_cb_id, out_df}})
+                .set_page_size(max_pool_partials_cb_id, max_pool_partials_cb_pagesize);
+        auto max_pool_partials_cb = tt::tt_metal::CreateCircularBuffer(program, all_cores, max_pool_partials_cb_config);
+        log_debug(
+            tt::LogOp,
+            "CB {} :: PS = {}, NP = {}",
+            max_pool_partials_cb_id,
+            max_pool_partials_cb_pagesize,
+            max_pool_partials_cb_npages);
+    }
     TT_FATAL(output.memory_config().is_sharded(), "Output memory config needs to be sharded");
 
     #if 1

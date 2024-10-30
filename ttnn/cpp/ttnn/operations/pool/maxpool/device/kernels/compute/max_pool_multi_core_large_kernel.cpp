@@ -15,7 +15,12 @@
 #if DEBUG_PRINT == 1
 #include "debug/dprint.h"
 // #include "debug_macros.h"
-
+#define dump_unpack(a) \
+    do { DPRINT_UNPACK(DPRINT << "UP: "<< #a " = " << a << ENDL()); } while(false)
+#define dump_pack(a) \
+    do { DPRINT_PACK(DPRINT << "P: "<< #a " = " << a << ENDL()); } while(false)
+#define dump_math(a) \
+    do { DPRINT_MATH(DPRINT << "M: "<< #a " = " << a << ENDL()); } while(false)
 // SliceRange srt = SliceRange{.h0 = 0, .h1 = 32, .hs = 8, .w0 = 0, .w1 = 32, .ws = 4};
 // SliceRange srr = SliceRange{.h0 = 0, .h1 = 1, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1};
 // SliceRange srr1 = SliceRange{.h0 = 1, .h1 = 2, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1};
@@ -120,12 +125,25 @@ void MAIN {
     constexpr uint32_t MAX_ROWS_FOR_REDUCTION = 16;
     constexpr uint32_t MAX_TILES_PER_REDUCTION = 8;
 
-    constexpr uint32_t num_tiles_for_reduction =
+    dump_unpack(in_ntiles_hw);
+    dump_unpack(in_ntiles_c);
+    dump_unpack(in_ntiles_hwc);
+    dump_unpack(window_size_hw);
+    dump_unpack(out_h);
+    dump_unpack(out_w);
+    dump_unpack(out_ntiles_c);
+    dump_unpack(nblocks);
+    dump_unpack(split_reader);
+    dump_unpack(nsticks_per_core_by_nblocks);
+    dump_unpack(in_c);
+    uint32_t num_tiles_for_reduction =
         in_ntiles_hwc > MAX_TILES_PER_REDUCTION ? MAX_TILES_PER_REDUCTION : in_ntiles_hwc;
     uint32_t num_8_tiles_blocks = 1;
+    num_tiles_for_reduction = num_output_tiles;
     if (num_output_tiles > MAX_TILES_PER_REDUCTION) {
         num_8_tiles_blocks =
             num_output_tiles / MAX_TILES_PER_REDUCTION;  // For now, only pow of 2 number of channels are supported.
+        num_tiles_for_reduction = MAX_TILES_PER_REDUCTION;
     }
 
     tilizeA_B_reduce_init<true>(
@@ -140,19 +158,12 @@ void MAIN {
     cb_wait_front(in_scalar_cb_id, 1);
     //cb_wait_front(interm_reduction_cb_id, 1);
     cb_reserve_back(out_cb_id, 1);
-    // DPRINT << "n_sticks_per_core_by_nblocks: " << nsticks_per_core_by_nblocks << ENDL();
-    // DPRINT << "num_8_tiles_blocks: " << num_8_tiles_blocks << ENDL();
-    // DPRINT << "num_tiles_for_reduction: " << num_tiles_for_reduction << ENDL();
-    // DPRINT << "interm_reduction_chunks: " << interm_reduction_chunks << ENDL();
-    // DPRINT << "num_output_tiles: " << num_output_tiles << ENDL();
-    // DPRINT << "num_faces_in_tile: " << num_faces_in_tile << ENDL();
-    // DPRINT << "num_out_rows: " << num_out_rows << ENDL();
     for (uint32_t i = 0; i < nsticks_per_core_by_nblocks; ++i) {
         for (uint32_t j = 0; j < num_8_tiles_blocks; j++) {
             // NOTE: Assuming in_ntiles_hw < 8 for now.
             // TODO: subblocking to support this.
             uint32_t out_write_idx = i * num_8_tiles_blocks + j;
-            pack_untilize_dst_init_short<num_tiles_for_reduction, num_output_tiles>(
+            pack_untilize_dst_init_short<num_output_tiles>(
                 interm_reduction_cb_id, num_out_rows, num_faces_in_tile);
             cb_reserve_back(interm_reduction_cb_id, 1);
             for (uint32_t h = 0; h <= interm_reduction_chunks; h++) {
@@ -167,7 +178,7 @@ void MAIN {
                     MAX_ROWS_FOR_REDUCTION);
                 tile_regs_wait();
                 tile_regs_commit();
-                pack_untilize_dst<num_tiles_for_reduction, num_output_tiles>(
+                pack_untilize_dst<num_output_tiles>(
                     interm_reduction_cb_id,
                     1 /*out_subblock_h*/,
                     h,
@@ -179,9 +190,12 @@ void MAIN {
             pack_untilize_uninit(interm_reduction_cb_id);
             cb_wait_front(interm_reduction_cb_id, 1);
 
-            pack_untilize_dst_init_short<num_tiles_for_reduction, num_output_tiles>(
+            pack_untilize_dst_init_short<num_output_tiles>(
                 out_cb_id, num_out_rows, num_faces_in_tile);
 
+            if(i == 0) {
+                /*print_full_tile(interm_reduction_cb_id);*/
+            }
             tile_regs_acquire();
             unpack_tilizeA_B_block(
                 interm_reduction_cb_id,
@@ -194,12 +208,13 @@ void MAIN {
                 reduce_tile_math(c_i, num_faces_in_tile /* reduce 1 or 2 faces */);
             }
 
+            /*print_full_tile(out_cb_id);*/
             tile_regs_wait();
             tile_regs_commit();
 
             //print_tile_rows(out_cb_id, 1);
 
-            pack_untilize_dst<num_tiles_for_reduction, num_output_tiles>(
+            pack_untilize_dst<num_output_tiles>(
                 out_cb_id,
                 1 /*out_subblock_h*/,
                 out_write_idx,
@@ -210,6 +225,7 @@ void MAIN {
             pack_untilize_uninit(out_cb_id);
         }
     }
+    /*print_full_tile(out_cb_id);*/
     cb_push_back(out_cb_id, 1);
     cb_pop_front(in_scalar_cb_id, 1);
     //cb_pop_front(interm_reduction_cb_id, 1);

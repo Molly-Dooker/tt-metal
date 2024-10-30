@@ -153,9 +153,9 @@ void kernel_main() {
                         processed_rows++;
                         if ((processed_rows % MAX_ROWS_FOR_REDUCTION) == 0) {
                             noc_async_read_barrier();
-                            if (reader_id == 0) {
+                            if (reader_id == 1) {
                                 DPRINT << "out_l1: " << ENDL();
-                                print_pages(out_l1_write_addr_base, in_nbytes_c / 2, MAX_ROWS_FOR_REDUCTION);
+                                /*print_pages(out_l1_write_addr_base, in_nbytes_c / 2, MAX_ROWS_FOR_REDUCTION);*/
                             }
                             cb_push_back(in_cb_id, npages_to_reserve);
                             cb_reserve_back(in_cb_id, npages_to_reserve);
@@ -169,9 +169,9 @@ void kernel_main() {
                 }
                 if (remaining_elems) {
                     noc_async_read_barrier();
-                    if (reader_id == 0) {
+                    if (reader_id == 1) {
                         DPRINT << "out_l1: " << ENDL();
-                        print_pages(out_l1_write_addr_base, in_nbytes_c / 2, (window_h * window_w) % MAX_ROWS_FOR_REDUCTION);
+                        /*print_pages(out_l1_write_addr_base, in_nbytes_c / 2, (window_h * window_w) % MAX_ROWS_FOR_REDUCTION);*/
                     }
                     cb_push_back(in_cb_id, npages_to_reserve);
                 }
