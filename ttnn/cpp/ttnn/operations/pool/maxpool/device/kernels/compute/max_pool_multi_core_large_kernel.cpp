@@ -143,7 +143,6 @@ void MAIN {
     if (num_output_tiles > MAX_TILES_PER_REDUCTION) {
         num_8_tiles_blocks =
             num_output_tiles / MAX_TILES_PER_REDUCTION;  // For now, only pow of 2 number of channels are supported.
-        num_tiles_for_reduction = MAX_TILES_PER_REDUCTION;
     }
 
     tilizeA_B_reduce_init<true>(

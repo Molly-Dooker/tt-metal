@@ -105,7 +105,7 @@ void kernel_main() {
         uint32_t out_l1_write_addr = out_l1_write_addr_base;
         uint16_t top_left_local_index = reader_indices_ptr[counter ++];
         if (reader_id == 0) {
-            DPRINT << "top_left_local_index: " << top_left_local_index << ENDL();
+            /*DPRINT << "top_left_local_index: " << top_left_local_index << ENDL();*/
         }
         uint32_t h_multiples = 0;
         for (uint32_t h = 0; h < window_h; ++ h, h_multiples += in_w_padded) {
@@ -117,8 +117,8 @@ void kernel_main() {
         if (split_reader) counter++; // interleave the indices
         noc_async_read_barrier();
         if (reader_id == 0) {
-            DPRINT << "out_l1: " << ENDL();
-            print_pages(out_l1_write_addr_base, in_nbytes_c / 2, window_h * window_w);
+            /*DPRINT << "out_l1: " << ENDL();*/
+            /*print_pages(out_l1_write_addr_base, in_nbytes_c / 2, window_h * window_w);*/
         }
         cb_push_back(in_cb_id, npages_to_reserve);
     }
