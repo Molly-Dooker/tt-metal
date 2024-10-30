@@ -311,11 +311,11 @@ class EnqueueProgramCommand : public Command {
 
     void assemble_preamble_commands(ProgramCommandSequence& program_command_sequence, std::vector<ConfigBufferEntry>& kernel_config_addrs);
     void assemble_stall_commands(ProgramCommandSequence& program_command_sequence, bool prefetch_stall);
-    void assemble_runtime_args_commands(ProgramCommandSequence& program_command_sequence);
+    void assemble_runtime_args_commands(ProgramCommandSequence& program_command_sequence, std::vector<HostMemDeviceCommand>& runtime_args_command_sequences);
     void assemble_device_commands(ProgramCommandSequence& program_command_sequence, std::vector<ConfigBufferEntry>& kernel_config_addrs);
     void update_device_commands(ProgramCommandSequence& cached_program_command_sequence, std::vector<ConfigBufferEntry>& kernel_config_addrs);
 
-    void write_program_command_sequence(const ProgramCommandSequence& program_command_sequence, bool stall_first);
+    void write_program_command_sequence(const ProgramCommandSequence& program_command_sequence, std::vector<HostMemDeviceCommand>& runtime_args_command_sequences, bool stall_first);
 
     void process();
 

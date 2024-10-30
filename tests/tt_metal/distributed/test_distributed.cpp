@@ -279,9 +279,25 @@ TEST_F(MeshDevice_T3000, TestMeshProgramBasicKernel) {
                                     DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default}
                                 );
     CreateSemaphore(*program, cr_set, 0);
+    CreateSemaphore(*program, cr_set, 1);
 
+    uint32_t kernel_inc_val = 2;
+    uint32_t kernel_dec_val = 1;
+    uint32_t num_kernel_loops = 1;
+    uint32_t sem_idx_dm_0 = 0;
+    uint32_t sem_idx_dm_1 = 1;
+    uint32_t num_loops_multiplier = 1;
+
+    // Initialize Runtime Args
+    std::vector<uint32_t> dm0_rtas = {kernel_inc_val, kernel_dec_val, num_kernel_loops, sem_idx_dm_0};
+    std::vector<uint32_t> dm1_rtas = {kernel_inc_val, kernel_dec_val, num_kernel_loops, sem_idx_dm_1, num_loops_multiplier};
+    SetRuntimeArgs(*program, dm0_kernel, cr_set, dm0_rtas);
+    SetRuntimeArgs(*program, dm1_kernel, cr_set, dm1_rtas);
+
+    // Create Mesh Workload
     std::shared_ptr<experimental::MeshWorkload> mesh_workload = std::make_shared<experimental::MeshWorkload>();
     mesh_workload->add_program(program);
+
     for (auto loop = 0; loop < NUM_LOOPS; loop++) {
         EnqueueMeshWorkload(this->mesh_device_, 0, mesh_workload, true);
         for (auto device: this->mesh_device_->get_devices()) {
@@ -289,13 +305,22 @@ TEST_F(MeshDevice_T3000, TestMeshProgramBasicKernel) {
             {
                 for (const CoreCoord& core_coord : core_range)
                 {
-                    std::vector<uint32_t> sem_readback = {};
-                    uint32_t semaphore_base = program->get_sem_base_addr(device, core_coord, CoreType::WORKER);
-                    tt::tt_metal::detail::ReadFromDeviceL1(device, core_coord, semaphore_base, sizeof(uint32_t), sem_readback);
-                    EXPECT_EQ(sem_readback.at(0), 40); // 2 DM Kernels increment the semaphore for 20 iters each
+                    std::vector<uint32_t> dm0_result = {};
+                    std::vector<uint32_t> dm1_result = {};
+                    uint32_t dm0_result_addr = program->get_sem_base_addr(device, core_coord, CoreType::WORKER);
+                    uint32_t dm1_result_addr = program->get_sem_base_addr(device, core_coord, CoreType::WORKER) + hal.get_alignment(HalMemType::L1);
+                    tt::tt_metal::detail::ReadFromDeviceL1(device, core_coord, dm0_result_addr, sizeof(uint32_t), dm0_result);
+                    tt::tt_metal::detail::ReadFromDeviceL1(device, core_coord, dm1_result_addr, sizeof(uint32_t), dm1_result);
+                    EXPECT_EQ(dm0_result.at(0), (kernel_inc_val - kernel_dec_val) * num_kernel_loops);
+                    EXPECT_EQ(dm1_result.at(0), (kernel_inc_val - kernel_dec_val) * num_kernel_loops * num_loops_multiplier + 1);
                 }
             }
         }
+        kernel_inc_val *= 2;
+        kernel_dec_val *= 2;
+        num_loops_multiplier *= 2;
+        SetRuntimeArgs(*program, dm0_kernel, cr_set, {kernel_inc_val, kernel_dec_val, num_kernel_loops, sem_idx_dm_0});
+        SetRuntimeArgs(*program, dm1_kernel, cr_set, {kernel_inc_val, kernel_dec_val, num_kernel_loops, sem_idx_dm_1, num_loops_multiplier});
     }
 }
 

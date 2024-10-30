@@ -204,7 +204,7 @@ class Program_ {
 
     std::unordered_map<uint64_t, ProgramCommandSequence> cached_program_command_sequences_;
     std::vector<HostMemDeviceCommand> cached_runtime_args_command_sequence_;
-    std::vector<std::pair<CoreCoord, uint32_t*>> rtas_noc_encoding_update_md {};
+    std::vector<std::pair<CoreCoord, uint32_t*>> rtas_noc_encoding_update_md;
     friend std::shared_ptr<CircularBuffer> GetCircularBuffer(const Program &program, CBHandle id);
     friend void ValidateCircularBufferRegion(const Program &program, const Device *device);
 
@@ -1577,5 +1577,13 @@ const std::vector<uint32_t> &Program::get_program_config_sizes() const noexcept 
 std::unordered_map<uint64_t, ProgramCommandSequence> &Program::get_cached_program_command_sequences() noexcept {
     return pimpl_->cached_program_command_sequences_;
 }
+
+std::vector<HostMemDeviceCommand>& Program::get_cached_runtime_args_commands() noexcept {
+    return pimpl_->cached_runtime_args_command_sequence_;
+};
+
+std::vector<std::pair<CoreCoord, uint32_t*>>& Program::get_rta_cmds_noc_encoding_update_md() noexcept {
+    return pimpl_->rtas_noc_encoding_update_md;
+};
 
 }  // namespace tt::tt_metal
