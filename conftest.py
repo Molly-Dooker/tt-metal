@@ -23,6 +23,11 @@ from loguru import logger
 
 from tests.scripts.common import run_process_and_get_result
 
+from models.utility_functions import (
+    is_grayskull,
+    is_wormhole_b0,
+)
+
 
 @pytest.fixture(scope="function")
 def reset_seeds():
@@ -368,7 +373,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--device-id",
         type=int,
-        default=6,
+        default=6 if is_wormhole_b0() else 4,  # grayskull
         help="Target device id",
     )
     parser.addoption(
