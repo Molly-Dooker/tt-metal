@@ -42,6 +42,7 @@ ttnn::Tensor bound_matmul(
     const ttnn::Tensor& input_tensor_a,
     const ttnn::Tensor& input_tensor_b,
     const std::optional<const ttnn::Tensor>& bias,
+    const std::optional<const ttnn::Tensor>& input_tensor_c,
     const struct Matmul& parameters,
     const uint8_t& queue_id) {
     const auto& input_tensor_a_adjusted = parameters.transpose_a
@@ -60,7 +61,9 @@ ttnn::Tensor bound_matmul(
     if (width_a != height_b) {
         TT_THROW("ttnn.matmul: The width of the first tensor must be equal to the height of the second tensor");
     }
-
+    if (input_tensor_c.has_value()) {
+        std::cout <<" --- tensor c has value but do nothing with it.." << std::endl;
+    }
     const bool has_program_config = parameters.program_config.has_value();
     const bool has_user_grid = parameters.user_core_coord.has_value();
     bool post_process_bias = false;
@@ -113,6 +116,7 @@ Tensor MatmulOperation::invoke(
         input_tensor_a,
         input_tensor_b,
         /*bias=*/std::nullopt,
+        /*input_tensor_c=*/std::nullopt,
         Matmul{
             program_config,
             /*bcast_batch=*/std::nullopt,
@@ -151,6 +155,7 @@ Tensor LinearOperation::invoke(
         input_tensor_a,
         input_tensor_b,
         bias,
+        /*input_tensor_c=*/std::nullopt,
         Matmul{
             program_config,
             /*bcast_batch=*/std::nullopt,
@@ -185,12 +190,11 @@ Tensor LinearAddOperation::invoke(
     }
     bool b_is_batched = detail::is_input_batched(input_tensor_b.get_shape());
     TT_FATAL(!(b_is_batched), "Batched input not supported when bias exists (linearadd operation).");
-    //TODO : fix bound_matmul
-    //TODO : ttnn::linearadd get input_c but do nothing with it..
     return bound_matmul(
         input_tensor_a,
         input_tensor_b,
         bias,
+        input_tensor_c,
         Matmul{
             program_config,
             /*bcast_batch=*/std::nullopt,
