@@ -346,16 +346,18 @@ void py_module(py::module& module) {
         module,
         ::ttnn::linearadd,
         R"doc(
-    linearadd(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, *, bias: Optional[ttnn.Tensor] = None, memory_config: Optional[ttnn.MemoryConfig] = None, dtype: Optional[ttnn.DataType] = None, core_grid: Optional[ttnn.CoreGrid] = None, program_config: Optional[MatmulProgramConfig] = None, activation: Optional[str] = None, compute_kernel_config: Optional[ttnn.DeviceComputeKernelConfig] = None, transpose_a[boolean] = False, transpose_b[boolean] = False) -> ttnn.Tensor
+    linearadd(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, bias: ttnn.Tensor, input_tensor_c: ttnn.Tensor,*, memory_config: Optional[ttnn.MemoryConfig] = None, dtype: Optional[ttnn.DataType] = None, core_grid: Optional[ttnn.CoreGrid] = None, program_config: Optional[MatmulProgramConfig] = None, activation: Optional[str] = None, compute_kernel_config: Optional[ttnn.DeviceComputeKernelConfig] = None, transpose_a[boolean] = False, transpose_b[boolean] = False) -> ttnn.Tensor
 
     Returns the linearadd transformation of the inputs
 
     Arguments:
         * :attr:`input_tensor_a` (ttnn.Tensor): the first tensor to be multiplied. Needs to be on the device.
         * :attr:`input_tensor_b` (ttnn.Tensor): the second tensor to be multiplied. Needs to be on the device.
+        * :attr:`bias`           (ttnn.Tensor): the first  bias tensor to be added. Needs to be on the device.
+        * :attr:`input_tensor_c` (ttnn.Tensor): the second bias tensor to be added. Needs to be on the device.
 
     Keyword Arguments:
-        * :attr:`bias` (Optional[ttnn.Tensor]): the bias tensor to be added. If specified, needs to be on the device. Defaults to None
+        >>> activations = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.
         * :attr:`memory_config` (Optional[ttnn.MemoryConfig]): the memory configuration of the output tensor. Defaults to None, which will result in using ttnn.DRAM_MEMORY_CONFIG
         * :attr:`dtype` (Optional[ttnn.DataType]): the data type of the output tensor. Defaults to None
         * :attr:`core_grid` (Optional[ttnn.CoreGrid]): the grid on which to distribute the sharded tensor on (writes to the cores L1s). Defaults to None
@@ -364,8 +366,7 @@ void py_module(py::module& module) {
         * :attr:`compute_kernel_config` (Optional[ttnn.DeviceComputeKernelConfig]): the compute kernel configuration for the matmul operation. Defaults to None
 
     Example::
-        >>> # batched matrix x broadcasted matrix
-        >>> activations = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
+        >>> # batched matrix x broadcasted matrixbfloat16)), device)
         >>> weight = ttnn.to_device(ttnn.from_torch(torch.randn((32, 128), dtype=torch.bfloat16)), device)
         >>> bias = ttnn.to_device(ttnn.from_torch(torch.randn((128,), dtype=torch.bfloat16)), device)
         >>> output = ttnn.linearadd(activations, weight, bias=bias)
@@ -376,7 +377,8 @@ void py_module(py::module& module) {
             [](decltype(::ttnn::linearadd)& self,
                const ttnn::Tensor& input_tensor_a,
                const ttnn::Tensor& input_tensor_b,
-               const std::optional<const ttnn::Tensor>& bias,
+               const ttnn::Tensor& bias,
+               const ttnn::Tensor& input_tensor_c,
                const bool transpose_a,
                const bool transpose_b,
                const std::optional<const ttnn::MemoryConfig> memory_config,
@@ -389,6 +391,7 @@ void py_module(py::module& module) {
                     input_tensor_a,
                     input_tensor_b,
                     bias,
+                    input_tensor_c,
                     transpose_a,
                     transpose_b,
                     memory_config,
@@ -400,8 +403,9 @@ void py_module(py::module& module) {
             },
             py::arg("input_tensor_a"),
             py::arg("input_tensor_b"),
+            py::arg("bias"),
+            py::arg("input_tensor_c"),
             py::kw_only(),
-            py::arg("bias") = std::nullopt,
             py::arg("transpose_a") = false,
             py::arg("transpose_b") = false,
             py::arg("memory_config") = std::nullopt,

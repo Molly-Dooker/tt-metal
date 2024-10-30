@@ -169,7 +169,8 @@ Tensor LinearOperation::invoke(
 Tensor LinearAddOperation::invoke(
     const Tensor& input_tensor_a,
     const Tensor& input_tensor_b,
-    const std::optional<const Tensor>& bias,
+    const Tensor& bias,
+    const Tensor& input_tensor_c,
     const bool transpose_a,
     const bool transpose_b,
     const std::optional<const MemoryConfig> memory_config,
@@ -183,8 +184,9 @@ Tensor LinearAddOperation::invoke(
         user_core_coord = CoreCoord(core_grid->x, core_grid->y);
     }
     bool b_is_batched = detail::is_input_batched(input_tensor_b.get_shape());
-    TT_FATAL(!(b_is_batched && bias.has_value()), "Batched input not supported when bias exists (linearadd operation).");
-
+    TT_FATAL(!(b_is_batched), "Batched input not supported when bias exists (linearadd operation).");
+    //TODO : fix bound_matmul
+    //TODO : ttnn::linearadd get input_c but do nothing with it..
     return bound_matmul(
         input_tensor_a,
         input_tensor_b,

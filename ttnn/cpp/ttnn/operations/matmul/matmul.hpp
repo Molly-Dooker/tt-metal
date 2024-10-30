@@ -68,7 +68,8 @@ struct LinearAddOperation {
     static Tensor invoke(
         const Tensor& input_tensor_a,
         const Tensor& input_tensor_b,
-        const std::optional<const Tensor>& bias = std::nullopt,
+        const Tensor& bias,
+        const Tensor& input_tensor_c,
         const bool transpose_a = false,
         const bool transpose_b = false,
         const std::optional<const MemoryConfig> memory_config = std::nullopt,
