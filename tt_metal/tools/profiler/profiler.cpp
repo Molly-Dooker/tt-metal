@@ -30,6 +30,7 @@ void DeviceProfiler::readRiscProfilerResults(
 
     ZoneScoped;
 
+    my_device_id = device_id;
     HalProgrammableCoreType CoreType;
     int riscCount;
     profiler_msg_t *profiler_msg;
@@ -441,10 +442,11 @@ void DeviceProfiler::pushTracyDeviceResults()
         }
     }
 
-    double delay = 0;
-    double frequency = 0;
-    uint64_t cpuTime = 0;
+    static double delay = 0;
+    static double frequency = 0;
+    static uint64_t cpuTime = 0;
 
+    //std::cout << "Dev: " << my_device_id << ", freq: " << frequency << std::endl;
     for (auto& device_core: device_cores)
     {
         int device_id = device_core.first;
@@ -462,6 +464,7 @@ void DeviceProfiler::pushTracyDeviceResults()
                         cpuTime);
         }
     }
+
 
     for (auto& device_core: device_cores)
     {
@@ -493,9 +496,11 @@ void DeviceProfiler::pushTracyDeviceResults()
         }
     }
 
-    for (auto& event: device_events)
+    for (auto event: device_events)
     {
         std::pair<uint32_t, CoreCoord> device_core = {event.chip_id, (CoreCoord){event.core_x,event.core_y}};
+
+        event.timestamp = event.timestamp * this->freqScale + this->shift;
         if (event.zone_phase == tracy::TTDeviceEventPhase::begin)
         {
             TracyTTPushStartZone(device_tracy_contexts[device_core], event);

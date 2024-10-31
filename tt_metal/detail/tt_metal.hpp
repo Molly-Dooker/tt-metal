@@ -13,6 +13,8 @@
 #include "tt_metal/impl/dispatch/dispatch_core_manager.hpp"
 #include "tt_metal/impl/buffers/buffer.hpp"
 
+#include "tt_metal/third_party/tracy/public/tracy/TracyTTDevice.hpp"
+
 namespace tt::tt_metal {
 inline namespace v0 {
     class Program;
@@ -175,7 +177,17 @@ inline namespace v0 {
          * |---------------|---------------------------------------------------|-----------------|---------------------------|----------|
          * | device        | The device holding the program being profiled.    | Device *        |                           | True     |
          * */
-	    void InitDeviceProfiler(Device *device);
+        void InitDeviceProfiler(Device *device);
+
+        /**
+         * Sync TT devices with host
+         *
+         * Return value: void
+         *
+         * | Argument      | Description                                       | Type            | Valid Range               | Required |
+         * |---------------|---------------------------------------------------|-----------------|---------------------------|----------|
+         * */
+        void PorfilerSync();
 
         /**
          * Read device side profiler data and dump results into device side CSV log
@@ -212,27 +224,6 @@ inline namespace v0 {
          * | output_dir   | The output directory that will hold the output CSV logs  | std::string | Any valid directory path | No       |
          * */
         void SetDeviceProfilerDir(std::string output_dir = "");
-
-        /**
-         * Set the directory for all host-side CSV logs produced by the profiler instance in the tt-metal module
-         *
-         * Return value: void
-         *
-         * | Argument     | Description                                             |  Data type  | Valid range              | required |
-         * |--------------|---------------------------------------------------------|-------------|--------------------------|----------|
-         * | output_dir   | The output directory that will hold the output CSV logs  | std::string | Any valid directory path | No       |
-         * */
-        void SetHostProfilerDir(std::string output_dir = "");
-
-        /**
-         * Start a fresh log for the host side profile results
-         *
-         * Return value: void
-         *
-         * | Argument     | Description                                             |  Data type  | Valid range              | required |
-         * |--------------|---------------------------------------------------------|-------------|--------------------------|----------|
-         * */
-        void FreshProfilerHostLog();
 
         /**
          * Start a fresh log for the device side profile results

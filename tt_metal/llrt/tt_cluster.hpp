@@ -207,6 +207,9 @@ class Cluster {
     std::vector<std::vector<chip_id_t>> get_tunnels_from_mmio_device(chip_id_t mmio_chip_id) const {
         return this->tunnels_from_mmio_device.at(mmio_chip_id);
     }
+    std::unordered_map<chip_id_t, std::unordered_map<ethernet_channel_t, std::tuple<chip_id_t, ethernet_channel_t>>> get_ethernet_connections() const {
+        return this->cluster_desc_->get_ethernet_connections();
+    }
 
     // Returns whether we are running on Galaxy.
     bool is_galaxy_cluster() const;

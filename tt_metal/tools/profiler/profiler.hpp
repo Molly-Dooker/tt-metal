@@ -47,9 +47,6 @@ class DeviceProfiler {
         // Device-Core tracy context
         std::map<std::pair<uint16_t,CoreCoord>, TracyTTCtx> device_tracy_contexts;
 
-        // Device events
-        std::set<tracy::TTDeviceEvent> device_events;
-
         // Hash to zone source locations
         std::unordered_map<uint16_t, std::string> hash_to_zone_src_locations;
 
@@ -104,6 +101,19 @@ class DeviceProfiler {
         // Device-core Syncdata
         std::map<CoreCoord, std::tuple<double,double,double>> device_core_sync_info;
 
+        // Device events
+        std::set<tracy::TTDeviceEvent> device_events;
+
+        std::set<tracy::TTDeviceEvent> device_sync_events;
+
+        //shift
+        int64_t shift = 0;
+
+        //frequency scale
+        double freqScale = 1.0;
+
+        uint32_t my_device_id = 0;
+
         //Freshen device logs
         void freshDeviceLog();
 
@@ -115,6 +125,7 @@ class DeviceProfiler {
 
         //Traverse all cores on the device and dump the device profile results
         void dumpResults(Device *device, const std::vector<CoreCoord> &worker_cores, bool lastDump);
+
 };
 
 }  // namespace tt_metal
