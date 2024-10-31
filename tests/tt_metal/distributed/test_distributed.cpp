@@ -258,21 +258,20 @@ TEST_F(MeshDevice_T3000, TestMeshProgramMultiCBMultiCore) {
     EXPECT_TRUE(test_mesh_workload_with_cbs(this->mesh_device_, 0, mesh_workload, config));
 }
 
-TEST_F(MeshDevice_T3000, TestMeshProgramBasicKernel) {
-    const uint32_t NUM_LOOPS = 5;
+std::shared_ptr<Program> create_dummy_program_0(std::shared_ptr<MeshDevice> mesh_device, std::vector<uint32_t>& rtas, CoreRangeSet& cr_set, KernelHandle& dm0_kernel, KernelHandle& dm1_kernel) {
     std::shared_ptr<Program> program = std::make_shared<Program>();
 
-    CoreCoord worker_grid_size = this->mesh_device_->compute_with_storage_grid_size();
+    CoreCoord worker_grid_size = mesh_device->compute_with_storage_grid_size();
     CoreRange cr({0, 0}, {worker_grid_size.x - 1, worker_grid_size.y - 1});
-    CoreRangeSet cr_set({cr});
+    cr_set = {cr};
 
-    auto dm0_kernel = CreateKernel(
+    dm0_kernel = CreateKernel(
                                     *program,
                                     "tests/tt_metal/distributed/kernels/sem_update_dm0.cpp",
                                     cr_set,
                                     DataMovementConfig{.processor = DataMovementProcessor::RISCV_0, .noc = NOC::RISCV_0_default}
                                 );
-    auto dm1_kernel = CreateKernel(
+    dm1_kernel = CreateKernel(
                                     *program,
                                     "tests/tt_metal/distributed/kernels/sem_update_dm1.cpp",
                                     cr_set,
@@ -281,6 +280,26 @@ TEST_F(MeshDevice_T3000, TestMeshProgramBasicKernel) {
     CreateSemaphore(*program, cr_set, 0);
     CreateSemaphore(*program, cr_set, 1);
 
+    // Initialize Runtime Args
+    std::vector<uint32_t> dm0_rtas = {rtas[0], rtas[1], rtas[2], rtas[3]};
+    std::vector<uint32_t> dm1_rtas = {rtas[0], rtas[1], rtas[2], rtas[4], rtas[5]};
+    SetRuntimeArgs(*program, dm0_kernel, cr_set, dm0_rtas);
+    SetRuntimeArgs(*program, dm1_kernel, cr_set, dm1_rtas);
+    return program;
+}
+
+void update_runtime_args_for_dummy_program_0(std::shared_ptr<Program> program, std::vector<uint32_t>& rtas, CoreRangeSet& cr_set, KernelHandle& dm0_kernel, KernelHandle& dm1_kernel) {
+    SetRuntimeArgs(*program, dm0_kernel, cr_set, {rtas[0], rtas[1], rtas[2], rtas[3]});
+    SetRuntimeArgs(*program, dm1_kernel, cr_set, {rtas[0], rtas[1], rtas[2], rtas[4], rtas[5]});
+}
+
+// std::shared_ptr<Program> create_dummy_program_1(std::shared_ptr<MeshDevice> mesh_device) {
+//     return create_dummy_program_0(mesh_device);
+// }
+
+TEST_F(MeshDevice_T3000, TestMeshProgramBroadcast) {
+    const uint32_t NUM_LOOPS = 5;
+
     uint32_t kernel_inc_val = 2;
     uint32_t kernel_dec_val = 1;
     uint32_t num_kernel_loops = 1;
@@ -288,12 +307,11 @@ TEST_F(MeshDevice_T3000, TestMeshProgramBasicKernel) {
     uint32_t sem_idx_dm_1 = 1;
     uint32_t num_loops_multiplier = 1;
 
-    // Initialize Runtime Args
-    std::vector<uint32_t> dm0_rtas = {kernel_inc_val, kernel_dec_val, num_kernel_loops, sem_idx_dm_0};
-    std::vector<uint32_t> dm1_rtas = {kernel_inc_val, kernel_dec_val, num_kernel_loops, sem_idx_dm_1, num_loops_multiplier};
-    SetRuntimeArgs(*program, dm0_kernel, cr_set, dm0_rtas);
-    SetRuntimeArgs(*program, dm1_kernel, cr_set, dm1_rtas);
-
+    std::vector<uint32_t> all_rtas = {kernel_inc_val, kernel_dec_val, num_kernel_loops, sem_idx_dm_0, sem_idx_dm_1, num_loops_multiplier};
+    CoreRangeSet program_cr_set;
+    KernelHandle dm0_kernel_handle;
+    KernelHandle dm1_kernel_handle;
+    std::shared_ptr<Program> program = create_dummy_program_0(this->mesh_device_, all_rtas, program_cr_set, dm0_kernel_handle, dm1_kernel_handle);
     // Create Mesh Workload
     std::shared_ptr<experimental::MeshWorkload> mesh_workload = std::make_shared<experimental::MeshWorkload>();
     mesh_workload->add_program(program);
@@ -301,7 +319,7 @@ TEST_F(MeshDevice_T3000, TestMeshProgramBasicKernel) {
     for (auto loop = 0; loop < NUM_LOOPS; loop++) {
         EnqueueMeshWorkload(this->mesh_device_, 0, mesh_workload, true);
         for (auto device: this->mesh_device_->get_devices()) {
-            for (const CoreRange& core_range : cr_set.ranges())
+            for (const CoreRange& core_range : program_cr_set.ranges())
             {
                 for (const CoreCoord& core_coord : core_range)
                 {
@@ -311,16 +329,114 @@ TEST_F(MeshDevice_T3000, TestMeshProgramBasicKernel) {
                     uint32_t dm1_result_addr = program->get_sem_base_addr(device, core_coord, CoreType::WORKER) + hal.get_alignment(HalMemType::L1);
                     tt::tt_metal::detail::ReadFromDeviceL1(device, core_coord, dm0_result_addr, sizeof(uint32_t), dm0_result);
                     tt::tt_metal::detail::ReadFromDeviceL1(device, core_coord, dm1_result_addr, sizeof(uint32_t), dm1_result);
-                    EXPECT_EQ(dm0_result.at(0), (kernel_inc_val - kernel_dec_val) * num_kernel_loops);
-                    EXPECT_EQ(dm1_result.at(0), (kernel_inc_val - kernel_dec_val) * num_kernel_loops * num_loops_multiplier + 1);
+                    EXPECT_EQ(dm0_result.at(0), (all_rtas.at(0) - all_rtas.at(1)) * num_kernel_loops);
+                    EXPECT_EQ(dm1_result.at(0), (all_rtas.at(0) -  all_rtas.at(1)) * num_kernel_loops * all_rtas.at(5) + 1);
                 }
             }
         }
-        kernel_inc_val *= 2;
-        kernel_dec_val *= 2;
-        num_loops_multiplier *= 2;
-        SetRuntimeArgs(*program, dm0_kernel, cr_set, {kernel_inc_val, kernel_dec_val, num_kernel_loops, sem_idx_dm_0});
-        SetRuntimeArgs(*program, dm1_kernel, cr_set, {kernel_inc_val, kernel_dec_val, num_kernel_loops, sem_idx_dm_1, num_loops_multiplier});
+        // Update RTAs
+        all_rtas.at(0) *= 2;
+        all_rtas.at(1) *= 2;
+        all_rtas.at(5) *= 2;
+        update_runtime_args_for_dummy_program_0(program, all_rtas, program_cr_set, dm0_kernel_handle, dm1_kernel_handle);
+    }
+}
+
+TEST_F(MeshDevice_T3000, TestMeshProgramMultiBroadcast) {
+    LogicalDeviceRange grid_0(tt_xyz_coord(0, 0, 0), tt_xyz_coord(1, 1, 0));
+    LogicalDeviceRange grid_1(tt_xyz_coord(2, 0, 0), tt_xyz_coord(3, 1, 0));
+
+    const uint32_t NUM_LOOPS = 5;
+
+    // Initialize Runtime Args for grid 0
+    uint32_t grid_0_kernel_inc_val = 2;
+    uint32_t grid_0_kernel_dec_val = 1;
+    uint32_t grid_0_num_kernel_loops = 1;
+    uint32_t grid_0_sem_idx_dm_0 = 0;
+    uint32_t grid_0_sem_idx_dm_1 = 1;
+    uint32_t grid_0_num_loops_multiplier = 1;
+
+    // Initialize Runtime Args for grid 1
+    uint32_t grid_1_kernel_inc_val = 3;
+    uint32_t grid_1_kernel_dec_val = 1;
+    uint32_t grid_1_num_kernel_loops = 2;
+    uint32_t grid_1_sem_idx_dm_0 = 0;
+    uint32_t grid_1_sem_idx_dm_1 = 1;
+    uint32_t grid_1_num_loops_multiplier = 1;
+
+    std::vector<uint32_t> grid_0_rtas = {grid_0_kernel_inc_val, grid_0_kernel_dec_val, grid_0_num_kernel_loops, grid_0_sem_idx_dm_0, grid_0_sem_idx_dm_1, grid_0_num_loops_multiplier};
+    std::vector<uint32_t> grid_1_rtas = {grid_1_kernel_inc_val, grid_1_kernel_dec_val, grid_1_num_kernel_loops, grid_1_sem_idx_dm_0, grid_1_sem_idx_dm_1, grid_1_num_loops_multiplier};
+
+    CoreRangeSet grid_0_program_cr_set;
+    CoreRangeSet grid_1_program_cr_set;
+
+    KernelHandle grid_0_dm0_kernel_handle;
+    KernelHandle grid_0_dm1_kernel_handle;
+    KernelHandle grid_1_dm0_kernel_handle;
+    KernelHandle grid_1_dm1_kernel_handle;
+
+    std::shared_ptr<Program> grid0_program = create_dummy_program_0(this->mesh_device_, grid_0_rtas, grid_0_program_cr_set, grid_0_dm0_kernel_handle, grid_0_dm1_kernel_handle);
+    std::shared_ptr<Program> grid1_program = create_dummy_program_0(this->mesh_device_, grid_1_rtas, grid_1_program_cr_set, grid_1_dm0_kernel_handle, grid_1_dm1_kernel_handle);
+
+    // Create Mesh Workload, running 2 programs
+    std::shared_ptr<experimental::MeshWorkload> mesh_workload = std::make_shared<experimental::MeshWorkload>();
+    mesh_workload->add_program(grid_0, grid0_program);
+    mesh_workload->add_program(grid_1, grid1_program);
+
+    for (auto loop = 0; loop < NUM_LOOPS; loop++) {
+        EnqueueMeshWorkload(this->mesh_device_, 0, mesh_workload, true);
+
+        for (std::size_t row = grid_0.start_coord.y; row < grid_0.end_coord.y + 1; row++) {
+            for (std::size_t col = grid_0.start_coord.x; col < grid_0.end_coord.x + 1; col++) {
+                auto device = this->mesh_device_->get_device(row, col);
+                for (const CoreRange& core_range : grid_0_program_cr_set.ranges())
+                {
+                    for (const CoreCoord& core_coord : core_range)
+                    {
+                        std::vector<uint32_t> dm0_result = {};
+                        std::vector<uint32_t> dm1_result = {};
+                        uint32_t dm0_result_addr = grid0_program->get_sem_base_addr(device, core_coord, CoreType::WORKER);
+                        uint32_t dm1_result_addr = grid0_program->get_sem_base_addr(device, core_coord, CoreType::WORKER) + hal.get_alignment(HalMemType::L1);
+                        tt::tt_metal::detail::ReadFromDeviceL1(device, core_coord, dm0_result_addr, sizeof(uint32_t), dm0_result);
+                        tt::tt_metal::detail::ReadFromDeviceL1(device, core_coord, dm1_result_addr, sizeof(uint32_t), dm1_result);
+                        EXPECT_EQ(dm0_result.at(0), (grid_0_rtas.at(0) - grid_0_rtas.at(1)) * grid_0_num_kernel_loops);
+                        EXPECT_EQ(dm1_result.at(0), (grid_0_rtas.at(0) - grid_0_rtas.at(1)) * grid_0_num_kernel_loops * grid_0_rtas.at(5) + 1);
+                    }
+                }
+            }
+        }
+
+        for (std::size_t row = grid_1.start_coord.y; row < grid_1.end_coord.y + 1; row++) {
+            for (std::size_t col = grid_1.start_coord.x; col < grid_1.end_coord.x + 1; col++) {
+                auto device = this->mesh_device_->get_device(row, col);
+                for (const CoreRange& core_range : grid_1_program_cr_set.ranges())
+                {
+                    for (const CoreCoord& core_coord : core_range)
+                    {
+                        std::vector<uint32_t> dm0_result = {};
+                        std::vector<uint32_t> dm1_result = {};
+                        uint32_t dm0_result_addr = grid1_program->get_sem_base_addr(device, core_coord, CoreType::WORKER);
+                        uint32_t dm1_result_addr = grid1_program->get_sem_base_addr(device, core_coord, CoreType::WORKER) + hal.get_alignment(HalMemType::L1);
+                        tt::tt_metal::detail::ReadFromDeviceL1(device, core_coord, dm0_result_addr, sizeof(uint32_t), dm0_result);
+                        tt::tt_metal::detail::ReadFromDeviceL1(device, core_coord, dm1_result_addr, sizeof(uint32_t), dm1_result);
+                        EXPECT_EQ(dm0_result.at(0), (grid_1_rtas.at(0) - grid_1_rtas.at(1)) * grid_1_num_kernel_loops);
+                        EXPECT_EQ(dm1_result.at(0), (grid_1_rtas.at(0) - grid_1_rtas.at(1)) * grid_1_num_kernel_loops * grid_1_rtas.at(5) + 1);
+                    }
+                }
+            }
+        }
+
+        // Update RTAs grid_0
+        grid_0_rtas.at(0) *= 2;
+        grid_0_rtas.at(1) *= 2;
+        grid_0_rtas.at(5) *= 2;
+        // Update RTAs grid_1
+        grid_1_rtas.at(0) *= 3;
+        grid_1_rtas.at(1) *= 3;
+        grid_1_rtas.at(5) *= 3;
+
+        update_runtime_args_for_dummy_program_0(grid0_program, grid_0_rtas, grid_0_program_cr_set, grid_0_dm0_kernel_handle, grid_0_dm1_kernel_handle);
+        update_runtime_args_for_dummy_program_0(grid1_program, grid_1_rtas, grid_1_program_cr_set, grid_1_dm0_kernel_handle, grid_1_dm1_kernel_handle);
     }
 }
 
