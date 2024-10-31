@@ -189,7 +189,7 @@ Tensor LinearAddOperation::invoke(
         user_core_coord = CoreCoord(core_grid->x, core_grid->y);
     }
     bool b_is_batched = detail::is_input_batched(input_tensor_b.get_shape());
-    TT_FATAL(!(b_is_batched), "Batched input not supported when bias exists (linearadd operation).");
+    TT_FATAL(!(b_is_batched), "Batched input not supported when bias exists (linear_add operation).");
     return bound_matmul(
         input_tensor_a,
         input_tensor_b,

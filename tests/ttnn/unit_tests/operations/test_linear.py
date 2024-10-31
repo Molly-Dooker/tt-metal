@@ -58,7 +58,6 @@ def test_linear(
         )
     else:
         bias = None
-
     output_tensor = ttnn.linear(
         input_tensor_a,
         input_tensor_b,

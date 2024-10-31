@@ -344,11 +344,11 @@ void py_module(py::module& module) {
 
     bind_registered_operation(
         module,
-        ::ttnn::linearadd,
+        ::ttnn::linear_add,
         R"doc(
-    linearadd(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, bias: ttnn.Tensor, input_tensor_c: ttnn.Tensor,*, memory_config: Optional[ttnn.MemoryConfig] = None, dtype: Optional[ttnn.DataType] = None, core_grid: Optional[ttnn.CoreGrid] = None, program_config: Optional[MatmulProgramConfig] = None, activation: Optional[str] = None, compute_kernel_config: Optional[ttnn.DeviceComputeKernelConfig] = None, transpose_a[boolean] = False, transpose_b[boolean] = False) -> ttnn.Tensor
+    linear_add(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, bias: ttnn.Tensor, input_tensor_c: ttnn.Tensor,*, memory_config: Optional[ttnn.MemoryConfig] = None, dtype: Optional[ttnn.DataType] = None, core_grid: Optional[ttnn.CoreGrid] = None, program_config: Optional[MatmulProgramConfig] = None, activation: Optional[str] = None, compute_kernel_config: Optional[ttnn.DeviceComputeKernelConfig] = None, transpose_a[boolean] = False, transpose_b[boolean] = False) -> ttnn.Tensor
 
-    Returns the linearadd transformation of the inputs
+    Returns the linear_add transformation of the inputs
 
     Arguments:
         * :attr:`input_tensor_a` (ttnn.Tensor): the first tensor to be multiplied. Needs to be on the device.
@@ -369,12 +369,12 @@ void py_module(py::module& module) {
         >>> # batched matrix x broadcasted matrixbfloat16)), device)
         >>> weight = ttnn.to_device(ttnn.from_torch(torch.randn((32, 128), dtype=torch.bfloat16)), device)
         >>> bias = ttnn.to_device(ttnn.from_torch(torch.randn((128,), dtype=torch.bfloat16)), device)
-        >>> output = ttnn.linearadd(activations, weight, bias=bias)
+        >>> output = ttnn.linear_add(activations, weight, bias=bias)
         >>> print(output.shape)
         [10, 64, 128]
         )doc",
         ttnn::pybind_overload_t{
-            [](decltype(::ttnn::linearadd)& self,
+            [](decltype(::ttnn::linear_add)& self,
                const ttnn::Tensor& input_tensor_a,
                const ttnn::Tensor& input_tensor_b,
                const ttnn::Tensor& bias,
