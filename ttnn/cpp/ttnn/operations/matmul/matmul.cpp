@@ -74,7 +74,7 @@ ttnn::Tensor bound_matmul(
     }
 
     auto output_tensor =
-        matmul(input_tensor_a_adjusted, input_tensor_b_adjusted, post_process_bias ? std::nullopt : bias, parameters);
+        matmul(input_tensor_a_adjusted, input_tensor_b_adjusted, post_process_bias ? std::nullopt : bias, input_tensor_c ,parameters);
 
     if (post_process_bias) {
         output_tensor = ttnn::add(output_tensor, bias.value(), std::nullopt, parameters.output_mem_config);
