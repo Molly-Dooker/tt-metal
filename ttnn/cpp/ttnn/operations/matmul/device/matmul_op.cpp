@@ -909,6 +909,7 @@ Tensor matmul(
     const Tensor& input_tensor_a,
     const Tensor& input_tensor_b,
     const std::optional<const Tensor> bias,
+    const std::optional<const Tensor> input_tensor_c,
     const struct Matmul& parameters,
     const uint8_t queue_id) {
     std::vector<std::optional<const Tensor>> optional_input_tensors = {};
