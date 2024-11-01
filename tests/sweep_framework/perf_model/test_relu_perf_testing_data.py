@@ -13,7 +13,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
     [
         (32, 5 * 32),  # 5
         (10 * 32, 2 * 32),  # 20
-        (10 * 32, 2 * 32),  # 200
+        (10 * 32, 20 * 32),  # 200
         (100 * 32, 5 * 32),  # 500
         (100 * 32, 30 * 32),  # 3k
         (100 * 32, 40 * 32),  # 4k
@@ -27,7 +27,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 @pytest.mark.parametrize("input_dtype", [ttnn.bfloat16, ttnn.bfloat4_b, ttnn.bfloat8_b])
 # @pytest.mark.parametrize("input_layout", [ttnn.TILE_LAYOUT])
 def test_relu_interleaved(device, dims, input_mem_config, out_mem_config, input_dtype):
-    for i in range(1):
+    for i in range(10):
         h = dims[0]
         w = dims[1]
         torch_input_tensor_a = torch.rand((h, w))

@@ -1,46 +1,32 @@
 import os
 import csv
-import matplotlib.pyplot as plt
 import numpy as np
 from collections import defaultdict
+import matplotlib.pyplot as plt
 import argparse
 
-# Set up argument parsing
+# Argument parsing and file setup
 parser = argparse.ArgumentParser(description="Process performance results CSV files.")
 parser.add_argument("-f", "--file", type=str, help="Path to the input CSV file", required=False)
 args = parser.parse_args()
 
-# Path to the directory containing the CSV files
 reports_dir = "generated/profiler/reports/"
-
-# Determine the CSV file to process
-if args.file:
-    # Use the provided file if specified
-    last_csv_file = os.path.abspath(args.file)
-else:
-    # Get all CSV files recursively from the specified directory that start with 'ops_perf_results_'
-    csv_files = []
-    for dirpath, _, filenames in os.walk(reports_dir):
-        for f in filenames:
-            if f.endswith(".csv") and f.startswith("ops_perf_results_"):
-                csv_files.append(os.path.abspath(os.path.join(dirpath, f)))
-
-    # Sort the files by their modification time
-    csv_files.sort(key=lambda f: os.path.getmtime(f))
-
-    if not csv_files:
-        print("No CSV files found in the specified directory.")
-        exit()
-
-    last_csv_file = csv_files[-1]  # Get the most recently modified CSV file
+last_csv_file = (
+    args.file
+    if args.file
+    else max(
+        [os.path.join(dp, f) for dp, dn, filenames in os.walk(reports_dir) for f in filenames if f.endswith(".csv")],
+        key=os.path.getmtime,
+    )
+)
 
 output_file = "tests/sweep_framework/perf_model/filtered_rows_new_data.csv"
-fitting_file = "tests/sweep_framework/perf_model/fitting_data.csv"  # File containing fitting coefficients
-
-# To hold data for plotting and aggregation
-agg_data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+stats_file = "tests/sweep_framework/perf_model/kernel_duration_stats.csv"
+plots_dir = "tests/sweep_framework/perf_model/plots"
+os.makedirs(plots_dir, exist_ok=True)  # Ensure the plots directory exists
 
 # Load fitting coefficients
+fitting_file = "tests/sweep_framework/perf_model/fitting_data.csv"
 fitting_coeffs = {}
 with open(fitting_file, mode="r") as fit_file:
     fit_reader = csv.DictReader(fit_file)
@@ -48,116 +34,217 @@ with open(fitting_file, mode="r") as fit_file:
         key = (row["INPUT_0_MEMORY"], row["OUTPUT_0_MEMORY"], row["INPUT_0_DATATYPE"])
         fitting_coeffs[key] = (float(row["COEFFICIENT_A"]), float(row["COEFFICIENT_B"]))
 
-# Open the selected CSV file for reading
+# Process the selected CSV file
+data = []
+kernel_durations = defaultdict(lambda: defaultdict(list))
+
 with open(last_csv_file, mode="r") as infile:
     reader = csv.reader(infile)
     header = next(reader)
 
-    # Define the indices of the columns we want to keep
-    device_kernel_duration_index = (
-        header.index("DEVICE KERNEL DURATION [ns]") if "DEVICE KERNEL DURATION [ns]" in header else None
+    device_kernel_duration_index = header.index("DEVICE KERNEL DURATION [ns]")
+    input_0_y_index = header.index("INPUT_0_Y")
+    input_0_x_index = header.index("INPUT_0_X")
+    input_0_memory_index = header.index("INPUT_0_MEMORY")
+    output_0_memory_index = header.index("OUTPUT_0_MEMORY")
+    input_0_datatype_index = header.index("INPUT_0_DATATYPE")
+
+    for row in reader:
+        if not row[0].startswith("(torch)"):
+            input_0_x = int(row[input_0_x_index]) if row[input_0_x_index] else 0
+            input_0_y = int(row[input_0_y_index]) if row[input_0_y_index] else 0
+            num_tiles = (input_0_x * input_0_y) // 1024
+
+            input_memory = row[input_0_memory_index].replace("DEV_0_", "")
+            output_memory = row[output_0_memory_index].replace("DEV_0_", "")
+            input_datatype = row[input_0_datatype_index]
+
+            actual_duration = int(row[device_kernel_duration_index])
+            key = (input_memory, output_memory, input_datatype)
+
+            estimated_duration = fitting_coeffs.get(key, (0, 0))
+            estimated_duration = estimated_duration[0] * num_tiles + estimated_duration[1]
+
+            # Store the values for output
+            data.append((input_memory, output_memory, input_datatype, num_tiles, actual_duration, estimated_duration))
+            kernel_durations[(input_memory, output_memory, input_datatype)][num_tiles].append(actual_duration)
+
+# Write detailed results to a CSV file
+with open(output_file, mode="w", newline="") as out_file:
+    writer = csv.writer(out_file)
+    writer.writerow(
+        [
+            "Input Memory",
+            "Output Memory",
+            "Input Datatype",
+            "Num Tiles",
+            "Actual Duration [ns]",
+            "Estimated Duration [ns]",
+        ]
     )
-    input_0_y_index = header.index("INPUT_0_Y") if "INPUT_0_Y" in header else None
-    input_0_x_index = header.index("INPUT_0_X") if "INPUT_0_X" in header else None
-    input_0_memory_index = header.index("INPUT_0_MEMORY") if "INPUT_0_MEMORY" in header else None
-    output_0_memory_index = header.index("OUTPUT_0_MEMORY") if "OUTPUT_0_MEMORY" in header else None
-    input_0_datatype_index = header.index("INPUT_0_DATATYPE") if "INPUT_0_DATATYPE" in header else None
+    for entry in data:
+        writer.writerow(entry)
 
-    # Open the output CSV file for writing (this will overwrite it if it exists)
-    with open(output_file, mode="w", newline="") as outfile:
-        writer = csv.writer(outfile)
+# Calculate statistics and write to a new CSV file
+with open(stats_file, mode="w", newline="") as stats_out_file:
+    stats_writer = csv.writer(stats_out_file)
+    stats_writer.writerow(
+        [
+            "Input Memory",
+            "Output Memory",
+            "Input Datatype",
+            "Num Tiles",
+            "Mean Duration [ns]",
+            "Std Dev Duration [ns]",
+            "Std Dev/Mean",
+        ]
+    )
 
-        # Write the header for the filtered columns
-        writer.writerow(
-            [
-                "DEVICE KERNEL DURATION [ns]",
-                "ESTIMATED KERNEL DURATION [ns]",
-                "NUM_TILES",
-                "INPUT_0_DATATYPE",
-                "INPUT_0_MEMORY",
-                "OUTPUT_0_MEMORY",
-            ]
+    for key, num_tiles_dict in kernel_durations.items():
+        for num_tiles, durations in num_tiles_dict.items():
+            mean_duration = np.mean(durations)
+            std_duration = np.std(durations)
+            std_dev_over_mean = std_duration / mean_duration if mean_duration > 0 else np.nan
+            stats_writer.writerow([key[0], key[1], key[2], num_tiles, mean_duration, std_duration, std_dev_over_mean])
+
+# Prepare for plotting
+plot_data = defaultdict(lambda: defaultdict(dict))
+
+for key, num_tiles_dict in kernel_durations.items():
+    for num_tiles, durations in num_tiles_dict.items():
+        mean_duration = np.mean(durations)
+        std_duration = np.std(durations)
+
+        # Calculate RRMSE
+        rrmse_value = (std_duration / mean_duration * 100) if mean_duration > 0 else 0
+
+        # Calculate RMSRE
+        estimated_durations = []
+        for actual_duration in durations:
+            estimated_duration = fitting_coeffs.get(key, (0, 0))
+            estimated_duration = estimated_duration[0] * num_tiles + estimated_duration[1]
+            estimated_durations.append(estimated_duration)
+
+        rmsre_value = (
+            (np.sqrt(np.mean((np.array(durations) - np.array(estimated_durations)) ** 2)) / mean_duration * 100)
+            if mean_duration > 0
+            else 0
         )
 
-        actual_durations = []
+        plot_data[key][num_tiles] = (rrmse_value, rmsre_value)
+
+# Prepare for plotting
+# Explicitly define the 12 combinations you want to plot
+plot_order = [
+    ("L1_INTERLEAVED", "L1_INTERLEAVED", "BFLOAT16"),
+    ("L1_INTERLEAVED", "L1_INTERLEAVED", "BFLOAT4_B"),
+    ("L1_INTERLEAVED", "L1_INTERLEAVED", "BFLOAT8_B"),
+    ("L1_INTERLEAVED", "DRAM_INTERLEAVED", "BFLOAT16"),
+    ("L1_INTERLEAVED", "DRAM_INTERLEAVED", "BFLOAT4_B"),
+    ("L1_INTERLEAVED", "DRAM_INTERLEAVED", "BFLOAT8_B"),
+    ("DRAM_INTERLEAVED", "L1_INTERLEAVED", "BFLOAT16"),
+    ("DRAM_INTERLEAVED", "L1_INTERLEAVED", "BFLOAT4_B"),
+    ("DRAM_INTERLEAVED", "L1_INTERLEAVED", "BFLOAT8_B"),
+    ("DRAM_INTERLEAVED", "DRAM_INTERLEAVED", "BFLOAT16"),
+    ("DRAM_INTERLEAVED", "DRAM_INTERLEAVED", "BFLOAT4_B"),
+    ("DRAM_INTERLEAVED", "DRAM_INTERLEAVED", "BFLOAT8_B"),
+]
+
+# Filter plot data to match the specified order
+ordered_plot_data = [(key, plot_data[key]) for key in plot_order if key in plot_data]
+
+num_plots = len(ordered_plot_data)
+num_cols = 3  # Number of columns for the subplots
+num_rows = (num_plots + num_cols - 1) // num_cols  # Calculate required number of rows
+fig, axes = plt.subplots(num_rows, num_cols, figsize=(18, 5 * num_rows), squeeze=False)
+
+# Flatten axes for easy indexing
+axes = axes.flatten()
+
+# Plotting
+for plot_index, (key, num_tiles_metrics) in enumerate(ordered_plot_data):
+    input_memory, output_memory, input_datatype = key
+    num_tiles = sorted(num_tiles_metrics.keys())
+    rrmse_values = [num_tiles_metrics[nt][0] for nt in num_tiles]
+    rmsre_values = [num_tiles_metrics[nt][1] for nt in num_tiles]
+
+    ax = axes[plot_index]  # Get the axis for the current plot
+    ax.plot(num_tiles, rrmse_values, "bo-", label="RRMSE (%)", alpha=0.7)
+    ax.plot(num_tiles, rmsre_values, "ro-", label="RMSRE (%)", alpha=0.7)
+
+    # Set title and labels
+    ax.set_title(
+        f"Input: {input_memory}\nOutput: {output_memory}\nFormat: {input_datatype}", fontsize=12, pad=20
+    )  # Multi-line title
+    ax.set_xlabel("Num Tiles")
+    ax.set_ylabel("Error (%)")
+    ax.grid()
+    ax.legend()
+
+# Remove any unused subplots
+for i in range(plot_index + 1, len(axes)):
+    fig.delaxes(axes[i])
+
+# Adjust layout to prevent overlap
+plt.tight_layout(pad=3.0)
+plt.subplots_adjust(hspace=0.8)  # Increase vertical spacing
+plt.savefig(os.path.join(plots_dir, "all_plots_ordered.png"))
+print(f"All ordered plots have been saved to {os.path.join(plots_dir, 'all_plots_ordered.png')}.")
+
+# Prepare for plotting RMSRE without mean
+# New section for RMSRE without mean
+plot_data_without_mean = defaultdict(dict)
+
+for key, num_tiles_dict in kernel_durations.items():
+    for num_tiles, durations in num_tiles_dict.items():
         estimated_durations = []
+        for actual_duration in durations:
+            estimated_duration = fitting_coeffs.get(key, (0, 0))
+            estimated_duration = estimated_duration[0] * num_tiles + estimated_duration[1]
+            estimated_durations.append(estimated_duration)
 
-        # Iterate over each row in the input file
-        for row in reader:
-            if not row[0].startswith("(torch)"):
-                # Calculate NUM_TILES
-                num_tiles = None
-                if input_0_x_index is not None and input_0_y_index is not None:
-                    input_0_x = int(row[input_0_x_index]) if row[input_0_x_index] else 0
-                    input_0_y = int(row[input_0_y_index]) if row[input_0_y_index] else 0
-                    num_tiles = (input_0_x * input_0_y) // 1024
+        rmsre_value_without_mean = (
+            np.sqrt(np.mean((np.array(durations) - np.array(estimated_durations)) ** 2)) if len(durations) > 0 else 0
+        )
+        plot_data_without_mean[key][num_tiles] = rmsre_value_without_mean
 
-                # Prepare the filtered row
-                input_memory = (
-                    row[input_0_memory_index].replace("DEV_0_", "") if input_0_memory_index is not None else ""
-                )
-                output_memory = (
-                    row[output_0_memory_index].replace("DEV_0_", "") if output_0_memory_index is not None else ""
-                )
-                input_datatype = row[input_0_datatype_index] if input_0_datatype_index is not None else ""
+# Prepare for plotting
+ordered_plot_data_without_mean = [
+    (key, plot_data_without_mean[key]) for key in plot_order if key in plot_data_without_mean
+]
 
-                # Actual duration
-                actual_duration = (
-                    int(row[device_kernel_duration_index]) if device_kernel_duration_index is not None else 0
-                )
-                actual_durations.append(actual_duration)
+num_plots_without_mean = len(ordered_plot_data_without_mean)
+num_cols = 3  # Number of columns for the subplots
+num_rows_without_mean = (num_plots_without_mean + num_cols - 1) // num_cols  # Calculate required number of rows
+fig, axes = plt.subplots(num_rows_without_mean, num_cols, figsize=(18, 5 * num_rows_without_mean), squeeze=False)
 
-                # Calculate estimated duration
-                key = (input_memory, output_memory, input_datatype)
-                estimated_duration = 0
-                if key in fitting_coeffs:
-                    a, b = fitting_coeffs[key]
-                    estimated_duration = a * num_tiles + b
+# Flatten axes for easy indexing
+axes = axes.flatten()
 
-                estimated_durations.append(estimated_duration)
+# Plotting
+for plot_index, (key, num_tiles_metrics) in enumerate(ordered_plot_data_without_mean):
+    input_memory, output_memory, input_datatype = key
+    num_tiles = sorted(num_tiles_metrics.keys())
+    rmsre_values_without_mean = [num_tiles_metrics[nt] for nt in num_tiles]
 
-                # Write the filtered row to the output file
-                writer.writerow(
-                    [actual_duration, estimated_duration, num_tiles, input_datatype, input_memory, output_memory]
-                )
+    ax = axes[plot_index]  # Get the axis for the current plot
+    ax.plot(num_tiles, rmsre_values_without_mean, "ro-", label="RMSRE (%)", alpha=0.7)
 
+    # Set title and labels
+    ax.set_title(
+        f"RMSRE - Input: {input_memory}\nOutput: {output_memory}\nFormat: {input_datatype}", fontsize=12, pad=20
+    )  # Multi-line title
+    ax.set_xlabel("Num Tiles")
+    ax.set_ylabel("RMSRE (%)")
+    ax.grid()
+    ax.legend()
 
-# Function to calculate RRMSE
-def rrmse(actual, predicted):
-    actual = np.array(actual)
-    predicted = np.array(predicted)
+# Remove any unused subplots
+for i in range(plot_index + 1, len(axes)):
+    fig.delaxes(axes[i])
 
-    # Calculate mean of actual values
-    mean_actual = np.mean(actual)
-
-    # Calculate RMSE
-    rmse = np.sqrt(np.mean((actual - predicted) ** 2))
-
-    # Calculate RRMSE
-    rrmse_value = (rmse / mean_actual) * 100
-
-    return rrmse_value
-
-
-# Function to calculate RMSRE
-def rmsre(actual, predicted):
-    actual = np.array(actual)
-    predicted = np.array(predicted)
-
-    # Calculate relative errors
-    relative_errors = np.abs((actual - predicted) / actual)
-
-    # Calculate RMSRE
-    rmsre_value = np.sqrt(np.mean(relative_errors**2)) * 100  # Percentage
-
-    return rmsre_value
-
-
-# Calculate and print RRMSE and RMSRE
-rrmse_value = rrmse(actual_durations, estimated_durations)
-rmsre_value = rmsre(actual_durations, estimated_durations)
-
-print(f"RRMSE: {rrmse_value:.2f}%")
-print(f"RMSRE: {rmsre_value:.2f}%")
-
-print(f"Filtered data has been written to {output_file}.")
+# Adjust layout to prevent overlap
+plt.tight_layout(pad=3.0)
+plt.subplots_adjust(hspace=0.8)  # Increase vertical spacing
+plt.savefig(os.path.join(plots_dir, "rmsre_without_mean.png"))
+print(f"RMSRE without mean plot has been saved to {os.path.join(plots_dir, 'rmsre_without_mean.png')}.")
