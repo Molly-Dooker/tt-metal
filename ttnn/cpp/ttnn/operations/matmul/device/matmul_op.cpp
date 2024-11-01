@@ -943,6 +943,45 @@ Tensor matmul(
     return output_tensors.at(0);
 }
 
+Tensor matmul2(
+    const Tensor& input_tensor_a,
+    const Tensor& input_tensor_b,
+    const std::optional<const Tensor> bias,
+    const std::optional<const Tensor> input_tensor_c,
+    const struct Matmul& parameters,
+    const uint8_t queue_id) {
+    std::vector<std::optional<const Tensor>> optional_input_tensors = {};
+    std::vector<Tensor> output_tensors;
+    if (bias.has_value()) {
+        optional_input_tensors.push_back(bias.value());
+        output_tensors = {
+            Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}, {bias.value()}))};
+    } else {
+        optional_input_tensors.push_back(std::nullopt);
+        output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
+    }
+
+    operation::launch_op(
+        [parameters, queue_id](
+            const std::vector<Tensor>& input_tensors,
+            const std::vector<std::optional<const Tensor>>& optional_input_tensors,
+            const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
+            const auto& input_tensor_a = input_tensors.at(0);
+            const auto& input_tensor_b = input_tensors.at(1);
+
+            return operation::run(
+                create_matmul_struct(input_tensor_a, input_tensor_b, parameters),
+                {input_tensor_a, input_tensor_b},
+                optional_input_tensors,
+                {},
+                queue_id);
+        },
+        {input_tensor_a, input_tensor_b},
+        output_tensors,
+        optional_input_tensors);
+    return output_tensors.at(0);
+}
+
 void Matmul::validate(
     const std::vector<Tensor>& input_tensors,
     const std::vector<std::optional<const Tensor>>& optional_input_tensors) const {

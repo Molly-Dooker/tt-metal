@@ -61,9 +61,7 @@ ttnn::Tensor bound_matmul(
     if (width_a != height_b) {
         TT_THROW("ttnn.matmul: The width of the first tensor must be equal to the height of the second tensor");
     }
-    if (input_tensor_c.has_value()) {
-        std::cout <<" --- tensor c has value but do nothing with it.." << std::endl;
-    }
+
     const bool has_program_config = parameters.program_config.has_value();
     const bool has_user_grid = parameters.user_core_coord.has_value();
     bool post_process_bias = false;
@@ -72,9 +70,15 @@ ttnn::Tensor bound_matmul(
             post_process_bias = true;
         }
     }
+    ttnn::Tensor output_tensor;
+    if (input_tensor_c.has_value()) {
+        std::cout <<" --- tensor c has value but do nothing with it.." << std::endl;
+        output_tensor = matmul2(input_tensor_a_adjusted, input_tensor_b_adjusted, bias, input_tensor_c, parameters);
+    }
+    else{
+        output_tensor = matmul(input_tensor_a_adjusted, input_tensor_b_adjusted, post_process_bias ? std::nullopt : bias, parameters);
+    }
 
-    auto output_tensor =
-        matmul(input_tensor_a_adjusted, input_tensor_b_adjusted, post_process_bias ? std::nullopt : bias, parameters);
 
     if (post_process_bias) {
         output_tensor = ttnn::add(output_tensor, bias.value(), std::nullopt, parameters.output_mem_config);
