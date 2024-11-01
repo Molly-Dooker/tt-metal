@@ -288,8 +288,7 @@ TEST_P(SingleCoreSingleDeviceSfpuParameterizedFixture, SfpuCompute) {
     tt::DataFormat input_format = std::get<0>(formats);
     tt::DataFormat output_format = std::get<1>(formats);
 
-    CoreCoord worker_grid_size = this->devices_.at(0)->logical_grid_size();
-    CoreRange core_range({0, 0}, {worker_grid_size.x - 2, worker_grid_size.y - 2});
+    CoreRange core_range({0, 0}, {0, 0});
     CoreRangeSet core_range_set({core_range});
     for (bool approx_mode: {true, false}) {
         for (bool fp32_dest_acc_en : {true, false}) {
