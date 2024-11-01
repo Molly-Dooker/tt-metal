@@ -84,5 +84,5 @@ struct LinearAddOperation {
 }  // namespace operations
 constexpr auto matmul    = ttnn::register_operation<"ttnn::matmul",    operations::matmul::MatmulOperation>();
 constexpr auto linear    = ttnn::register_operation<"ttnn::linear",    operations::matmul::LinearOperation>();
-// constexpr auto linear_add = ttnn::register_operation<"ttnn::linear_add", operations::matmul::LinearAddOperation>();
+constexpr auto linear_add = ttnn::register_operation<"ttnn::linear_add", operations::matmul::LinearAddOperation>();
 }  // namespace ttnn
