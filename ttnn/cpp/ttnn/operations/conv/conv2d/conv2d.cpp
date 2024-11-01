@@ -859,7 +859,6 @@ std::tuple<ttnn::Tensor, uint32_t, uint32_t, ttnn::Tensor, std::optional<ttnn::T
             matmul_input,
             weight_tensor_on_device,
             bias_tensor_on_device,
-            /*input_tensor_c=*/std::nullopt,
             ttnn::operations::matmul::Matmul{
             matmul_program_config,
             /*bcast_batch=*/std::nullopt,
