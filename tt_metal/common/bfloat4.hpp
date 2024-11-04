@@ -62,7 +62,7 @@ constexpr int log2(int n) {
     return log;
 }
 
-#if defined(__x86_64__)
+#if 0
 inline std::vector<float> unpack_bfp4_tiles_into_float_vec(const std::vector<uint32_t> &bfp_tiles, bool row_major_output, bool is_exp_a) {
     ZoneScoped;
 

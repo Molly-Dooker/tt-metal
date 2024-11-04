@@ -202,7 +202,7 @@ inline std::vector<uint32_t> pack_fp32_vec_as_bfp8_tiles(const std::vector<float
     return packed_result;
 }
 
-#if defined(__x86_64__)
+#if 0
 inline std::vector<float> unpack_bfp8_tiles_into_float_vec(const std::vector<uint32_t> &bfp8_tiles, bool row_major_output, bool is_exp_a) {
     ZoneScoped;
 
