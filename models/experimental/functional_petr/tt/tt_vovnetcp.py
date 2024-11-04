@@ -68,6 +68,7 @@ class ttnn_osa_module:
                 )
 
         self.concat = Conv([1, 1, 0, 0], parameters["{}_{}".format(module_name, "concat")], activation="relu")
+        print("concat parameters: ", parameters["{}_{}".format(module_name, "concat")])
         self.ese = ttnn_esemodule(parameters)
 
     def __call__(self, device, x):
@@ -86,6 +87,12 @@ class ttnn_osa_module:
             ttnn.deallocate(y)
         # x = ttnn.to_layout(x, ttnn.TILE_LAYOUT)
         xt = self.concat(device, x)  # PCC = 0.062789802576302
+        # print(x.shape)
+        # x = ttnn.to_torch(x)
+        # x = torch.reshape(x, (1, 80, 200, 768))
+        # x = x.permute(0, 3, 1, 2)
+        # print(x.shape)
+        # torch.save(x, "concat_input.pt")
         # xt = ttnn.to_layout(xt, ttnn.TILE_LAYOUT)
         # xt = self.ese(device, xt)
 
