@@ -73,7 +73,7 @@ def test_linear(
 @pytest.mark.parametrize("k_size", [1024])
 @pytest.mark.parametrize("n_size", [1024])
 @pytest.mark.parametrize("use_bias", [True])
-@pytest.mark.parametrize("bias2", [False])
+@pytest.mark.parametrize("bias2", [True])
 @pytest.mark.parametrize("core_grid", [False])
 def test_linear_with_core_grid(
     batch_size,
