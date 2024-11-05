@@ -1062,7 +1062,7 @@ void Matmul::validate(
             using ProgramConfigType = std::decay_t<decltype(program_config)>;
             // TODO: For 1D and 2D mcasts, we don't check if tensor is single core or single row/col
             // We can uplift these variants to skip mcasting to support single core (1D) or single row/col (2D)
-            if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCast1DProgramConfig>) {
+            if constexpr      (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCast1DProgramConfig>) {
                 if (program_config.mcast_in0) {
                     if (input_tensor_a.is_sharded()) {
                         TT_FATAL(program_config.fuse_batch, "Error");
@@ -1142,9 +1142,8 @@ void Matmul::validate(
                     }
                 }
                 TT_FATAL(input_tensor_b.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED, "Error");
-            } else if constexpr (std::is_same_v<
-                                     ProgramConfigType,
-                                     MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig>) {
+            }
+            else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig>) {
                 TT_FATAL(input_tensor_a.is_sharded(), "Error");
                 TT_FATAL(this->output_mem_config.is_sharded(), "Error");
                 TT_FATAL(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::WIDTH_SHARDED, "Error");
@@ -1166,7 +1165,8 @@ void Matmul::validate(
 
                 // tensor in1
                 TT_FATAL(input_tensor_b.memory_config().memory_layout == TensorMemoryLayout::WIDTH_SHARDED, "Error");
-            } else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCastProgramConfig>) {
+            }
+            else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCastProgramConfig>) {
                 if (input_tensor_a.memory_config().is_sharded()) {
                     auto tensor_a_memory_layout = input_tensor_a.memory_config().memory_layout;
                     uint32_t M = input_tensor_a.volume() / input_tensor_a.get_legacy_shape()[-1] / TILE_HEIGHT;
@@ -1228,7 +1228,8 @@ void Matmul::validate(
 
                     TT_FATAL(program_config.out_subblock_w == per_core_N || program_config.out_subblock_h == 1, "Error");
                 }
-            } else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseProgramConfig>) {
+            }
+            else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseProgramConfig>) {
                 uint32_t M = input_tensor_a.get_legacy_shape()[-2] / TILE_HEIGHT;
                 uint32_t total_M = input_tensor_a.volume() / input_tensor_a.get_legacy_shape()[-1] / TILE_HEIGHT;
                 uint32_t N = input_tensor_b.get_legacy_shape()[-1] / TILE_WIDTH;
