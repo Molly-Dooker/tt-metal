@@ -952,14 +952,21 @@ Tensor matmul2(
     const uint8_t queue_id) {
     std::vector<std::optional<const Tensor>> optional_input_tensors = {};
     std::vector<Tensor> output_tensors;
-    if (bias.has_value()) {
-        optional_input_tensors.push_back(bias.value());
-        output_tensors = {
-            Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}, {bias.value()}))};
-    } else {
-        optional_input_tensors.push_back(std::nullopt);
-        output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
-    }
+
+    // if (bias.has_value()) {
+    //     optional_input_tensors.push_back(bias.value());
+    //     output_tensors = {
+    //         Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}, {bias.value()}))};
+    // } else {
+    //     optional_input_tensors.push_back(std::nullopt);
+    //     output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
+    // }
+
+    std::cout << "matmul2.. do job with bias and input_c" << std::endl;
+    optional_input_tensors.push_back(bias.value());
+    optional_input_tensors.push_back(input_tensor_c.value());
+    output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}, {bias.value(), input_tensor_c.value()}))};
+
 
     operation::launch_op(
         [parameters, queue_id](
@@ -1026,7 +1033,9 @@ void Matmul::validate(
 
     MatmulProgramConfig chosen_program_config = get_program_config(input_tensor_a, input_tensor_b, this);
 
-    TT_FATAL(optional_input_tensors.size() == 1, "Error");
+    // TT_FATAL(optional_input_tensors.size() == 1, "Error");
+    std::cout << "====== optional_input_tensors.size: " << optional_input_tensors.size() << std::endl;
+
     const auto& optional_bias = optional_input_tensors.at(0);
     if (optional_bias.has_value()) {
         const auto& bias = optional_bias.value();

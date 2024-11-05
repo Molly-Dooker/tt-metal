@@ -72,7 +72,6 @@ ttnn::Tensor bound_matmul(
     }
     ttnn::Tensor output_tensor;
     if (input_tensor_c.has_value()) {
-        std::cout <<" --- tensor c has value but do nothing with it.." << std::endl;
         output_tensor = matmul2(input_tensor_a_adjusted, input_tensor_b_adjusted, bias, input_tensor_c, parameters);
     }
     else{

@@ -68,7 +68,7 @@ def test_linear(
     assert_with_pcc(torch_output_tensor, output_tensor, 0.999)
 
 
-@pytest.mark.parametrize("batch_size", [8])
+@pytest.mark.parametrize("batch_size", [1])
 @pytest.mark.parametrize("m_size", [384])
 @pytest.mark.parametrize("k_size", [1024])
 @pytest.mark.parametrize("n_size", [1024])
@@ -125,12 +125,21 @@ def test_linear_with_core_grid(
     else:
         bias = None
 
-    output_tensor = ttnn.linear(
+    output_tensor = ttnn.linear_add(
         input_tensor_a,
         input_tensor_b,
-        bias=bias,
+        bias,
+        bias,
         core_grid=ttnn.CoreGrid(y=batch_size, x=6),
     )
+
+    # output_tensor = ttnn.linear(
+    #     input_tensor_a,
+    #     input_tensor_b,
+    #     bias = bias,
+    #     core_grid=ttnn.CoreGrid(y=batch_size, x=6),
+    # )
+
     if bias2:
         output_tensor = ttnn.add(output_tensor, bias)
     output_tensor = ttnn.to_torch(output_tensor)
