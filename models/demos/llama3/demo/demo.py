@@ -9,7 +9,6 @@ from datetime import datetime
 from loguru import logger
 import os
 import ttnn
-import math
 import pytest
 import requests
 from pathlib import Path
@@ -18,12 +17,9 @@ import hashlib
 from models.demos.llama3.tt.llama_common import (
     get_single_rot_mat,
     get_prefill_rot_mat,
-    get_rot_transformation_mat,
-    HostEmbedding,
     encode_prompt_llama_instruct,
 )
-from models.demos.llama3.tt.llama_model import TtTransformer
-from models.demos.llama3.tt.llama_embedding import TtLlamaEmbedding
+from models.demos.llama3.tt.llama_generation import TtLlamaModelForGeneration
 from models.demos.t3000.llama2_70b.reference.llama.llama31_8b.tokenizer import Tokenizer
 
 from models.perf.benchmarking_utils import BenchmarkProfiler
@@ -124,30 +120,10 @@ def preprocess_inputs_prefill(
     assert min_prompt_len <= max_prompt_len, f"Minimum prompt length {min_prompt_len} exceeds max len {max_prompt_len}"
 
     logger.info(f"# of users: {len(encoded_prompts)}")
-    input_tokens_prefill = []
-    decoding_pos = []
-    prefill_lens = []
-
-    # Always prefill the nearest power of 2 for each user. This means that the majority of cases we will prefill more tokens than needed.
-    # To avoid issues, we keep track of the decoding position to decode correctly the user's prompt
-    for i, encoded in enumerate(encoded_prompts):
-        # Prefill size is nearest power of 2
-        prefill_seq_len = max(2 ** math.ceil(math.log(len(encoded), 2)), 128)
-
-        # Initial prefill tensors full of pad tokens
-        input_tokens_prefill_i = torch.full((1, prefill_seq_len), 0, dtype=torch.int32)
-        input_tokens_prefill_i[0, : len(encoded[:])] = torch.tensor(encoded[:]).to(input_tokens_prefill_i)
-        input_tokens_prefill.append(input_tokens_prefill_i)
-
-        # Keep the correct decoding position of each user
-        decoding_pos.append(len(encoded))
-        prefill_lens.append(prefill_seq_len)
 
     return (
-        input_tokens_prefill,
         encoded_prompts,
-        decoding_pos,
-        prefill_lens,
+        prompt_lens,
     )
 
 
@@ -163,8 +139,6 @@ def run_llama3_demo(
 
     # This module requires the env paths above for CI runs
     from models.demos.llama3.tt.model_config import TtModelArgs
-
-    dtype = ttnn.bfloat8_b
 
     # We disregard any warmup iteration for profiling, in favour of just measuring compile time on the first iteration
     N_warmup_iter = {"inference_prefill": 0, "inference_decode": 0}
@@ -203,23 +177,7 @@ def run_llama3_demo(
     # Load TTNN Llama3.1 model
     logger.info("Loading weights to device...")
     profiler.start("loading_weights_to_device")
-    tt_model = TtTransformer(
-        args=model_args,
-        mesh_device=mesh_device,
-        dtype=dtype,
-        state_dict=state_dict,
-        weight_cache_path=model_args.weight_cache_path(dtype),
-    )
-    tt_embd = TtLlamaEmbedding(
-        mesh_device=mesh_device,
-        args=model_args,
-        weight_cache_path=model_args.weight_cache_path(dtype),
-        state_dict=state_dict,
-        dtype=ttnn.bfloat16,  # Row major layout requires bfloat16
-    )
-    embd = HostEmbedding(model_args)
-    state_dict_prefix = model_args.get_state_dict_prefix("", None)
-    embd.load_state_dict({"emb.weight": state_dict[f"{state_dict_prefix}tok_embeddings.weight"]})
+    gen_model = TtLlamaModelForGeneration(model_args, mesh_device, state_dict)
     profiler.end("loading_weights_to_device")
     logger.info("Finished loading weights to device.")
 
@@ -232,10 +190,8 @@ def run_llama3_demo(
         profiler.start(f"preprocess_prefill_inputs", iteration=batch_idx)
         # Preprocess initial prompt inputs
         (
-            input_tokens_prefill_pt,
             encoded_prompts,
             decoding_pos,
-            prefill_lens,
         ) = preprocess_inputs_prefill(
             input_prompts,
             tokenizer,
@@ -243,89 +199,31 @@ def run_llama3_demo(
             instruct_mode,
             max_generated_tokens,
         )
-        # Prefill embeddings are on host since we need to mask out the tokens after the prefill length after embeddings are computed
-        pt_prefill_input = [embd(input_tokens_prefill_pt[b]).view(1, prefill_lens[b], -1) for b in range(batch_size)]
         profiler.end(f"preprocess_prefill_inputs", iteration=batch_idx)
 
         # set kv cache to zeros if not first batch, to avoid context leaking when doing multiple batches
         if batch_idx != 0:
-            for layer in tt_model.layers:
+            for layer in gen_model.tt_model.layers:
                 k_cache, v_cache = layer.attention.layer_past
                 k_cache = ttnn.mul(k_cache, 0, output_tensor=k_cache)
                 v_cache = ttnn.mul(v_cache, 0, output_tensor=v_cache)
 
         logger.info(f"Starting prefill...")
 
-        profiler.start(f"prepare_rot_mat_for_prefill", iteration=batch_idx)
-        transformation_mat_torch = get_rot_transformation_mat(model_args.head_dim)
-        transformation_mats = ttnn.from_torch(
-            transformation_mat_torch,
-            dtype=ttnn.bfloat16,
-            layout=ttnn.TILE_LAYOUT,
-            device=mesh_device,
-            mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device),
-            memory_config=ttnn.DRAM_MEMORY_CONFIG,
-        )
-        profiler.end(f"prepare_rot_mat_for_prefill", iteration=batch_idx)
+        # Run prefill an extra time on a single user to measure compile time
+        if batch_idx == 0:
+            profiler.start(f"compile_prefill", iteration=batch_idx)
+            _ = gen_model.prefill_forward(encoded_prompts[0:1], decoding_pos[0:1])
+            profiler.end(f"compile_prefill", iteration=batch_idx)
 
-        # Do not count the first user for prefill time and instead log it as compile time
-        num_users_generated_prefill = batch_size - 1 if batch_size > 1 else 1
-
-        pt_out = []
-
+        num_users_generated_prefill = batch_size
         profiler.start(f"inference_prefill", iteration=batch_idx)
-        for batch_id in range(batch_size):
-            prefill_seq_len = prefill_lens[batch_id]
-            rot_mats_prefill = get_prefill_rot_mat(
-                model_args.head_dim, model_args.max_seq_len, mesh_device, seq_len=prefill_seq_len
-            )
-            if decoding_pos[batch_id] < prefill_seq_len:
-                pt_prefill_input[batch_id][
-                    :, decoding_pos[batch_id] :, :
-                ] = 0  # Zero out the tokens after the prefill length
-
-            prefill_input = model_args.prepare_inputs_ttnn_prefill(
-                pt_prefill_input[batch_id],
-            )
-
-            if batch_id == 0:  # First user prefill accounts for compile time
-                profiler.start(f"compile_prefill", iteration=batch_idx)
-
-            tt_out = tt_model(
-                prefill_input,
-                None,  # Current position
-                rot_mats_prefill,
-                transformation_mats,
-                user_id=batch_id,
-                mode="prefill",
-                get_last_token=((decoding_pos[batch_id] - 1) // 32) * 32,
-            )
-
-            if (
-                batch_id == 0
-            ):  # First user prefill accounts for compile time (which will be removed from the full prefill inference time)
-                profiler.end(f"compile_prefill", iteration=batch_idx)
-
-            # [PROFILER-ONLY] In runs where there is only one user, run the prefill twice to measure compile and inference prefill times
-            if batch_size == 1:
-                ttnn.deallocate(tt_out)
-                tt_out = tt_model(
-                    prefill_input,
-                    None,  # Current position
-                    rot_mats_prefill,
-                    transformation_mats,
-                    user_id=batch_id,
-                    mode="prefill",
-                    get_last_token=((decoding_pos[batch_id] - 1) // 32) * 32,
-                )
-
-            pt_out.append(
-                ttnn.to_torch(tt_out, mesh_composer=ttnn.ConcatMeshToTensor(mesh_device, dim=-1))[
-                    0, 0, (decoding_pos[batch_id] - 1) % 32, :
-                ]
-            )
-            ttnn.deallocate(tt_out)
-
+        pt_out_batched, padded_prefill_lens = gen_model.prefill_forward(
+            encoded_prompts, decoding_pos, return_padded_lens=True
+        )
+        prefill_seq_len = padded_prefill_lens[
+            0
+        ]  # TODO: ensure that all users have the same prefill length once a perf mode is added to the demo
         # Synchronize devices to ensure the profile captures the correct timing of all devices
         for i in range(model_args.num_devices):
             ttnn.synchronize_device(mesh_device.get_devices()[i])
@@ -334,7 +232,6 @@ def run_llama3_demo(
 
         # Preparing first decode token
         profiler.start(f"prepare_first_decode_token_{batch_idx}")
-        pt_out_batched = torch.stack(pt_out, dim=-2)
         pt_out_batched = torch.argmax(pt_out_batched, dim=-1)
         tt_out_tok = ttnn.from_torch(
             torch.nn.functional.pad(pt_out_batched.unsqueeze(0).unsqueeze(0).unsqueeze(0), (0, 31), "constant", 0),
@@ -345,7 +242,7 @@ def run_llama3_demo(
         profiler.end(f"prepare_first_decode_token_{batch_idx}")
 
         # Keep track of generated outputs to print out every iteration
-        all_outputs = [encoded_prompts[b][:prefill_seq_len] for b in range(batch_size)]
+        all_outputs = [encoded_prompts[b].copy() for b in range(batch_size)]
         for user in range(batch_size):
             user_tok = int(pt_out_batched[user].item())
             all_outputs[user].append(user_tok)
@@ -572,8 +469,6 @@ def run_llama3_demo(
 
     # Correct the inference decode time to remove the time spent on compile (1st iteration) and log_printing (at the end of every iteration)
     inference_decode_time = inference_decode_time - compile_decode_time - log_printing_time - log_saving_file_time
-    # Correct the inference prefill time to remove the time spent on compile (1st iteration)
-    inference_prefill_time = inference_prefill_time - compile_prefill_time
     # Average prefill time for each user
     prefill_time_to_first = inference_prefill_time / num_users_generated_prefill
 
@@ -594,7 +489,6 @@ def run_llama3_demo(
         "get_single_rot_mat_decode": profiler.get_duration("get_single_rot_mat_decode_0"),  # Only for batch 0
         "preprocess_prefill_inputs": profiler.get_duration("preprocess_prefill_inputs"),
         "loading_weights_to_device": profiler.get_duration("loading_weights_to_device"),
-        "prepare_rot_mat_for_prefill": profiler.get_duration("prepare_rot_mat_for_prefill"),
         "compile_trace": profiler.get_duration("compile_trace_0"),  # Only for batch 0
         "capture_trace": profiler.get_duration("capture_trace_0"),  # Only for batch 0
         "reset_rot_mat": sum(profiler.get_duration(f"reset_rot_mat_{i}") for i in range(max_generated_tokens)),

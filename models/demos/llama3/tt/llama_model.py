@@ -2,15 +2,11 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import os
-import math
 import ttnn
-import torch
-import torch.nn as nn
+from tqdm import tqdm
 from models.demos.llama3.tt.llama_decoder import TtTransformerBlock
 from models.common.rmsnorm import RMSNorm
 import ttnn
-from typing import Optional
 from models.common.lightweightmodule import LightweightModule
 from models.demos.llama3.tt.distributed_norm import DistributedNorm
 from models.demos.llama3.tt.lm_head import LMHead
@@ -45,7 +41,7 @@ class TtTransformer(LightweightModule):
                 weight_cache_path=weight_cache_path,
                 layer_num=i,
             )
-            for i in range(self.n_layers)
+            for i in tqdm(range(self.n_layers), desc="Loading layers")
         ]
         self.norm = DistributedNorm(
             RMSNorm(
