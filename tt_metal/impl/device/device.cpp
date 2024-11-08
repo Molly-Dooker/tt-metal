@@ -374,14 +374,23 @@ void Device::initialize_build() {
 
 void Device::build_firmware() {
     log_debug(tt::LogMetal, "Building base firmware for device {}", this->id_);
+    tt::log_info(tt::LogTest, "Building base firmware for device {}", this->id_);
     ZoneScoped;
 
     this->generate_device_headers(this->build_env_.get_out_firmware_root_path());
     jit_build_set(this->firmware_build_states_, nullptr);
 }
 
+void Device::initialize_global_array(const HalProgrammableCoreType &core_type, CoreCoord phys_core)
+{
+    tt::log_info(tt::LogTest, "initalize gloabl array  called for {}", core_type, phys_core);
+}
+
 void Device::initialize_firmware(const HalProgrammableCoreType &core_type, CoreCoord phys_core, launch_msg_t *launch_msg, go_msg_t* go_msg) {
     ZoneScoped;
+    tt::log_info(tt::LogTest, "initialize_firmware called for {}", core_type);
+
+    this->initialize_global_array(core_type, phys_core);
 
     uint32_t core_type_idx = hal.get_programmable_core_type_index(core_type);
     uint32_t processor_class_count = hal.get_processor_classes_count(core_type);
@@ -578,6 +587,7 @@ void Device::reset_cores() {
 
 void Device::initialize_and_launch_firmware() {
     ZoneScoped;
+    tt::log_info(tt::LogTest, "initialize_and_launch_firmware called for ");
 
     launch_msg_t launch_msg;
     go_msg_t go_msg;
@@ -3423,6 +3433,7 @@ void Device::generate_device_headers(const std::string &path) const
     const metal_SocDescriptor& soc_d = tt::Cluster::instance().get_soc_desc(this->id());
 
     // Generate header file in proper location
+    tt::log_info(tt::LogTest, "Calling genfiles for path {}", path);
     jit_build_genfiles_bank_to_noc_coord_descriptor (
         path,
         soc_d.grid_size,
@@ -3432,6 +3443,45 @@ void Device::generate_device_headers(const std::string &path) const
         l1_offset_per_bank,
         this->allocator_->config.alignment
     );
+    this->generate_mem_bank_info(
+        soc_d.grid_size,
+        dram_noc_coord_per_bank,
+        dram_offsets_per_bank,
+        l1_noc_coord_per_bank,
+        l1_offset_per_bank);
+}
+
+void Device::generate_mem_bank_info(
+    tt_xy_pair grid_size,
+    std::vector<CoreCoord>& dram_bank_map,
+    std::vector<int32_t>& dram_bank_offset_map,
+    std::vector<CoreCoord>& l1_bank_map,
+    std::vector<int32_t>& l1_bank_offset_map) const
+{
+    tt::log_info(tt::LogTest, "generate_mem_bank_info called for device {}\n", this->id_);
+    std::vector<std::vector<uint16_t>> dram_bank_to_noc_xy = {};
+    dram_bank_to_noc_xy.resize(2);
+    for (unsigned int noc = 0; noc < 2; noc++) {
+        dram_bank_to_noc_xy[noc].reserve(dram_bank_map.size());
+        for (unsigned int bank_id = 0; bank_id < dram_bank_map.size(); bank_id++) {
+            uint16_t noc_x = NOC_0_X(noc, grid_size.x, dram_bank_map[bank_id].x);
+            uint16_t noc_y = NOC_0_Y(noc, grid_size.y, dram_bank_map[bank_id].y);
+            uint16_t xy = ((noc_y << NOC_ADDR_NODE_ID_BITS) | noc_x) << NOC_COORD_REG_OFFSET;
+            dram_bank_to_noc_xy[noc].push_back(xy);
+        }
+    }
+
+    std::vector<std::vector<uint16_t>> l1_bank_to_noc_xy = {};
+    l1_bank_to_noc_xy.resize(2);
+    for (unsigned int noc = 0; noc < 2; noc++) {
+        l1_bank_to_noc_xy[noc].reserve(l1_bank_map.size());
+        for (unsigned int bank_id = 0; bank_id < l1_bank_map.size(); bank_id++) {
+            uint16_t noc_x = NOC_0_X(noc, grid_size.x, l1_bank_map[bank_id].x);
+            uint16_t noc_y = NOC_0_Y(noc, grid_size.y, l1_bank_map[bank_id].y);
+            uint16_t xy = ((noc_y << NOC_ADDR_NODE_ID_BITS) | noc_x) << NOC_COORD_REG_OFFSET;
+            l1_bank_to_noc_xy[noc].push_back(xy);
+        }
+    }
 }
 
 size_t Device::get_device_kernel_defines_hash() {

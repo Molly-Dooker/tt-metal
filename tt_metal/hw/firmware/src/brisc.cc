@@ -66,6 +66,12 @@ uint32_t tt_l1_ptr *rta_l1_base __attribute__((used));
 uint32_t tt_l1_ptr *crta_l1_base __attribute__((used));
 uint32_t tt_l1_ptr *sem_l1_base[ProgrammableCoreType::COUNT] __attribute__((used));
 
+//DRAM and L1 bank offsets and noc coordinates.
+uint16_t temp_dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS] __attribute__((used));
+int32_t temp_bank_to_dram_offset[NUM_DRAM_BANKS] __attribute__((used));
+uint16_t temp_l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS] __attribute__((used));
+//int32_t temp_bank_to_l1_offset[NUM_L1_BANKS]  __attribute__((used));
+
 #define MEM_MOVER_VIEW_IRAM_BASE_ADDR (0x4 << 12)
 
 #if defined(PROFILE_KERNEL)

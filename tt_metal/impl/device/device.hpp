@@ -210,6 +210,12 @@ class Device {
     float sfpu_inf() const;
 
     void generate_device_headers(const std::string &path) const;
+    void generate_mem_bank_info(
+        tt_xy_pair grid_size,
+        std::vector<CoreCoord>& dram_bank_map,
+        std::vector<int32_t>& dram_bank_offset_map,
+        std::vector<CoreCoord>& l1_bank_map,
+        std::vector<int32_t>& l1_bank_offset_map) const;
     const JitBuildEnv& build_env() const { return this->build_env_; }
     const string build_firmware_target_path(uint32_t programmable_core, uint32_t processor_class, int i) const;
     const string build_kernel_target_path(uint32_t programmable_core, uint32_t processor_class, int i, const string& kernel_name) const;
@@ -238,6 +244,7 @@ class Device {
     void initialize_build();
     void initialize_device_kernel_defines();
     void build_firmware();
+    void initialize_global_array(const HalProgrammableCoreType &core_type, CoreCoord phys_core);
     void initialize_firmware(const HalProgrammableCoreType &core_type, CoreCoord phys_core, launch_msg_t *launch_msg, go_msg_t* go_msg);
     void reset_cores();
     void initialize_and_launch_firmware();
