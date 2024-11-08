@@ -22,6 +22,8 @@ from framework.sweeps_logger import sweeps_logger as logger
 
 ARCH = os.getenv("ARCH_NAME")
 
+error_code = 0
+
 
 def git_hash():
     try:
@@ -110,6 +112,7 @@ def get_timeout(test_module):
 
 
 def execute_suite(test_module, test_vectors, pbar_manager, suite_name):
+    global error_code
     results = []
     input_queue = Queue()
     output_queue = Queue()
@@ -186,6 +189,7 @@ def execute_suite(test_module, test_vectors, pbar_manager, suite_name):
                 tt_smi_util.run_tt_smi(ARCH)
                 result["status"], result["exception"] = TestStatus.FAIL_CRASH_HANG, "TEST TIMED OUT (CRASH / HANG)"
                 result["e2e_perf"] = None
+                error_code = 1
         result["timestamp"] = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         result["host"] = get_hostname()
         result["user"] = get_username()
@@ -483,3 +487,5 @@ if __name__ == "__main__":
 
     if MEASURE_DEVICE_PERF:
         disable_profiler()
+
+    sys.exit(error_code)
