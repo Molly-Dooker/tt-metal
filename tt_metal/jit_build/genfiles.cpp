@@ -482,10 +482,6 @@ std::string generate_bank_to_noc_coord_descriptor_string(
 
     ss << "#ifdef KERNEL_BUILD" << endl;
     ss << endl;
-    ss << "extern uint16_t dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS];" << endl;
-    ss << "extern int32_t bank_to_dram_offset[NUM_DRAM_BANKS];" << endl;
-    ss << "extern uint16_t l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS];" << endl;
-    ss << "extern int32_t bank_to_l1_offset[NUM_L1_BANKS];" << endl;
 
     ss << endl;
     ss << "#else // !KERNEL_BUILD (FW_BUILD)" << endl;
