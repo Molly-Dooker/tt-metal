@@ -71,12 +71,12 @@ constexpr uint32_t inner_stop_mux_d_bypass = get_compile_time_arg_val(15);
 void kernel_main() {
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
 
-    write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
-    write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000000);
-    write_test_results(test_results, PQ_TEST_MISC_INDEX + 1, 0xbb000000);
-    write_test_results(test_results, PQ_TEST_MISC_INDEX + 2, 0xAABBCCDD);
-    write_test_results(test_results, PQ_TEST_MISC_INDEX + 3, 0xDDCCBBAA);
-    write_test_results(test_results, PQ_TEST_MISC_INDEX + 4, endpoint_id_start_index);
+    write_buffer_to_l1(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
+    write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX, 0xff000000);
+    write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX + 1, 0xbb000000);
+    write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX + 2, 0xAABBCCDD);
+    write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX + 3, 0xDDCCBBAA);
+    write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX + 4, endpoint_id_start_index);
 
     for (uint32_t i = 0; i < tunnel_lanes; i++) {
         input_queues[i].init(
@@ -103,11 +103,11 @@ void kernel_main() {
     }
 
     if (!wait_all_src_dest_ready(input_queues, tunnel_lanes, output_queues, tunnel_lanes, timeout_cycles)) {
-        write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
+        write_buffer_to_l1(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
         return;
     }
 
-    write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000001);
+    write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX, 0xff000001);
 
     bool timeout = false;
     bool all_outputs_finished = false;
@@ -158,7 +158,7 @@ void kernel_main() {
     }
 
     if (!timeout) {
-        write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000002);
+        write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX, 0xff000002);
         for (uint32_t i = 0; i < tunnel_lanes; i++) {
             if (!output_queues[i].output_barrier(timeout_cycles)) {
                 timeout = true;
@@ -169,7 +169,7 @@ void kernel_main() {
 
     uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
     if (!timeout) {
-        write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff000003);
+        write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX, 0xff000003);
     }
 
     set_64b_result(test_results, data_words_sent, PQ_TEST_WORD_CNT_INDEX);
@@ -177,9 +177,9 @@ void kernel_main() {
     set_64b_result(test_results, iter, PQ_TEST_ITER_INDEX);
 
     if (timeout) {
-        write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
+        write_buffer_to_l1(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
     } else {
-        write_test_results(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_PASS);
-        write_test_results(test_results, PQ_TEST_MISC_INDEX, 0xff00005);
+        write_buffer_to_l1(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_PASS);
+        write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX, 0xff00005);
     }
 }

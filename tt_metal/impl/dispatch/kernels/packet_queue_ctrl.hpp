@@ -51,7 +51,6 @@ inline bool is_remote_network_type_noc(DispatchRemoteNetworkType type) {
 }
 
 struct dispatch_packet_header_t {
-
     uint32_t packet_size_bytes;
     uint16_t packet_src;
     uint16_t packet_dest;
@@ -72,7 +71,11 @@ struct dispatch_packet_header_t {
     }
 };
 
+static_assert(sizeof(dispatch_packet_header_t) == PACKET_WORD_SIZE_BYTES);
+
 #define is_power_of_2(x) (((x) > 0) && (((x) & ((x) - 1)) == 0))
+
+#define is_16b_aligned(x) (x % 16 == 0)
 
 inline uint32_t packet_switch_4B_pack(uint32_t b0, uint32_t b1, uint32_t b2, uint32_t b3) {
     return (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;

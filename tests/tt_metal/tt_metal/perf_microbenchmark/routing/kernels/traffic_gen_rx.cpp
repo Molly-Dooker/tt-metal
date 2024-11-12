@@ -51,10 +51,19 @@ constexpr uint32_t timeout_cycles = get_compile_time_arg_val(17);
 
 constexpr uint32_t disable_header_check = get_compile_time_arg_val(18);
 
+constexpr uint32_t input_queue_local_wptr_addr = get_compile_time_arg_val(19);
+
+constexpr uint32_t remote_rptr_sent_addr = get_compile_time_arg_val(20);
+constexpr uint32_t remote_rptr_cleared_addr = get_compile_time_arg_val(21);
+
 // predicts size and payload of packets from each destination, should have
 // the same random seed as the corresponding traffic_gen_tx
 input_queue_rnd_state_t src_rnd_state[num_src_endpoints];
 
+// Ensure 16B alignment
+static_assert(is_16b_aligned(input_queue_local_wptr_addr), "16B alignment required for scratch addresses");
+static_assert(is_16b_aligned(remote_rptr_sent_addr), "16B alignment required for scratch addresses");
+static_assert(is_16b_aligned(remote_rptr_cleared_addr), "16B alignment required for scratch addresses");
 
 void kernel_main() {
 
@@ -73,8 +82,13 @@ void kernel_main() {
     packet_input_queue_state_t* input_queue = &(input_queues[input_queue_id]);
 
     input_queue->init(input_queue_id, queue_start_addr_words, queue_size_words,
-                      remote_tx_x, remote_tx_y, remote_tx_queue_id,
-                      rx_rptr_update_network_type);
+                      remote_tx_x,
+                      remote_tx_y,
+                      remote_tx_queue_id,
+                      rx_rptr_update_network_type,
+                      input_queue_local_wptr_addr,
+                      remote_rptr_sent_addr,
+                      remote_rptr_cleared_addr);
 
     if (!wait_all_src_dest_ready(input_queue, 1, NULL, 0, timeout_cycles)) {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
@@ -257,12 +271,14 @@ void kernel_main() {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
         set_64b_result(test_results, words_sent, PQ_TEST_MISC_INDEX+12);
         set_64b_result(test_results, words_cleared, PQ_TEST_MISC_INDEX+14);
+        DPRINT << "[Traffic gen rx] ";
         input_queue->dprint_object();
     } else if (check_failed) {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_DATA_MISMATCH;
         test_results[PQ_TEST_MISC_INDEX+12] = mismatch_addr;
         test_results[PQ_TEST_MISC_INDEX+12] = mismatch_val;
         test_results[PQ_TEST_MISC_INDEX+12] = expected_val;
+        DPRINT << "[Traffic gen rx] ";
         input_queue->dprint_object();
     } else {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;

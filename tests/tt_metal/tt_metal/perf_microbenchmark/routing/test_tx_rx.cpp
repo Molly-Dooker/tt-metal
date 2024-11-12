@@ -2,29 +2,30 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "logger.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/impl/device/device.hpp"
 #include "tt_metal/llrt/rtoptions.hpp"
 #include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
+#include "tt_metal/impl/dispatch/packet_queue_host_misc.cpp"
 #include "kernels/traffic_gen_test.hpp"
 #include "utils.hpp"
 
 using std::vector;
 using namespace tt;
-
+using namespace packet_queue_host;
 
 int main(int argc, char **argv) {
-
     bool pass = true;
     try {
         constexpr uint32_t default_tx_x = 0;
         constexpr uint32_t default_tx_y = 0;
-        constexpr uint32_t default_rx_x = 1;
-        constexpr uint32_t default_rx_y = 0;
+        constexpr uint32_t default_rx_x = 0;
+        constexpr uint32_t default_rx_y = 1;
 
         constexpr uint32_t default_prng_seed = 0x100;
-        constexpr uint32_t default_total_data_kb = 16*1024;
+        constexpr uint32_t default_total_data_kb = 8*1024;
         constexpr uint32_t default_max_packet_size_words = 0x100;
 
         int device_id = 0;
@@ -107,6 +108,10 @@ int main(int argc, char **argv) {
         CoreCoord phys_traffic_gen_tx_core = device->worker_core_from_logical_core(traffic_gen_tx_core);
         CoreCoord phys_traffic_gen_rx_core = device->worker_core_from_logical_core(traffic_gen_rx_core);
 
+        // Traffic gen TX has 1 input queue and 1 output queue
+        auto tx_buffers = packet_queue_host::make_buffer_set(device, 1);
+        auto rx_buffers = packet_queue_host::make_buffer_set(device, 1);
+
         std::vector<uint32_t> traffic_gen_tx_compile_args =
             {
                 0xaa, // 0: src_endpoint_id
@@ -131,6 +136,11 @@ int main(int argc, char **argv) {
                 tx_pkt_dest_size_choice, // 19: pkt_dest_size_choice
                 tx_data_sent_per_iter_low, // 20: data_sent_per_iter_low
                 tx_data_sent_per_iter_high, // 21: data_sent_per_iter_high
+                std::get<packet_queue_buffer_set_wptr>(tx_buffers)[0]->address(), // 22: input_queue_local_wptr_addr
+                std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers)[0]->address(), // 23: output_queue_rptr_sent_addr
+                std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers)[0]->address(), // 24: output_queue_rptr_cleared_addr
+                // Connect the output of the tx to the rx
+                std::get<packet_queue_buffer_set_wptr>(rx_buffers)[0]->address(), // 25: remote_wptr_addr
             };
 
         std::vector<uint32_t> traffic_gen_rx_compile_args =
@@ -150,10 +160,13 @@ int main(int argc, char **argv) {
                 total_data_kb, // 12: total_data_kb
                 max_packet_size_words, // 13: max_packet_size_words
                 rx_disable_data_check, // 14: disable data check
-                0xaa, // 15: src_endpoint_start_id
+                0xaa, // 15: src_endpoint_start_i d
                 0xbb, // 16: dest_endpoint_start_id
                 timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
                 rx_disable_header_check, // 18: disable_header_check
+                std::get<packet_queue_buffer_set_wptr>(rx_buffers)[0]->address(), // 19: input_queue_wptr_addr
+                std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers)[0]->address(), // 20: remote_rptr_sent_addr
+                std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers)[0]->address(), // 21: remote_rptr_cleared_addr
             };
 
         std::map<string, string> common_defines = {

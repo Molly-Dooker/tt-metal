@@ -59,6 +59,12 @@ constexpr pkt_dest_size_choices_t pkt_dest_size_choice = static_cast<pkt_dest_si
 constexpr uint32_t data_sent_per_iter_low = get_compile_time_arg_val(20);
 constexpr uint32_t data_sent_per_iter_high = get_compile_time_arg_val(21);
 
+constexpr uint32_t input_queue_local_wptr_addr = get_compile_time_arg_val(22);
+constexpr uint32_t output_queue_rptr_sent_addr = get_compile_time_arg_val(23);
+constexpr uint32_t output_queue_rptr_cleared_addr = get_compile_time_arg_val(24);
+
+constexpr uint32_t remote_wptr_addr = get_compile_time_arg_val(25);
+
 constexpr uint32_t input_queue_id = 0;
 constexpr uint32_t output_queue_id = 1;
 
@@ -70,6 +76,11 @@ constexpr packet_output_queue_state_t* output_queue_ptr = &output_queue;
 
 // input_queue_rnd_state_t input_queue_state;
 auto input_queue_state = select_input_queue<pkt_dest_size_choice>();
+
+static_assert(is_16b_aligned(input_queue_local_wptr_addr), "16B alignment required for scratch addresses");
+static_assert(is_16b_aligned(output_queue_rptr_sent_addr), "16B alignment required for scratch addresses");
+static_assert(is_16b_aligned(output_queue_rptr_cleared_addr), "16B alignment required for scratch addresses");
+static_assert(is_16b_aligned(remote_wptr_addr), "16B alignment required for scratch addresses");
 
 // generates packets with random size and payload on the input side
 inline bool input_queue_handler() {
@@ -147,11 +158,13 @@ void kernel_main() {
         input_queue_id,
         queue_start_addr_words,
         queue_size_words,
-        // remote_x, remote_y, remote_queue_id, remote_update_network_type:
-        0,
-        0,
-        0,
-        DispatchRemoteNetworkType::NONE);
+        0, // remote_x
+        0, // remote_y
+        0, // remote_queue_id
+        DispatchRemoteNetworkType::NONE,
+        input_queue_local_wptr_addr,
+        output_queue_rptr_sent_addr,
+        output_queue_rptr_cleared_addr);
 
     output_queue_ptr->init(
         output_queue_id,
@@ -162,7 +175,10 @@ void kernel_main() {
         remote_rx_queue_id,
         tx_network_type,
         input_queue_ptr,
-        1);
+        1, // num input queues
+        output_queue_rptr_sent_addr,
+        output_queue_rptr_cleared_addr,
+        remote_wptr_addr);
 
     if (!wait_all_src_dest_ready(NULL, 0, output_queue_ptr, 1, timeout_cycles)) {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
