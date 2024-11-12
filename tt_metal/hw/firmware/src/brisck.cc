@@ -19,6 +19,11 @@
 #include <kernel_includes.hpp>
 
 void kernel_launch(uint32_t kernel_base_addr) {
+    uint8_t go_message_signal;
+    tt_l1_ptr mailboxes_t *const mailboxes = (tt_l1_ptr mailboxes_t *)(MEM_MAILBOX_BASE);
+
+    while ((go_message_signal = mailboxes->go_message.signal) != RUN_MSG_GO) {
+    }
 
 #if defined(DEBUG_NULL_KERNELS) && !defined(DISPATCH_KERNEL)
 #ifdef KERNEL_RUN_TIME

@@ -368,7 +368,8 @@ int main() {
 
         WAYPOINT("GW");
         uint8_t go_message_signal = RUN_MSG_DONE;
-        while ((go_message_signal = mailboxes->go_message.signal) != RUN_MSG_GO) {
+        while (((go_message_signal = mailboxes->go_message.signal) != RUN_MSG_GO) &&
+               !(mailboxes->launch[mailboxes->launch_msg_rd_ptr].kernel_config.enables & DISPATCH_ENABLE_FLAG_PRELOAD)) {
             // While the go signal for kernel execution is not sent, check if the worker was signalled
             // to reset its launch message read pointer.
             if (go_message_signal == RUN_MSG_RESET_READ_PTR) {

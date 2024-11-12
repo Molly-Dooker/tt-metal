@@ -2,13 +2,16 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <cstdint>
+
+#include "noc.h"
+#include "noc_nonblocking_api.h"
+#include "noc_overlay_parameters.h"
+#include "risc_attribs.h"
 #include "risc_common.h"
+#include "stream_io_map.h"
 #include "tensix.h"
 #include "tensix_types.h"
-#include "noc.h"
-#include "noc_overlay_parameters.h"
-#include "noc_nonblocking_api.h"
-#include "stream_io_map.h"
 #ifdef PERF_DUMP
 #include "risc_perf.h"
 #endif
@@ -27,7 +30,11 @@ uint32_t noc_nonposted_atomics_acked[NUM_NOCS];
 uint32_t noc_posted_writes_num_issued[NUM_NOCS];
 
 void kernel_launch(uint32_t kernel_base_addr) {
+    uint8_t go_message_signal;
+    tt_l1_ptr mailboxes_t *const mailboxes = (tt_l1_ptr mailboxes_t *)(MEM_MAILBOX_BASE);
 
+    while ((go_message_signal = mailboxes->go_message.signal) != RUN_MSG_GO) {
+    }
   DeviceZoneScopedMainChildN("NCRISC-KERNEL");
 #if defined(DEBUG_NULL_KERNELS) && !defined(DISPATCH_KERNEL)
 #ifdef KERNEL_RUN_TIME

@@ -18,7 +18,8 @@
 #if !defined(KERNEL_BUILD) && !defined(FW_BUILD) // SW
 #include "common/tt_backend_api_types.hpp"
 typedef tt::DataFormat CommonDataFormat;
-#else // HW already includes tensix_types.h
+#else
+#include "tensix_types.h"
 typedef DataFormat CommonDataFormat;
 #endif
 

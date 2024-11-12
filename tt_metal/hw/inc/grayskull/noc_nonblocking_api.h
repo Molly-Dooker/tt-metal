@@ -8,6 +8,7 @@
 
 #include "noc_parameters.h"
 #include "dev_msgs.h"
+#include "risc_attribs.h"
 
 // Helper functions to convert NoC coordinates to NoC-0 coordinates, used in metal as "physical" coordinates.
 #define NOC_0_X(noc_index, noc_size_x, x) (noc_index == 0 ? (x) : (noc_size_x-1-(x)))

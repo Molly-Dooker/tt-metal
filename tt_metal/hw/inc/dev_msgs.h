@@ -89,6 +89,10 @@ struct rta_offset_t {
     volatile uint16_t crta_offset;
 };
 
+enum dispatchenable_flags {
+    DISPATCH_ENABLE_FLAG_PRELOAD = 1 << 7,
+};
+
 struct kernel_config_msg_t {
     volatile uint16_t watcher_kernel_ids[DISPATCH_CLASS_MAX];
     volatile uint16_t ncrisc_kernel_size16;  // size in 16 byte units
@@ -107,6 +111,7 @@ struct kernel_config_msg_t {
     volatile uint8_t brisc_noc_mode;
     volatile uint8_t max_cb_index;
     volatile uint8_t exit_erisc_kernel;
+    // Or of enable_flags and dispatch_core_processor_masks.
     volatile uint8_t enables;
     volatile uint8_t pad2[12];
 } __attribute__((packed));
