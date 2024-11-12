@@ -209,13 +209,11 @@ class Device {
     // machine inf
     float sfpu_inf() const;
 
-    void generate_device_headers(const std::string &path) const;
+    void generate_device_headers(const std::string &path);
     void generate_mem_bank_info(
         tt_xy_pair grid_size,
         std::vector<CoreCoord>& dram_bank_map,
-        std::vector<int32_t>& dram_bank_offset_map,
-        std::vector<CoreCoord>& l1_bank_map,
-        std::vector<int32_t>& l1_bank_offset_map) const;
+        std::vector<CoreCoord>& l1_bank_map);
     const JitBuildEnv& build_env() const { return this->build_env_; }
     const string build_firmware_target_path(uint32_t programmable_core, uint32_t processor_class, int i) const;
     const string build_kernel_target_path(uint32_t programmable_core, uint32_t processor_class, int i, const string& kernel_name) const;
@@ -357,6 +355,11 @@ class Device {
     void MarkAllocationsSafe();
     std::unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> trace_buffer_pool_;
     std::map<std::string, std::string> device_kernel_defines_;
+
+    std::vector<int32_t> dram_bank_offset_map_;
+    std::vector<int32_t> l1_bank_offset_map_;
+    std::vector<std::vector<uint16_t>> dram_bank_to_noc_xy_;
+    std::vector<std::vector<uint16_t>> l1_bank_to_noc_xy_;
 };
 
 }  // namespace v0

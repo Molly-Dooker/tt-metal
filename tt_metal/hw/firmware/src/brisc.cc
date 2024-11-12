@@ -349,6 +349,22 @@ int main() {
     int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
     l1_to_local_mem_copy((uint*)__ldm_data_start, (uint tt_l1_ptr*)MEM_BRISC_INIT_LOCAL_L1_BASE_SCRATCH, num_words);
 
+    int32_t num_dram_to_noc_words = (NUM_NOCS * NUM_DRAM_BANKS) >> 1;
+    l1_to_local_mem_copy((uint*)temp_dram_bank_to_noc_xy, (uint tt_l1_ptr*)MEM_BANK_TO_NOC_XY_SCRATCH, num_dram_to_noc_words);
+
+    int32_t num_l1_to_noc_words = (NUM_NOCS * NUM_L1_BANKS) >> 1;
+    l1_to_local_mem_copy((uint*)temp_l1_bank_to_noc_xy, (uint tt_l1_ptr*)(MEM_BANK_TO_NOC_XY_SCRATCH + num_dram_to_noc_words), num_l1_to_noc_words);
+
+    int32_t num_dram_offset_words = NUM_DRAM_BANKS >> 2;
+    l1_to_local_mem_copy((uint*)temp_bank_to_dram_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH), num_dram_offset_words);
+
+    DPRINT << " temp_dram_bank_to_noc_xy[0][0] = " << temp_dram_bank_to_noc_xy[0][0] << ENDL();
+    DPRINT << " dram_bank_to_noc_xy[0][0] = " << dram_bank_to_noc_xy[0][0] << ENDL();
+    DPRINT << " MEM_MAP_END = " << MEM_MAP_END << ENDL();
+
+    //int32_t num_l1_offset_words = NUM_L1_BANKS >> 2;
+    //l1_to_local_mem_copy((uint*)temp_bank_to_l1_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH + num_dram_offset_words), num_l1_offset_words);
+
     mailboxes->launch_msg_rd_ptr = 0; // Initialize the rdptr to 0
     noc_index = 0;
     risc_init();

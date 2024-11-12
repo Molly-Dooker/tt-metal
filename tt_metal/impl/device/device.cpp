@@ -383,7 +383,9 @@ void Device::build_firmware() {
 
 void Device::initialize_global_array(const HalProgrammableCoreType &core_type, CoreCoord phys_core)
 {
-    tt::log_info(tt::LogTest, "initalize gloabl array  called for {}", core_type, phys_core);
+    tt::log_info(tt::LogTest, "initialize_global_array  called for {} {}", core_type, phys_core);
+    tt::log_info(tt::LogTest, "initialize_global_array  dram_bank_to_noc_xy_[0][0] =  {}", dram_bank_to_noc_xy_[0][0]);
+    tt::Cluster::instance().write_core(&dram_bank_to_noc_xy_[0][0], dram_bank_to_noc_xy_[0].size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core),  MEM_BANK_TO_NOC_XY_SCRATCH);
 }
 
 void Device::initialize_firmware(const HalProgrammableCoreType &core_type, CoreCoord phys_core, launch_msg_t *launch_msg, go_msg_t* go_msg) {
@@ -3409,25 +3411,27 @@ void Device::MarkAllocationsSafe() {
     tt::tt_metal::allocator::mark_allocations_safe(*(this->allocator_));
 }
 
-void Device::generate_device_headers(const std::string &path) const
+void Device::generate_device_headers(const std::string &path)
 {
 
     // Basic Allocator generates number of banks which may not be power of 2, so we could just pad and alias for now
     const size_t num_dram_banks = this->num_banks(BufferType::DRAM);
     const size_t num_dram_banks_pow2 = std::pow(2, std::ceil(std::log2(num_dram_banks)));
     std::vector<CoreCoord> dram_noc_coord_per_bank(num_dram_banks);
-    std::vector<int32_t> dram_offsets_per_bank(num_dram_banks);
+    dram_bank_offset_map_.clear();
+    dram_bank_offset_map_.resize(num_dram_banks);
     for (unsigned bank_id = 0; bank_id < num_dram_banks; bank_id++) {
         dram_noc_coord_per_bank[bank_id] = this->dram_core_from_dram_channel(this->dram_channel_from_bank_id(bank_id));
-        dram_offsets_per_bank[bank_id] = this->bank_offset(BufferType::DRAM, bank_id);
+        dram_bank_offset_map_[bank_id] = this->bank_offset(BufferType::DRAM, bank_id);
     }
     const size_t num_l1_banks = this->num_banks(BufferType::L1); // 128
     const size_t num_l1_banks_pow2 = std::pow(2, std::ceil(std::log2(num_l1_banks)));
     std::vector<CoreCoord> l1_noc_coord_per_bank(num_l1_banks);
-    std::vector<int32_t> l1_offset_per_bank(num_l1_banks);
+    l1_bank_offset_map_.clear();
+    l1_bank_offset_map_.resize(num_l1_banks);
     for (unsigned bank_id = 0; bank_id < num_l1_banks; bank_id++) {
         l1_noc_coord_per_bank[bank_id] = this->worker_core_from_logical_core(this->logical_core_from_bank_id(bank_id));
-        l1_offset_per_bank[bank_id] = this->bank_offset(BufferType::L1, bank_id);
+        l1_bank_offset_map_[bank_id] = this->bank_offset(BufferType::L1, bank_id);
     }
 
     const metal_SocDescriptor& soc_d = tt::Cluster::instance().get_soc_desc(this->id());
@@ -3438,48 +3442,44 @@ void Device::generate_device_headers(const std::string &path) const
         path,
         soc_d.grid_size,
         dram_noc_coord_per_bank,
-        dram_offsets_per_bank,
+        dram_bank_offset_map_,
         l1_noc_coord_per_bank,
-        l1_offset_per_bank,
+        l1_bank_offset_map_,
         this->allocator_->config.alignment
     );
     this->generate_mem_bank_info(
         soc_d.grid_size,
         dram_noc_coord_per_bank,
-        dram_offsets_per_bank,
-        l1_noc_coord_per_bank,
-        l1_offset_per_bank);
+        l1_noc_coord_per_bank);
 }
 
 void Device::generate_mem_bank_info(
     tt_xy_pair grid_size,
     std::vector<CoreCoord>& dram_bank_map,
-    std::vector<int32_t>& dram_bank_offset_map,
-    std::vector<CoreCoord>& l1_bank_map,
-    std::vector<int32_t>& l1_bank_offset_map) const
+    std::vector<CoreCoord>& l1_bank_map)
 {
     tt::log_info(tt::LogTest, "generate_mem_bank_info called for device {}\n", this->id_);
-    std::vector<std::vector<uint16_t>> dram_bank_to_noc_xy = {};
-    dram_bank_to_noc_xy.resize(2);
+    dram_bank_to_noc_xy_.clear();
+    dram_bank_to_noc_xy_.resize(2);
     for (unsigned int noc = 0; noc < 2; noc++) {
-        dram_bank_to_noc_xy[noc].reserve(dram_bank_map.size());
+        dram_bank_to_noc_xy_[noc].reserve(dram_bank_map.size());
         for (unsigned int bank_id = 0; bank_id < dram_bank_map.size(); bank_id++) {
             uint16_t noc_x = NOC_0_X(noc, grid_size.x, dram_bank_map[bank_id].x);
             uint16_t noc_y = NOC_0_Y(noc, grid_size.y, dram_bank_map[bank_id].y);
             uint16_t xy = ((noc_y << NOC_ADDR_NODE_ID_BITS) | noc_x) << NOC_COORD_REG_OFFSET;
-            dram_bank_to_noc_xy[noc].push_back(xy);
+            dram_bank_to_noc_xy_[noc].push_back(xy);
         }
     }
 
-    std::vector<std::vector<uint16_t>> l1_bank_to_noc_xy = {};
-    l1_bank_to_noc_xy.resize(2);
+    l1_bank_to_noc_xy_.clear();
+    l1_bank_to_noc_xy_.resize(2);
     for (unsigned int noc = 0; noc < 2; noc++) {
-        l1_bank_to_noc_xy[noc].reserve(l1_bank_map.size());
+        l1_bank_to_noc_xy_[noc].reserve(l1_bank_map.size());
         for (unsigned int bank_id = 0; bank_id < l1_bank_map.size(); bank_id++) {
             uint16_t noc_x = NOC_0_X(noc, grid_size.x, l1_bank_map[bank_id].x);
             uint16_t noc_y = NOC_0_Y(noc, grid_size.y, l1_bank_map[bank_id].y);
             uint16_t xy = ((noc_y << NOC_ADDR_NODE_ID_BITS) | noc_x) << NOC_COORD_REG_OFFSET;
-            l1_bank_to_noc_xy[noc].push_back(xy);
+            l1_bank_to_noc_xy_[noc].push_back(xy);
         }
     }
 }
