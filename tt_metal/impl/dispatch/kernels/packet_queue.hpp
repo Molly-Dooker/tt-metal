@@ -31,13 +31,13 @@ void zero_l1_buf(tt_l1_ptr uint32_t* buf, uint32_t size_bytes) {
     }
 }
 
-static FORCE_INLINE void write_buffer_to_l1(tt_l1_ptr uint32_t* const buf, uint32_t i, uint32_t val) {
+static void write_buffer_to_l1(tt_l1_ptr uint32_t* const buf, uint32_t i, uint32_t val) {
     if (buf != nullptr) {
         buf[i] = val;
     }
 }
 
-static FORCE_INLINE void set_64b_result(uint32_t* buf, uint64_t val, uint32_t index = 0) {
+static void set_64b_result(uint32_t* buf, uint64_t val, uint32_t index = 0) {
     if (buf != nullptr) {
         buf[index] = val >> 32;
         buf[index + 1] = val & 0xFFFFFFFF;
@@ -369,23 +369,6 @@ class packet_queue_state_t {
     void yield() {
         // TODO: implement yield for ethernet here
     }
-
-    void dprint_object() {
-        DPRINT << "  id: " << DEC() << static_cast<uint32_t>(this->queue_id) << ENDL();
-        DPRINT << "  start_addr: 0x" << HEX()
-               << static_cast<uint32_t>(this->queue_start_addr_words * PACKET_WORD_SIZE_BYTES) << ENDL();
-        DPRINT << "  size_bytes: 0x" << HEX() << static_cast<uint32_t>(this->queue_size_words * PACKET_WORD_SIZE_BYTES)
-               << ENDL();
-        DPRINT << "  remote_x: " << DEC() << static_cast<uint32_t>(this->remote_x) << ENDL();
-        DPRINT << "  remote_y: " << DEC() << static_cast<uint32_t>(this->remote_y) << ENDL();
-        DPRINT << "  remote_queue_id: " << DEC() << static_cast<uint32_t>(this->remote_queue_id) << ENDL();
-        DPRINT << "  remote_update_network_type: " << DEC() << static_cast<uint32_t>(this->remote_update_network_type)
-               << ENDL();
-        DPRINT << "  ready_status: 0x" << HEX() << this->get_remote_ready_status() << ENDL();
-        DPRINT << "  local_wptr: 0x" << HEX() << this->get_queue_local_wptr() << ENDL();
-        DPRINT << "  local_rptr_sent: 0x" << HEX() << this->get_queue_local_rptr_sent() << ENDL();
-        DPRINT << "  local_rptr_cleared: 0x" << HEX() << this->get_queue_local_rptr_cleared() << ENDL();
-    }
 };
 
 class packet_input_queue_state_t : public packet_queue_state_t {
@@ -610,18 +593,6 @@ class packet_input_queue_state_t : public packet_queue_state_t {
             }
         }
     }
-
-    void dprint_object() {
-        DPRINT << "Input queue:" << ENDL();
-        packet_queue_state_t::dprint_object();
-        DPRINT << "  packet_valid: " << DEC() << static_cast<uint32_t>(this->curr_packet_valid) << ENDL();
-        DPRINT << "  packet_tag: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_tag) << ENDL();
-        DPRINT << "  packet_src: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_src) << ENDL();
-        DPRINT << "  packet_dest: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_dest) << ENDL();
-        DPRINT << "  packet_flags: 0x" << HEX() << static_cast<uint32_t>(this->curr_packet_flags) << ENDL();
-        DPRINT << "  packet_size_words: " << DEC() << static_cast<uint32_t>(this->curr_packet_size_words) << ENDL();
-        DPRINT << "  packet_words_sent: " << DEC() << static_cast<uint32_t>(this->curr_packet_words_sent) << ENDL();
-    }
 };
 
 class packet_output_queue_state_t : public packet_queue_state_t {
@@ -685,22 +656,6 @@ class packet_output_queue_state_t : public packet_queue_state_t {
             this->curr_input_queue_words_in_flight[input_queue_id] += (num_words + input_pad_words_skipped);
             this->curr_output_total_words_in_flight += num_words;
         }
-
-        void dprint_object() {
-            DPRINT << "  curr_output_total_words_in_flight: " << DEC() << this->curr_output_total_words_in_flight
-                   << ENDL();
-            for (uint32_t j = 0; j < MAX_SWITCH_FAN_IN; j++) {
-                DPRINT << "       from input queue id " << DEC() << this->input_queue_array[j].get_queue_id() << ": "
-                       << DEC() << this->curr_input_queue_words_in_flight[j] << ENDL();
-            }
-            DPRINT << "  prev_output_total_words_in_flight: " << DEC() << this->prev_output_total_words_in_flight
-                   << ENDL();
-            for (uint32_t j = 0; j < MAX_SWITCH_FAN_IN; j++) {
-                DPRINT << "       from input queue id " << DEC() << this->input_queue_array[j].get_queue_id() << ": "
-                       << DEC() << this->prev_input_queue_words_in_flight[j] << ENDL();
-            }
-        }
-
     } input_queue_status;
 
    public:
@@ -891,12 +846,6 @@ class packet_output_queue_state_t : public packet_queue_state_t {
         }
 
         return num_words_to_forward;
-    }
-
-    void dprint_object() {
-        DPRINT << "Output queue:" << ENDL();
-        packet_queue_state_t::dprint_object();
-        this->input_queue_status.dprint_object();
     }
 };
 

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
-#include "debug/dprint.h"
 #include "tt_metal/impl/dispatch/kernels/cq_helpers.hpp"
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
 

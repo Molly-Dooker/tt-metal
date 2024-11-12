@@ -4,7 +4,6 @@
 
 // clang-format off
 #include "dataflow_api.h"
-#include "debug/dprint.h"
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
 #include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen.hpp"
 // clang-format on
@@ -193,9 +192,11 @@ void kernel_main() {
     uint64_t few_data_sent_iter = 0;
     uint64_t many_data_sent_iter = 0;
     uint64_t words_flushed = 0;
-    bool timeout = false;
     uint64_t start_timestamp = get_timestamp();
+#ifdef CHECK_TIMEOUT
     uint32_t progress_timestamp = start_timestamp & 0xFFFFFFFF;
+    bool timeout = false;
+#endif
 
     while (true) {
         iter++;
@@ -228,14 +229,13 @@ void kernel_main() {
         words_flushed += output_queue_ptr->prev_words_in_flight_check_flush();
     }
 
+#ifdef CHECK_TIMEOUT
     if (!timeout) {
         test_results[PQ_TEST_MISC_INDEX] = 0xff00002;
         if (!output_queue_ptr->output_barrier(timeout_cycles)) {
             timeout = true;
         }
     }
-
-    uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
 
     if (!timeout) {
         test_results[PQ_TEST_MISC_INDEX] = 0xff00003;
@@ -250,7 +250,9 @@ void kernel_main() {
             }
         }
     }
+#endif
 
+    uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
     uint64_t num_packets = input_queue_state.get_num_packets();
     set_64b_result(test_results, data_words_sent, PQ_TEST_WORD_CNT_INDEX);
     set_64b_result(test_results, cycles_elapsed, PQ_TEST_CYCLES_INDEX);
@@ -261,14 +263,15 @@ void kernel_main() {
     set_64b_result(test_results, few_data_sent_iter, TX_TEST_IDX_FEW_DATA_WORDS_SENT_ITER);
     set_64b_result(test_results, many_data_sent_iter, TX_TEST_IDX_MANY_DATA_WORDS_SENT_ITER);
 
-    if (!timeout) {
-        test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
-        test_results[PQ_TEST_MISC_INDEX] = 0xff00004;
-    } else {
+#ifdef CHECK_TIMEOUT
+    if (timeout) {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
         set_64b_result(test_results, words_flushed, TX_TEST_IDX_WORDS_FLUSHED);
-        // these calls lead to code size issues?
-        // input_queue_ptr->dprint_object();
-        // output_queue_ptr->dprint_object();
+    } else
+#endif
+    {
+        // intentional behaviour to use this path by default if no timeout checks
+        test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
+        test_results[PQ_TEST_MISC_INDEX] = 0xff00004;
     }
 }

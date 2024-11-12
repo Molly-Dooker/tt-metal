@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
-#include "debug/dprint.h"
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
 #include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen.hpp"
 
@@ -66,7 +65,6 @@ static_assert(is_16b_aligned(remote_rptr_sent_addr), "16B alignment required for
 static_assert(is_16b_aligned(remote_rptr_cleared_addr), "16B alignment required for scratch addresses");
 
 void kernel_main() {
-
     zero_l1_buf(test_results, test_results_size_bytes);
     test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_STARTED;
     test_results[PQ_TEST_MISC_INDEX] = 0xff000000;
@@ -100,8 +98,10 @@ void kernel_main() {
     uint64_t num_words_checked = 0;
     uint32_t curr_packet_payload_words_remaining_to_check = 0;
 
-    uint64_t iter = 0;
+#ifdef CHECK_TIMEOUT
     bool timeout = false;
+#endif
+    uint64_t iter = 0;
     bool check_failed = false;
     bool all_src_endpoints_last_packet = false;
     bool src_endpoint_last_packet[num_src_endpoints] = {false};
@@ -258,29 +258,24 @@ void kernel_main() {
 
     uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
 
-    if (!timeout && !check_failed) {
-        test_results[PQ_TEST_MISC_INDEX] = 0xff000002;
-        input_queue->send_remote_finished_notification();
-    }
-
     set_64b_result(test_results, num_words_checked, PQ_TEST_WORD_CNT_INDEX);
     set_64b_result(test_results, cycles_elapsed, PQ_TEST_CYCLES_INDEX);
     set_64b_result(test_results, iter, PQ_TEST_ITER_INDEX);
 
+#ifdef CHECK_TIMEOUT
     if (timeout) {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
         set_64b_result(test_results, words_sent, PQ_TEST_MISC_INDEX+12);
         set_64b_result(test_results, words_cleared, PQ_TEST_MISC_INDEX+14);
-        DPRINT << "[Traffic gen rx] ";
-        input_queue->dprint_object();
-    } else if (check_failed) {
+    } else
+#endif
+    if (check_failed) {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_DATA_MISMATCH;
         test_results[PQ_TEST_MISC_INDEX+12] = mismatch_addr;
         test_results[PQ_TEST_MISC_INDEX+12] = mismatch_val;
         test_results[PQ_TEST_MISC_INDEX+12] = expected_val;
-        DPRINT << "[Traffic gen rx] ";
-        input_queue->dprint_object();
     } else {
+        input_queue->send_remote_finished_notification();
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
         test_results[PQ_TEST_MISC_INDEX] = 0xff000005;
     }

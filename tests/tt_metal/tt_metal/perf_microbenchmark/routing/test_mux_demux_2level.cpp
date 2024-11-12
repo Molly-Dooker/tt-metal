@@ -7,14 +7,18 @@
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/llrt/rtoptions.hpp"
 #include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
+#include "tt_metal/impl/dispatch/packet_queue_host_misc.cpp"
 #include "kernels/traffic_gen_test.hpp"
 
 using std::vector;
 using namespace tt;
+using namespace packet_queue_host;
 
-
+/**
+ * This test checks the Mux and Demux kernels working in a 2 level mux/demux configuration.
+ * It creates 16 Traffic Generators ---> 4 Muxes ---> Mux --> Demux ---> 4 Demuxes ---> 16 Traffic Receivers
+ */
 int main(int argc, char **argv) {
-
     constexpr uint32_t default_prng_seed = 0x100;
     constexpr uint32_t default_data_kb_per_tx = 64*1024;
     constexpr uint32_t default_max_packet_size_words = 0x100;
@@ -93,13 +97,30 @@ int main(int argc, char **argv) {
 
     try {
         int device_id = 0;
-        tt_metal::Device *device = tt_metal::CreateDevice(device_id);
+        tt_metal::Device* device = tt_metal::CreateDevice(device_id);
         tt_metal::Program program = tt_metal::CreateProgram();
 
         constexpr uint32_t tx_x = 0;
         constexpr uint32_t tx_y = 0;
         std::vector<CoreCoord> tx_core;
         std::vector<CoreCoord> tx_phys_core;
+
+        packet_queue_host::packet_queue_buffer_set tx_buffers = make_buffer_set(device, num_src_endpoints);
+
+        packet_queue_host::packet_queue_buffer_set mux_l1_input_buffers = make_buffer_set(device, num_mux_l1 * MAX_SWITCH_FAN_IN);
+        packet_queue_host::packet_queue_buffer_set mux_l1_output_buffers = make_buffer_set(device, num_mux_l1);
+
+        packet_queue_host::packet_queue_buffer_set mux_l2_input_buffers = make_buffer_set(device, MAX_SWITCH_FAN_IN);
+        packet_queue_host::packet_queue_buffer_set mux_l2_output_buffers = make_buffer_set(device, num_mux_l2);
+
+        packet_queue_host::packet_queue_buffer_set demux_l1_input_buffers = make_buffer_set(device, num_demux_l1);
+        packet_queue_host::packet_queue_buffer_set demux_l1_output_buffers = make_buffer_set(device, MAX_SWITCH_FAN_IN);
+
+        packet_queue_host::packet_queue_buffer_set demux_l2_input_buffers = make_buffer_set(device, num_demux_l2);
+        packet_queue_host::packet_queue_buffer_set demux_l2_output_buffers = make_buffer_set(device, num_demux_l2 * MAX_SWITCH_FAN_IN);
+
+        packet_queue_host::packet_queue_buffer_set rx_buffers = make_buffer_set(device, num_dest_endpoints);
+
         for (uint32_t i = 0; i < num_src_endpoints; i++) {
             CoreCoord core = {tx_x+(i%8), tx_y+(i/8)};
             tx_core.push_back(core);
@@ -149,6 +170,12 @@ int main(int argc, char **argv) {
         for (uint32_t i = 0; i < num_src_endpoints; i++) {
             uint32_t mux_index = i / MAX_SWITCH_FAN_IN;
             uint32_t mux_queue_index = i % MAX_SWITCH_FAN_IN;
+
+            std::shared_ptr<Buffer> input_local_wptr = std::get<packet_queue_buffer_set_wptr>(tx_buffers).at(i);
+            std::shared_ptr<Buffer> output_local_rptr_sent = std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers).at(i);
+            std::shared_ptr<Buffer> output_local_rptr_clear = std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers).at(i);
+            std::shared_ptr<Buffer> mux_local_wptr = std::get<packet_queue_buffer_set_wptr>(mux_l1_input_buffers).at(i);
+
             std::vector<uint32_t> compile_args =
                 {
                     src_endpoint_start_id + i, // 0: src_endpoint_id
@@ -172,7 +199,13 @@ int main(int argc, char **argv) {
                     0, // 18: skip_pkt_content_gen
                     0, // 19: pkt_dest_size_choice
                     0, // 20: data_sent_per_iter_low
-                    0 // 21: data_sent_per_iter_high
+                    0, // 21: data_sent_per_iter_high
+                    // Connect the output of the TX to the input of the mux
+                    input_local_wptr->address(),  // 22: input_queue_local_wptr_addr
+                    output_local_rptr_sent->address(), // 23: output_queue_rptr_sent_addr
+                    output_local_rptr_clear->address(), // 24: output_queue_rptr_cleared_addr
+                    // Connect the output of the traffic gen to the input of the mux L1
+                    mux_local_wptr->address(), // 25: remote_wptr_addr
                 };
             log_info(LogTest, "run TX {} at x={},y={} (phys x={},y={})",
                             i, tx_core[i].x, tx_core[i].y, tx_phys_core[i].x, tx_phys_core[i].y);
@@ -192,6 +225,11 @@ int main(int argc, char **argv) {
         for (uint32_t i = 0; i < num_dest_endpoints; i++) {
             uint32_t demux_index = i / MAX_SWITCH_FAN_OUT;
             uint32_t demux_queue_index = 1 + i % MAX_SWITCH_FAN_OUT;
+
+            std::shared_ptr<Buffer> input_local_wptr = std::get<packet_queue_buffer_set_wptr>(rx_buffers).at(i);
+            std::shared_ptr<Buffer> demux_rptr_sent = std::get<packet_queue_buffer_set_rptr_sent>(demux_l2_output_buffers).at(i);
+            std::shared_ptr<Buffer> demux_rptr_cleared = std::get<packet_queue_buffer_set_rptr_cleared>(demux_l2_output_buffers).at(i);
+
             std::vector<uint32_t> compile_args =
                 {
                     dest_endpoint_start_id + i, // 0: dest_endpoint_id
@@ -212,7 +250,11 @@ int main(int argc, char **argv) {
                     src_endpoint_start_id, // 15: src_endpoint_start_id
                     dest_endpoint_start_id, // 16: dest_endpoint_start_id
                     timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
-                    0 // 18: disable_header_check
+                    0, // 18: disable_header_check
+                    input_local_wptr->address(), // 19: input_queue_local_wptr_addr
+                    // Connect the input of the traffic receiver to the output of the demux L2
+                    demux_rptr_sent->address(), // 20: remote_rptr_sent_addr
+                    demux_rptr_cleared->address(), // 21: remote_rptr_cleared_addr
                 };
             log_info(LogTest, "run RX {} at x={},y={} (phys x={},y={})",
                     i, rx_core[i].x, rx_core[i].y, rx_phys_core[i].x, rx_phys_core[i].y);
@@ -263,7 +305,29 @@ int main(int argc, char **argv) {
                     test_results_addr, // 14: test_results_addr
                     test_results_size, // 15: test_results_size
                     timeout_mcycles * 1000 * 1000, // 16: timeout_cycles
-                    0, 0, 0, 0, 0, 0, 0, 0 // 17-24: packetize/depacketize settings
+                    0, 0, 0, 0, 0, 0, 0, 0, // 17-24: packetize/depacketize settings
+                    std::get<packet_queue_buffer_set_wptr>(mux_l1_input_buffers)[i * MAX_SWITCH_FAN_IN]->address(), // 25: mux_in_local_wptr_addr[0]
+                    std::get<packet_queue_buffer_set_wptr>(mux_l1_input_buffers)[i * MAX_SWITCH_FAN_IN + 1]->address(), // 26: mux_in_local_wptr_addr[1]
+                    std::get<packet_queue_buffer_set_wptr>(mux_l1_input_buffers)[i * MAX_SWITCH_FAN_IN + 2]->address(), // 27: mux_in_local_wptr_addr[2]
+                    std::get<packet_queue_buffer_set_wptr>(mux_l1_input_buffers)[i * MAX_SWITCH_FAN_IN + 3]->address(), // 28: mux_in_local_wptr_addr[3]
+                    // Mux L1 Inputs
+                    // Connect the input of the mux L1 to each traffic generator
+                    // -- Remote rptr sent
+                    std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers)[i * MAX_SWITCH_FAN_IN]->address(), // 29: mux_in_remote_rptr_sent_addr[0]
+                    std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers)[i * MAX_SWITCH_FAN_IN + 1]->address(), // 30: mux_in_remote_rptr_sent_addr[1]
+                    std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers)[i * MAX_SWITCH_FAN_IN + 2]->address(), // 31: mux_in_remote_rptr_sent_addr[2]
+                    std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers)[i * MAX_SWITCH_FAN_IN + 3]->address(), // 32: mux_in_remote_rptr_sent_addr[3]
+                    // -- Remote rptr cleared
+                    std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers)[i * MAX_SWITCH_FAN_IN]->address(), // 33: mux_in_remote_rptr_cleared_addr[0]
+                    std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers)[i * MAX_SWITCH_FAN_IN + 1]->address(), // 34: mux_in_remote_rptr_cleared_addr[1]
+                    std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers)[i * MAX_SWITCH_FAN_IN + 2]->address(), // 35: mux_in_remote_rptr_cleared_addr[2]
+                    std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers)[i * MAX_SWITCH_FAN_IN + 3]->address(), // 36: mux_in_remote_rptr_cleared_addr[3]
+
+                    // Mux L1 Outputs
+                    // Connect the output of the mux L1 to each mux L2
+                    std::get<packet_queue_buffer_set_rptr_sent>(mux_l1_output_buffers)[i]->address(), // 37: mux_out_local_rptr_sent_addr
+                    std::get<packet_queue_buffer_set_rptr_cleared>(mux_l1_output_buffers)[i]->address(), // 38: mux_out_local_rptr_cleared_addr
+                    std::get<packet_queue_buffer_set_wptr>(mux_l2_input_buffers)[i]->address(), // 39: mux_out_remote_wptr_addr
                 };
             log_info(LogTest, "run L1 MUX {} at x={},y={} (phys x={},y={})",
                             i, mux_l1_core[i].x, mux_l1_core[i].y, mux_l1_phys_core[i].x, mux_l1_phys_core[i].y);
@@ -311,7 +375,29 @@ int main(int argc, char **argv) {
                 test_results_addr, // 14: test_results_addr
                 test_results_size, // 15: test_results_size
                 timeout_mcycles * 1000 * 1000, // 16: timeout_cycles
-                0, 0, 0, 0, 0, 0, 0, 0 // 17-24: packetize/depacketize settings
+                0, 0, 0, 0, 0, 0, 0, 0, // 17-24: packetize/depacketize settings
+                std::get<packet_queue_buffer_set_wptr>(mux_l2_input_buffers)[0]->address(), // 25: mux_in_local_wptr_addr[0]
+                std::get<packet_queue_buffer_set_wptr>(mux_l2_input_buffers)[1]->address(), // 26: mux_in_local_wptr_addr[1]
+                std::get<packet_queue_buffer_set_wptr>(mux_l2_input_buffers)[2]->address(), // 27: mux_in_local_wptr_addr[2]
+                std::get<packet_queue_buffer_set_wptr>(mux_l2_input_buffers)[3]->address(), // 28: mux_in_local_wptr_addr[3]
+                // Mux L2 Inputs
+                // Connect the input of the mux L2 to each mux L1
+                // -- Remote rptr sent
+                std::get<packet_queue_buffer_set_rptr_sent>(mux_l1_output_buffers)[0]->address(), // 29: mux_in_remote_rptr_sent_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(mux_l1_output_buffers)[1]->address(), // 30: mux_in_remote_rptr_sent_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(mux_l1_output_buffers)[2]->address(), // 31: mux_in_remote_rptr_sent_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(mux_l1_output_buffers)[3]->address(), // 32: mux_in_remote_rptr_sent_addr[3]
+                // -- Remote rptr cleared
+                std::get<packet_queue_buffer_set_rptr_cleared>(mux_l1_output_buffers)[0]->address(), // 33: mux_in_remote_rptr_cleared_addr[0]
+                std::get<packet_queue_buffer_set_rptr_cleared>(mux_l1_output_buffers)[1]->address(), // 34: mux_in_remote_rptr_cleared_addr[1]
+                std::get<packet_queue_buffer_set_rptr_cleared>(mux_l1_output_buffers)[2]->address(), // 35: mux_in_remote_rptr_cleared_addr[2]
+                std::get<packet_queue_buffer_set_rptr_cleared>(mux_l1_output_buffers)[3]->address(), // 36: mux_in_remote_rptr_cleared_addr[3]
+
+                // Mux L2 Outputs
+                // Connect the output of the mux L2 to the input of the demux L1
+                std::get<packet_queue_buffer_set_rptr_sent>(mux_l2_output_buffers)[0]->address(), // 37: mux_out_local_rptr_sent_addr
+                std::get<packet_queue_buffer_set_rptr_cleared>(mux_l2_output_buffers)[0]->address(), // 38: mux_out_local_rptr_cleared_addr
+                std::get<packet_queue_buffer_set_wptr>(demux_l1_input_buffers)[0]->address(), // 39: mux_out_remote_wptr_addr
             };
         log_info(LogTest, "run L2 MUX at x={},y={} (phys x={},y={})",
                  mux_l2_core.x, mux_l2_core.y, mux_l2_phys_core.x, mux_l2_phys_core.y);
@@ -371,7 +457,29 @@ int main(int argc, char **argv) {
                 test_results_addr, // 22: test_results_addr
                 test_results_size, // 23: test_results_size
                 timeout_mcycles * 1000 * 1000, // 24: timeout_cycles
-                0, 0, 0, 0, 0 // 25-29: packetize/depacketize settings
+                0, 0, 0, 0, 0, // 25-29: packetize/depacketize settings
+                // Demux L1 inputs
+                // Connect the output of the mux L2 to the input of the demux
+                std::get<packet_queue_buffer_set_wptr>(demux_l1_input_buffers)[0]->address(), // 30: demux_in_local_wptr_addr
+                std::get<packet_queue_buffer_set_rptr_sent>(mux_l2_output_buffers)[0]->address(), // 31: demux_in_remote_rptr_sent_addr
+                std::get<packet_queue_buffer_set_rptr_cleared>(mux_l2_output_buffers)[0]->address(), // 32: demux_in_remote_rptr_cleared_addr
+
+                // Demux L1 outputs
+                // Connect the output of the demux to each demux L2
+                std::get<packet_queue_buffer_set_rptr_sent>(demux_l1_output_buffers)[0]->address(), // 33: demux_out_local_rptr_sent_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(demux_l1_output_buffers)[1]->address(), // 34: demux_out_local_rptr_sent_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(demux_l1_output_buffers)[2]->address(), // 35: demux_out_local_rptr_sent_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(demux_l1_output_buffers)[3]->address(), // 36: demux_out_local_rptr_sent_addr[3]
+
+                std::get<packet_queue_buffer_set_rptr_cleared>(demux_l1_output_buffers)[0]->address(), // 37: demux_out_local_rptr_cleared_addr[0]
+                std::get<packet_queue_buffer_set_rptr_cleared>(demux_l1_output_buffers)[1]->address(), // 38: demux_out_local_rptr_cleared_addr[1]
+                std::get<packet_queue_buffer_set_rptr_cleared>(demux_l1_output_buffers)[2]->address(), // 39: demux_out_local_rptr_cleared_addr[2]
+                std::get<packet_queue_buffer_set_rptr_cleared>(demux_l1_output_buffers)[3]->address(), // 40: demux_out_local_rptr_cleared_addr[3]
+
+                std::get<packet_queue_buffer_set_wptr>(demux_l2_input_buffers)[0]->address(), // 41: demux_out_remote_wptr_addr[0]
+                std::get<packet_queue_buffer_set_wptr>(demux_l2_input_buffers)[1]->address(), // 42: demux_out_remote_wptr_addr[1]
+                std::get<packet_queue_buffer_set_wptr>(demux_l2_input_buffers)[2]->address(), // 43: demux_out_remote_wptr_addr[2]
+                std::get<packet_queue_buffer_set_wptr>(demux_l2_input_buffers)[3]->address(), // 44: demux_out_remote_wptr_addr[3]
             };
 
         log_info(LogTest, "run L1 DEMUX at x={},y={} (phys x={},y={})",
@@ -396,7 +504,7 @@ int main(int argc, char **argv) {
         uint64_t demux_l2_dest_endpoint_output_map =
             packet_switch_dest_pack(demux_l2_dest_map_array, num_dest_endpoints);
         for (uint32_t i = 0; i < num_demux_l2; i++) {
-            uint32_t rx_index = i*MAX_SWITCH_FAN_OUT;
+            uint32_t rx_index = i * MAX_SWITCH_FAN_OUT;
             std::vector<uint32_t> demux_l2_compile_args =
                 {
                     dest_endpoint_start_id, // 0: endpoint_id_start_index
@@ -436,7 +544,29 @@ int main(int argc, char **argv) {
                     test_results_addr, // 22: test_results_addr
                     test_results_size, // 23: test_results_size
                     timeout_mcycles * 1000 * 1000, // 24: timeout_cycles
-                    0, 0, 0, 0, 0 // 25-29: packetize/depacketize settings
+                    0, 0, 0, 0, 0, // 25-29: packetize/depacketize settings
+                    // Demux L2 inputs
+                    // Connect the output of the demux L1 to the input of the demux
+                    std::get<packet_queue_buffer_set_wptr>(demux_l2_input_buffers)[i]->address(), // 30: demux_in_local_wptr_addr
+                    std::get<packet_queue_buffer_set_rptr_sent>(demux_l1_output_buffers)[i]->address(), // 31: demux_in_remote_rptr_sent_addr
+                    std::get<packet_queue_buffer_set_rptr_cleared>(demux_l1_output_buffers)[i]->address(), // 32: demux_in_remote_rptr_cleared_addr
+
+                    // Demux L2 outputs
+                    // Connect the output of the demux to each traffic receiver
+                    std::get<packet_queue_buffer_set_rptr_sent>(demux_l2_output_buffers)[i * num_demux_l2]->address(), // 33: demux_out_local_rptr_sent_addr[0]
+                    std::get<packet_queue_buffer_set_rptr_sent>(demux_l2_output_buffers)[i * num_demux_l2 + 1]->address(), // 34: demux_out_local_rptr_sent_addr[1]
+                    std::get<packet_queue_buffer_set_rptr_sent>(demux_l2_output_buffers)[i * num_demux_l2 + 2]->address(), // 35: demux_out_local_rptr_sent_addr[2]
+                    std::get<packet_queue_buffer_set_rptr_sent>(demux_l2_output_buffers)[i * num_demux_l2 + 3]->address(), // 36: demux_out_local_rptr_sent_addr[3]
+
+                    std::get<packet_queue_buffer_set_rptr_cleared>(demux_l2_output_buffers)[i * num_demux_l2]->address(), // 37: demux_out_local_rptr_cleared_addr[0]
+                    std::get<packet_queue_buffer_set_rptr_cleared>(demux_l2_output_buffers)[i * num_demux_l2 + 1]->address(), // 38: demux_out_local_rptr_cleared_addr[1]
+                    std::get<packet_queue_buffer_set_rptr_cleared>(demux_l2_output_buffers)[i * num_demux_l2 + 2]->address(), // 39: demux_out_local_rptr_cleared_addr[2]
+                    std::get<packet_queue_buffer_set_rptr_cleared>(demux_l2_output_buffers)[i * num_demux_l2 + 3]->address(), // 40: demux_out_local_rptr_cleared_addr[3]
+
+                    std::get<packet_queue_buffer_set_wptr>(rx_buffers)[i * num_demux_l2]->address(), // 41: demux_out_remote_wptr_addr[0]
+                    std::get<packet_queue_buffer_set_wptr>(rx_buffers)[i * num_demux_l2 + 1]->address(), // 42: demux_out_remote_wptr_addr[1]
+                    std::get<packet_queue_buffer_set_wptr>(rx_buffers)[i * num_demux_l2 + 2]->address(), // 43: demux_out_remote_wptr_addr[2]
+                    std::get<packet_queue_buffer_set_wptr>(rx_buffers)[i * num_demux_l2 + 3]->address(), // 44: demux_out_remote_wptr_addr[3]
                 };
 
             log_info(LogTest, "run L2 DEMUX at x={},y={} (phys x={},y={})",
