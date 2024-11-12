@@ -579,47 +579,47 @@ std::string generate_bank_to_noc_coord_descriptor_string(
     ss << "#else // !KERNEL_BUILD (FW_BUILD)" << endl;
     ss << endl;
 
-    ss << "uint16_t dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS] __attribute__((used)) = {" << endl;
-    for (unsigned int noc = 0; noc < 2; noc++) {
-        ss << "    {"
-           << "\t// noc=" << noc << endl;
-        for (unsigned int bank_id = 0; bank_id < dram_bank_map.size(); bank_id++) {
-            uint16_t noc_x = NOC_0_X(noc, grid_size.x, dram_bank_map[bank_id].x);
-            uint16_t noc_y = NOC_0_Y(noc, grid_size.y, dram_bank_map[bank_id].y);
-            ss << "        (((" << noc_y << " << NOC_ADDR_NODE_ID_BITS) | " << noc_x << ") << NOC_COORD_REG_OFFSET),"
-               << "\t// NOC_X=" << noc_x << " NOC_Y=" << noc_y << endl;
-        }
-        ss << "    }," << endl;
-    }
-    ss << "};" << endl;
-    ss << endl;
-    ss << "int32_t bank_to_dram_offset[NUM_DRAM_BANKS] __attribute__((used)) = {" << endl;
-    for (unsigned int bank_id = 0; bank_id < dram_bank_map.size(); bank_id++) {
-        ss << "    " << dram_bank_offset_map[bank_id] << "," << endl;
-    }
-    ss << "};" << endl;
-    ss << endl;
+    //ss << "uint16_t dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS] __attribute__((used)) = {" << endl;
+    //for (unsigned int noc = 0; noc < 2; noc++) {
+    //    ss << "    {"
+    //       << "\t// noc=" << noc << endl;
+    //    for (unsigned int bank_id = 0; bank_id < dram_bank_map.size(); bank_id++) {
+    //        uint16_t noc_x = NOC_0_X(noc, grid_size.x, dram_bank_map[bank_id].x);
+    //        uint16_t noc_y = NOC_0_Y(noc, grid_size.y, dram_bank_map[bank_id].y);
+    //        ss << "        (((" << noc_y << " << NOC_ADDR_NODE_ID_BITS) | " << noc_x << ") << NOC_COORD_REG_OFFSET),"
+    //           << "\t// NOC_X=" << noc_x << " NOC_Y=" << noc_y << endl;
+    //    }
+    //    ss << "    }," << endl;
+    //}
+    //ss << "};" << endl;
+    //ss << endl;
+    //ss << "int32_t bank_to_dram_offset[NUM_DRAM_BANKS] __attribute__((used)) = {" << endl;
+    //for (unsigned int bank_id = 0; bank_id < dram_bank_map.size(); bank_id++) {
+    //    ss << "    " << dram_bank_offset_map[bank_id] << "," << endl;
+    //}
+    //ss << "};" << endl;
+    //ss << endl;
 
-    ss << "uint16_t l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS] __attribute__((used)) = {" << endl;
-    for (unsigned int noc = 0; noc < 2; noc++) {
-        ss << "    {"
-           << "\t// noc=" << noc << endl;
-        for (unsigned int bank_id = 0; bank_id < l1_bank_map.size(); bank_id++) {
-            uint16_t noc_x = NOC_0_X(noc, grid_size.x, l1_bank_map[bank_id].x);
-            uint16_t noc_y = NOC_0_Y(noc, grid_size.y, l1_bank_map[bank_id].y);
-            ss << "        (((" << noc_y << " << NOC_ADDR_NODE_ID_BITS) | " << noc_x << ") << NOC_COORD_REG_OFFSET),"
-               << "\t// NOC_X=" << noc_x << " NOC_Y=" << noc_y << endl;
-        }
-        ss << "    }," << endl;
-    }
-    ss << "};" << endl;
-    ss << endl;
-    ss << "int32_t bank_to_l1_offset[NUM_L1_BANKS]  __attribute__((used)) = {" << endl;
-    for (unsigned int bank_id = 0; bank_id < l1_bank_map.size(); bank_id++) {
-        ss << "    " << l1_bank_offset_map[bank_id] << "," << endl;
-    }
-    ss << "};" << endl;
-    ss << endl;
+    //ss << "uint16_t l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS] __attribute__((used)) = {" << endl;
+    //for (unsigned int noc = 0; noc < 2; noc++) {
+    //    ss << "    {"
+    //       << "\t// noc=" << noc << endl;
+    //    for (unsigned int bank_id = 0; bank_id < l1_bank_map.size(); bank_id++) {
+    //        uint16_t noc_x = NOC_0_X(noc, grid_size.x, l1_bank_map[bank_id].x);
+    //        uint16_t noc_y = NOC_0_Y(noc, grid_size.y, l1_bank_map[bank_id].y);
+    //        ss << "        (((" << noc_y << " << NOC_ADDR_NODE_ID_BITS) | " << noc_x << ") << NOC_COORD_REG_OFFSET),"
+    //           << "\t// NOC_X=" << noc_x << " NOC_Y=" << noc_y << endl;
+    //    }
+    //    ss << "    }," << endl;
+    //}
+    //ss << "};" << endl;
+    //ss << endl;
+    //ss << "int32_t bank_to_l1_offset[NUM_L1_BANKS]  __attribute__((used)) = {" << endl;
+    //for (unsigned int bank_id = 0; bank_id < l1_bank_map.size(); bank_id++) {
+    //    ss << "    " << l1_bank_offset_map[bank_id] << "," << endl;
+    //}
+    //ss << "};" << endl;
+    //ss << endl;
 
     ss << "#endif // FW_BUILD" << endl;
 

@@ -39,6 +39,12 @@ uint32_t tt_l1_ptr *rta_l1_base __attribute__((used));
 uint32_t tt_l1_ptr *crta_l1_base __attribute__((used));
 uint32_t tt_l1_ptr *sem_l1_base[ProgrammableCoreType::COUNT] __attribute__((used));
 
+//DRAM and L1 bank offsets and noc coordinates.
+uint16_t dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS] __attribute__((used));
+int32_t bank_to_dram_offset[NUM_DRAM_BANKS] __attribute__((used));
+uint16_t l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS] __attribute__((used));
+int32_t bank_to_l1_offset[NUM_L1_BANKS]  __attribute__((used));
+
 #if defined(PROFILE_KERNEL)
 namespace kernel_profiler {
     uint32_t wIndex __attribute__((used));
@@ -78,6 +84,16 @@ int main(int argc, char *argv[]) {
 
     int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
     l1_to_local_mem_copy((uint *)__ldm_data_start, (uint tt_l1_ptr *)MEM_NCRISC_INIT_LOCAL_L1_BASE_SCRATCH, num_words);
+
+    int32_t num_dram_to_noc_words = (NUM_NOCS * NUM_DRAM_BANKS) << 1;
+    l1_to_local_mem_copy((uint*)dram_bank_to_noc_xy, (uint tt_l1_ptr*)MEM_BANK_TO_NOC_XY_SCRATCH, num_dram_to_noc_words);
+    int32_t num_l1_to_noc_words = (NUM_NOCS * NUM_L1_BANKS) << 1;
+    l1_to_local_mem_copy((uint*)l1_bank_to_noc_xy, (uint tt_l1_ptr*)(MEM_BANK_TO_NOC_XY_SCRATCH + num_dram_to_noc_words), num_l1_to_noc_words);
+
+    int32_t num_dram_offset_words = NUM_DRAM_BANKS << 2;
+    l1_to_local_mem_copy((uint*)bank_to_dram_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH), num_dram_offset_words);
+    int32_t num_l1_offset_words = NUM_L1_BANKS << 2;
+    l1_to_local_mem_copy((uint*)bank_to_l1_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH + num_dram_offset_words), num_l1_offset_words);
 
     risc_init();
 

@@ -67,10 +67,10 @@ uint32_t tt_l1_ptr *crta_l1_base __attribute__((used));
 uint32_t tt_l1_ptr *sem_l1_base[ProgrammableCoreType::COUNT] __attribute__((used));
 
 //DRAM and L1 bank offsets and noc coordinates.
-uint16_t temp_dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS] __attribute__((used));
-int32_t temp_bank_to_dram_offset[NUM_DRAM_BANKS] __attribute__((used));
-uint16_t temp_l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS] __attribute__((used));
-//int32_t temp_bank_to_l1_offset[NUM_L1_BANKS]  __attribute__((used));
+uint16_t dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS] __attribute__((used));
+uint16_t l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS] __attribute__((used));
+int32_t bank_to_dram_offset[NUM_DRAM_BANKS] __attribute__((used));
+int32_t bank_to_l1_offset[NUM_L1_BANKS]  __attribute__((used));
 
 #define MEM_MOVER_VIEW_IRAM_BASE_ADDR (0x4 << 12)
 
@@ -349,21 +349,47 @@ int main() {
     int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
     l1_to_local_mem_copy((uint*)__ldm_data_start, (uint tt_l1_ptr*)MEM_BRISC_INIT_LOCAL_L1_BASE_SCRATCH, num_words);
 
-    int32_t num_dram_to_noc_words = (NUM_NOCS * NUM_DRAM_BANKS) >> 1;
-    l1_to_local_mem_copy((uint*)temp_dram_bank_to_noc_xy, (uint tt_l1_ptr*)MEM_BANK_TO_NOC_XY_SCRATCH, num_dram_to_noc_words);
+    int32_t num_dram_to_noc_words = (NUM_NOCS * NUM_DRAM_BANKS) << 1;
+    l1_to_local_mem_copy((uint*)dram_bank_to_noc_xy, (uint tt_l1_ptr*)MEM_BANK_TO_NOC_XY_SCRATCH, num_dram_to_noc_words);
 
-    int32_t num_l1_to_noc_words = (NUM_NOCS * NUM_L1_BANKS) >> 1;
-    l1_to_local_mem_copy((uint*)temp_l1_bank_to_noc_xy, (uint tt_l1_ptr*)(MEM_BANK_TO_NOC_XY_SCRATCH + num_dram_to_noc_words), num_l1_to_noc_words);
+    int32_t num_l1_to_noc_words = (NUM_NOCS * NUM_L1_BANKS) << 1;
+    //DPRINT << " base addr = " << MEM_BANK_TO_NOC_XY_SCRATCH << " num_dram_to_noc_words = " << num_dram_to_noc_words << " num_l1_to_noc_words = " << num_l1_to_noc_words << ENDL();
+    l1_to_local_mem_copy((uint*)l1_bank_to_noc_xy, (uint tt_l1_ptr*)(MEM_BANK_TO_NOC_XY_SCRATCH + num_dram_to_noc_words), num_l1_to_noc_words);
 
-    int32_t num_dram_offset_words = NUM_DRAM_BANKS >> 2;
-    l1_to_local_mem_copy((uint*)temp_bank_to_dram_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH), num_dram_offset_words);
+    int32_t num_dram_offset_words = NUM_DRAM_BANKS << 2;
+    l1_to_local_mem_copy((uint*)bank_to_dram_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH), num_dram_offset_words);
 
-    DPRINT << " temp_dram_bank_to_noc_xy[0][0] = " << temp_dram_bank_to_noc_xy[0][0] << ENDL();
-    DPRINT << " dram_bank_to_noc_xy[0][0] = " << dram_bank_to_noc_xy[0][0] << ENDL();
-    DPRINT << " MEM_MAP_END = " << MEM_MAP_END << ENDL();
+    //DPRINT << "DRAM noc_xy[0][0] = " << dram_bank_to_noc_xy[0][0] <<  " and " << temp_dram_bank_to_noc_xy[0][0] << ENDL();
+    //DPRINT << "DRAM noc_xy[0][1] = " << dram_bank_to_noc_xy[0][1] <<  " and " << temp_dram_bank_to_noc_xy[0][1] << ENDL();
+    //DPRINT << "DRAM noc_xy[0][last] = " << dram_bank_to_noc_xy[0][NUM_DRAM_BANKS-1] <<  " and " << temp_dram_bank_to_noc_xy[0][NUM_DRAM_BANKS-1] << ENDL();
+    //DPRINT << "DRAM noc_xy[0][last-1] = " << dram_bank_to_noc_xy[0][NUM_DRAM_BANKS-2] <<  " and " << temp_dram_bank_to_noc_xy[0][NUM_DRAM_BANKS-2] << ENDL();
 
-    //int32_t num_l1_offset_words = NUM_L1_BANKS >> 2;
-    //l1_to_local_mem_copy((uint*)temp_bank_to_l1_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH + num_dram_offset_words), num_l1_offset_words);
+    //DPRINT << "DRAM noc_xy[1][0] = " << dram_bank_to_noc_xy[1][0] <<  " and " << temp_dram_bank_to_noc_xy[1][0] << ENDL();
+    //DPRINT << "DRAM noc_xy[1][1] = " << dram_bank_to_noc_xy[1][1] <<  " and " << temp_dram_bank_to_noc_xy[1][1] << ENDL();
+    //DPRINT << "DRAM noc_xy[1][last] = " << dram_bank_to_noc_xy[1][NUM_DRAM_BANKS-1] <<  " and " << temp_dram_bank_to_noc_xy[1][NUM_DRAM_BANKS-1] << ENDL();
+    //DPRINT << "DRAM noc_xy[1][last-1] = " << dram_bank_to_noc_xy[1][NUM_DRAM_BANKS-2] <<  " and " << temp_dram_bank_to_noc_xy[1][NUM_DRAM_BANKS-2] << ENDL();
+
+    //DPRINT << "l1 noc_xy[0][0] = " << l1_bank_to_noc_xy[0][0] <<  " and " << temp_l1_bank_to_noc_xy[0][0] << ENDL();
+    //DPRINT << "l1 noc_xy[0][1] = " << l1_bank_to_noc_xy[0][1] <<  " and " << temp_l1_bank_to_noc_xy[0][1] << ENDL();
+    //DPRINT << "l1 noc_xy[0][last] = " << l1_bank_to_noc_xy[0][NUM_L1_BANKS-1] <<  " and " << temp_l1_bank_to_noc_xy[0][NUM_L1_BANKS-1] << ENDL();
+    //DPRINT << "l1 noc_xy[0][last-1] = " << l1_bank_to_noc_xy[0][NUM_L1_BANKS-2] <<  " and " << temp_l1_bank_to_noc_xy[0][NUM_L1_BANKS-2] << ENDL();
+
+    //DPRINT << "l1 noc_xy[1][0] = " << l1_bank_to_noc_xy[1][0] <<  " and " << temp_l1_bank_to_noc_xy[1][0] << ENDL();
+    //DPRINT << "l1 noc_xy[1][1] = " << l1_bank_to_noc_xy[1][1] <<  " and " << temp_l1_bank_to_noc_xy[1][1] << ENDL();
+    //DPRINT << "l1 noc_xy[1][last] = " << l1_bank_to_noc_xy[1][NUM_L1_BANKS-1] <<  " and " << temp_l1_bank_to_noc_xy[1][NUM_L1_BANKS-1] << ENDL();
+    //DPRINT << "l1 noc_xy[1][last-1] = " << l1_bank_to_noc_xy[1][NUM_L1_BANKS-2] <<  " and " << temp_l1_bank_to_noc_xy[1][NUM_L1_BANKS-2] << ENDL();
+
+    //DPRINT << "dram_offset [0] = " << bank_to_dram_offset[0] << " and " << temp_bank_to_dram_offset[0] << ENDL();
+    //DPRINT << "dram_offset [1] = " << bank_to_dram_offset[1] << " and " << temp_bank_to_dram_offset[1] << ENDL();
+    //DPRINT << "dram_offset [last] = " << bank_to_dram_offset[NUM_DRAM_BANKS-1] << " and " << temp_bank_to_dram_offset[NUM_DRAM_BANKS-1] << ENDL();
+    //DPRINT << "dram_offset [last-1] = " << bank_to_dram_offset[NUM_DRAM_BANKS-2] << " and " << temp_bank_to_dram_offset[NUM_DRAM_BANKS-2] << ENDL();
+
+    int32_t num_l1_offset_words = NUM_L1_BANKS << 2;
+    l1_to_local_mem_copy((uint*)bank_to_l1_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH + num_dram_offset_words), num_l1_offset_words);
+    //DPRINT << "l1_offset [0] = " << bank_to_l1_offset[0] << " and " << temp_bank_to_l1_offset[0] << ENDL();
+    //DPRINT << "l1_offset [1] = " << bank_to_l1_offset[1] << " and " << temp_bank_to_l1_offset[1] << ENDL();
+    //DPRINT << "l1_offset [last] = " << bank_to_l1_offset[NUM_L1_BANKS-1] << " and " << temp_bank_to_l1_offset[NUM_L1_BANKS-1] << ENDL();
+    //DPRINT << "l1_offset [last-1] = " << bank_to_l1_offset[NUM_L1_BANKS-2] << " and " << temp_bank_to_l1_offset[NUM_L1_BANKS-2] << ENDL();
 
     mailboxes->launch_msg_rd_ptr = 0; // Initialize the rdptr to 0
     noc_index = 0;

@@ -374,7 +374,6 @@ void Device::initialize_build() {
 
 void Device::build_firmware() {
     log_debug(tt::LogMetal, "Building base firmware for device {}", this->id_);
-    tt::log_info(tt::LogTest, "Building base firmware for device {}", this->id_);
     ZoneScoped;
 
     this->generate_device_headers(this->build_env_.get_out_firmware_root_path());
@@ -383,14 +382,27 @@ void Device::build_firmware() {
 
 void Device::initialize_global_array(const HalProgrammableCoreType &core_type, CoreCoord phys_core)
 {
-    tt::log_info(tt::LogTest, "initialize_global_array  called for {} {}", core_type, phys_core);
-    tt::log_info(tt::LogTest, "initialize_global_array  dram_bank_to_noc_xy_[0][0] =  {}", dram_bank_to_noc_xy_[0][0]);
     tt::Cluster::instance().write_core(&dram_bank_to_noc_xy_[0][0], dram_bank_to_noc_xy_[0].size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core),  MEM_BANK_TO_NOC_XY_SCRATCH);
+
+
+    uint64_t addr = MEM_BANK_TO_NOC_XY_SCRATCH + (dram_bank_to_noc_xy_[0].size() * sizeof(uint16_t));
+    //tt::log_info(tt::LogTest, "initialize_global_array  dram array 1 addr = {}", addr);
+    tt::Cluster::instance().write_core(&dram_bank_to_noc_xy_[1][0], dram_bank_to_noc_xy_[1].size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core), addr);
+
+    addr = MEM_BANK_TO_NOC_XY_SCRATCH + (sizeof(uint16_t) * (dram_bank_to_noc_xy_[0].size() + dram_bank_to_noc_xy_[1].size()));
+    tt::Cluster::instance().write_core(&l1_bank_to_noc_xy_[0][0], l1_bank_to_noc_xy_[0].size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core), addr);
+
+    addr = MEM_BANK_TO_NOC_XY_SCRATCH + (sizeof(uint16_t) * (dram_bank_to_noc_xy_[0].size() + dram_bank_to_noc_xy_[1].size() + l1_bank_to_noc_xy_[0].size()));
+    tt::Cluster::instance().write_core(&l1_bank_to_noc_xy_[1][0], l1_bank_to_noc_xy_[1].size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core), addr);
+
+    tt::Cluster::instance().write_core(&dram_bank_offset_map_[0], dram_bank_offset_map_.size() * sizeof(int32_t), tt_cxy_pair(this->id(), phys_core), MEM_BANK_OFFSET_SCRATCH);
+
+    addr = MEM_BANK_OFFSET_SCRATCH + (dram_bank_offset_map_.size() * sizeof(int32_t));
+    tt::Cluster::instance().write_core(&l1_bank_offset_map_[0], l1_bank_offset_map_.size() * sizeof(int32_t), tt_cxy_pair(this->id(), phys_core), addr);
 }
 
 void Device::initialize_firmware(const HalProgrammableCoreType &core_type, CoreCoord phys_core, launch_msg_t *launch_msg, go_msg_t* go_msg) {
     ZoneScoped;
-    tt::log_info(tt::LogTest, "initialize_firmware called for {}", core_type);
 
     this->initialize_global_array(core_type, phys_core);
 

@@ -34,12 +34,12 @@ extern uint16_t dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS];
 extern int32_t bank_to_dram_offset[NUM_DRAM_BANKS];
 extern uint16_t l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS];
 extern int32_t bank_to_l1_offset[NUM_L1_BANKS];
-
-extern uint16_t temp_dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS];
-extern int32_t temp_bank_to_dram_offset[NUM_DRAM_BANKS];
-extern uint16_t temp_l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS];
-//extern int32_t temp_bank_to_l1_offset[NUM_L1_BANKS];
 #else
+extern uint16_t dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS];
+extern int32_t bank_to_dram_offset[NUM_DRAM_BANKS];
+extern uint16_t l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS];
+extern int32_t bank_to_l1_offset[NUM_L1_BANKS];
+
 extern uint8_t noc_index;
 constexpr uint8_t noc_mode = DM_DEDICATED_NOC;
 #endif
