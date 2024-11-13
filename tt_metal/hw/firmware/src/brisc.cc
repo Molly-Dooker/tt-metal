@@ -20,7 +20,6 @@
 #include "tools/profiler/kernel_profiler.hpp"
 #include "dev_msgs.h"
 #include "risc_attribs.h"
-#include "generated_bank_to_noc_coord_mapping.h"
 #include "circular_buffer.h"
 #include "dataflow_api.h"
 #include "dev_mem_map.h"
