@@ -13,9 +13,15 @@
 #include "dev_mem_map.h"
 #include "hostdevcommon/kernel_structs.h"
 #include "dev_msgs.h"
+#include "noc/noc_parameters.h"
 
 extern void (*__init_array_start[])();
 extern void (*__init_array_end[])();
+
+extern uint16_t dram_bank_to_noc_xy[NUM_NOCS][NUM_DRAM_BANKS];
+extern int32_t bank_to_dram_offset[NUM_DRAM_BANKS];
+extern uint16_t l1_bank_to_noc_xy[NUM_NOCS][NUM_L1_BANKS];
+extern int32_t bank_to_l1_offset[NUM_L1_BANKS];
 
 extern void kernel_init(uint32_t kernel_init);
 extern void kernel_launch(uint32_t kernel_base_addr);
@@ -64,6 +70,19 @@ inline void do_crt1(uint32_t tt_l1_ptr* data_image) {
     for (void (**fptr)() = __init_array_start; fptr < __init_array_end; fptr++) {
         (**fptr)();
     }
+}
+
+void noc_bank_table_init()
+{
+    int32_t num_dram_to_noc_words = (NUM_NOCS * NUM_DRAM_BANKS) << 1;
+    l1_to_local_mem_copy((uint*)dram_bank_to_noc_xy, (uint tt_l1_ptr*)MEM_BANK_TO_NOC_XY_SCRATCH, num_dram_to_noc_words);
+    int32_t num_l1_to_noc_words = (NUM_NOCS * NUM_L1_BANKS) << 1;
+    l1_to_local_mem_copy((uint*)l1_bank_to_noc_xy, (uint tt_l1_ptr*)(MEM_BANK_TO_NOC_XY_SCRATCH + num_dram_to_noc_words), num_l1_to_noc_words);
+
+    int32_t num_dram_offset_words = NUM_DRAM_BANKS << 2;
+    l1_to_local_mem_copy((uint*)bank_to_dram_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH), num_dram_offset_words);
+    int32_t num_l1_offset_words = NUM_L1_BANKS << 2;
+    l1_to_local_mem_copy((uint*)bank_to_l1_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH + num_dram_offset_words), num_l1_offset_words);
 }
 
 FORCE_INLINE

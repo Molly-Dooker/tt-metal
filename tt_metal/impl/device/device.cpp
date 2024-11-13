@@ -402,11 +402,11 @@ void Device::build_firmware() {
     log_debug(tt::LogMetal, "Building base firmware for device {}", this->id_);
     ZoneScoped;
 
-    this->generate_global_arrays();
+    this->generate_device_bank_to_noc_tables();
     jit_build_set(this->firmware_build_states_, nullptr);
 }
 
-void Device::initialize_global_array(const HalProgrammableCoreType &core_type, CoreCoord phys_core)
+void Device::initialize_device_bank_to_noc_tables(const HalProgrammableCoreType &core_type, CoreCoord phys_core)
 {
     tt::Cluster::instance().write_core(&dram_bank_to_noc_xy_[0], dram_bank_to_noc_xy_.size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core),  MEM_BANK_TO_NOC_XY_SCRATCH);
     uint64_t l1_noc_addr = MEM_BANK_TO_NOC_XY_SCRATCH + (dram_bank_to_noc_xy_.size() * sizeof(uint16_t));
@@ -420,12 +420,12 @@ void Device::initialize_global_array(const HalProgrammableCoreType &core_type, C
 void Device::initialize_firmware(const HalProgrammableCoreType &core_type, CoreCoord phys_core, launch_msg_t *launch_msg, go_msg_t* go_msg) {
     ZoneScoped;
 
+    this->initialize_device_bank_to_noc_tables(core_type, phys_core);
     uint32_t core_type_idx = hal.get_programmable_core_type_index(core_type);
     uint32_t processor_class_count = hal.get_processor_classes_count(core_type);
 
     switch (core_type) {
         case HalProgrammableCoreType::TENSIX: {
-            this->initialize_global_array(core_type, phys_core);
             llrt::program_risc_startup_addr(this->id(), phys_core);
             for (uint32_t processor_class = 0; processor_class < processor_class_count; processor_class++) {
                 auto [build_idx, num_build_states] = this->build_processor_type_to_index(core_type_idx, processor_class);
@@ -3552,7 +3552,7 @@ void Device::MarkAllocationsSafe() {
     tt::tt_metal::allocator::mark_allocations_safe(*this->get_initialized_allocator());
 }
 
-void Device::generate_global_arrays()
+void Device::generate_device_bank_to_noc_tables()
 {
     const size_t num_dram_banks = this->num_banks(BufferType::DRAM);
     std::vector<CoreCoord> dram_noc_coord_per_bank(num_dram_banks);
