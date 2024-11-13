@@ -10,9 +10,7 @@
 #include "chlkc_unpack_tile_dims.h"
 #define DATA_FORMATS_DEFINED
 #endif
-#if __has_include("generated_bank_to_noc_coord_mapping.h")
-#include "generated_bank_to_noc_coord_mapping.h"
-#endif
+#include <noc/noc_parameters.h>
 
 #include <stdint.h>
 
@@ -90,6 +88,10 @@ extern CBInterface cb_interface[NUM_CIRCULAR_BUFFERS];
 #define EXCLUDE_START_Y_OFFSET 14
 #define EXCLUDE_START_X_OFFSET 8
 #define DYNAMIC_NOC_DIRECTION(noc, direction) (noc == 1 ? 1 - direction : direction)
+
+static_assert(NUM_NOCS == 2);
+// "Scratch" in L1 has space allocated for 256 DRAM and L1 enteries, to store offsets and NOC XY data. (MEM_BANK_TO_NOC_XY_SCRATCH and MEM_BANK_OFFSET_SCRATCH)
+static_assert((NUM_DRAM_BANKS + NUM_L1_BANKS) <= 256);
 
 FORCE_INLINE
 uint32_t align(uint32_t addr, uint32_t alignment) { return ((addr - 1) | (alignment - 1)) + 1; }
