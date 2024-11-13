@@ -659,7 +659,6 @@ void JitBuildState::build(const JitBuildSettings* settings) const {
         std::remove(log_file.c_str());
     }
 
-    tt::log_info(tt::LogTest, "Building JitBuild for {}", out_dir);
     compile(log_file, out_dir, settings);
     link(log_file, out_dir);
     if (this->is_fw_) {

@@ -231,11 +231,7 @@ class Device {
     // machine inf
     float sfpu_inf() const;
 
-    void generate_device_headers(const std::string &path);
-    void generate_mem_bank_info(
-        tt_xy_pair grid_size,
-        std::vector<CoreCoord>& dram_bank_map,
-        std::vector<CoreCoord>& l1_bank_map);
+    void generate_global_arrays();
     const JitBuildEnv& build_env() const { return this->build_env_; }
     const string build_firmware_target_path(uint32_t programmable_core, uint32_t processor_class, int i) const;
     const string build_kernel_target_path(uint32_t programmable_core, uint32_t processor_class, int i, const string& kernel_name) const;
