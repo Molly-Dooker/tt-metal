@@ -409,21 +409,11 @@ void Device::build_firmware() {
 
 void Device::initialize_global_array(const HalProgrammableCoreType &core_type, CoreCoord phys_core)
 {
-    tt::Cluster::instance().write_core(&dram_bank_to_noc_xy_[0][0], dram_bank_to_noc_xy_[0].size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core),  MEM_BANK_TO_NOC_XY_SCRATCH);
-
-
-    uint64_t addr = MEM_BANK_TO_NOC_XY_SCRATCH + (dram_bank_to_noc_xy_[0].size() * sizeof(uint16_t));
-    //tt::log_info(tt::LogTest, "initialize_global_array  dram array 1 addr = {}", addr);
-    tt::Cluster::instance().write_core(&dram_bank_to_noc_xy_[1][0], dram_bank_to_noc_xy_[1].size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core), addr);
-
-    addr = MEM_BANK_TO_NOC_XY_SCRATCH + (sizeof(uint16_t) * (dram_bank_to_noc_xy_[0].size() + dram_bank_to_noc_xy_[1].size()));
-    tt::Cluster::instance().write_core(&l1_bank_to_noc_xy_[0][0], l1_bank_to_noc_xy_[0].size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core), addr);
-
-    addr = MEM_BANK_TO_NOC_XY_SCRATCH + (sizeof(uint16_t) * (dram_bank_to_noc_xy_[0].size() + dram_bank_to_noc_xy_[1].size() + l1_bank_to_noc_xy_[0].size()));
-    tt::Cluster::instance().write_core(&l1_bank_to_noc_xy_[1][0], l1_bank_to_noc_xy_[1].size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core), addr);
+    tt::Cluster::instance().write_core(&dram_bank_to_noc_xy_[0], dram_bank_to_noc_xy_.size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core),  MEM_BANK_TO_NOC_XY_SCRATCH);
+    uint64_t addr = MEM_BANK_TO_NOC_XY_SCRATCH + (dram_bank_to_noc_xy_.size() * sizeof(uint16_t));
+    tt::Cluster::instance().write_core(&l1_bank_to_noc_xy_[0], l1_bank_to_noc_xy_.size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core), addr);
 
     tt::Cluster::instance().write_core(&dram_bank_offset_map_[0], dram_bank_offset_map_.size() * sizeof(int32_t), tt_cxy_pair(this->id(), phys_core), MEM_BANK_OFFSET_SCRATCH);
-
     addr = MEM_BANK_OFFSET_SCRATCH + (dram_bank_offset_map_.size() * sizeof(int32_t));
     tt::Cluster::instance().write_core(&l1_bank_offset_map_[0], l1_bank_offset_map_.size() * sizeof(int32_t), tt_cxy_pair(this->id(), phys_core), addr);
 }
@@ -3612,26 +3602,24 @@ void Device::generate_mem_bank_info(
 {
     tt::log_info(tt::LogTest, "generate_mem_bank_info called for device {}\n", this->id_);
     dram_bank_to_noc_xy_.clear();
-    dram_bank_to_noc_xy_.resize(2);
+    dram_bank_to_noc_xy_.reserve(2 * dram_bank_map.size());
     for (unsigned int noc = 0; noc < 2; noc++) {
-        dram_bank_to_noc_xy_[noc].reserve(dram_bank_map.size());
         for (unsigned int bank_id = 0; bank_id < dram_bank_map.size(); bank_id++) {
             uint16_t noc_x = NOC_0_X(noc, grid_size.x, dram_bank_map[bank_id].x);
             uint16_t noc_y = NOC_0_Y(noc, grid_size.y, dram_bank_map[bank_id].y);
             uint16_t xy = ((noc_y << NOC_ADDR_NODE_ID_BITS) | noc_x) << NOC_COORD_REG_OFFSET;
-            dram_bank_to_noc_xy_[noc].push_back(xy);
+            dram_bank_to_noc_xy_.push_back(xy);
         }
     }
 
     l1_bank_to_noc_xy_.clear();
-    l1_bank_to_noc_xy_.resize(2);
+    l1_bank_to_noc_xy_.reserve(2 * l1_bank_map.size());
     for (unsigned int noc = 0; noc < 2; noc++) {
-        l1_bank_to_noc_xy_[noc].reserve(l1_bank_map.size());
         for (unsigned int bank_id = 0; bank_id < l1_bank_map.size(); bank_id++) {
             uint16_t noc_x = NOC_0_X(noc, grid_size.x, l1_bank_map[bank_id].x);
             uint16_t noc_y = NOC_0_Y(noc, grid_size.y, l1_bank_map[bank_id].y);
             uint16_t xy = ((noc_y << NOC_ADDR_NODE_ID_BITS) | noc_x) << NOC_COORD_REG_OFFSET;
-            l1_bank_to_noc_xy_[noc].push_back(xy);
+            l1_bank_to_noc_xy_.push_back(xy);
         }
     }
 }

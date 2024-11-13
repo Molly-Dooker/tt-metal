@@ -404,8 +404,8 @@ class Device {
 
     std::vector<int32_t> dram_bank_offset_map_;
     std::vector<int32_t> l1_bank_offset_map_;
-    std::vector<std::vector<uint16_t>> dram_bank_to_noc_xy_;
-    std::vector<std::vector<uint16_t>> l1_bank_to_noc_xy_;
+    std::vector<uint16_t> dram_bank_to_noc_xy_;
+    std::vector<uint16_t> l1_bank_to_noc_xy_;
 };
 
 }  // namespace v0
