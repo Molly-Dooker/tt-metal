@@ -191,51 +191,55 @@ plt.subplots_adjust(hspace=0.8)  # Increase vertical spacing
 plt.savefig(os.path.join(plots_dir, "all_plots_ordered.png"))
 print(f"All ordered plots have been saved to {os.path.join(plots_dir, 'all_plots_ordered.png')}.")
 
-# Prepare for plotting RMSRE without mean
-# New section for RMSRE without mean
-plot_data_without_mean = defaultdict(dict)
+# Prepare for plotting RMSE without dividing by mean
+plot_data_rmse_without_mean = defaultdict(dict)
 
 for key, num_tiles_dict in kernel_durations.items():
     for num_tiles, durations in num_tiles_dict.items():
+        # Calculate RMSE directly
         estimated_durations = []
         for actual_duration in durations:
             estimated_duration = fitting_coeffs.get(key, (0, 0))
             estimated_duration = estimated_duration[0] * num_tiles + estimated_duration[1]
             estimated_durations.append(estimated_duration)
 
-        rmsre_value_without_mean = (
-            np.sqrt(np.mean((np.array(durations) - np.array(estimated_durations)) ** 2)) if len(durations) > 0 else 0
-        )
-        plot_data_without_mean[key][num_tiles] = rmsre_value_without_mean
+        # Calculate RMSE
+        rmse_value = np.sqrt(np.mean((np.array(durations) - np.array(estimated_durations)) ** 2))
+
+        plot_data_rmse_without_mean[key][num_tiles] = rmse_value
 
 # Prepare for plotting
-ordered_plot_data_without_mean = [
-    (key, plot_data_without_mean[key]) for key in plot_order if key in plot_data_without_mean
+ordered_plot_data_rmse_without_mean = [
+    (key, plot_data_rmse_without_mean[key]) for key in plot_order if key in plot_data_rmse_without_mean
 ]
 
-num_plots_without_mean = len(ordered_plot_data_without_mean)
+num_plots_rmse_without_mean = len(ordered_plot_data_rmse_without_mean)
 num_cols = 3  # Number of columns for the subplots
-num_rows_without_mean = (num_plots_without_mean + num_cols - 1) // num_cols  # Calculate required number of rows
-fig, axes = plt.subplots(num_rows_without_mean, num_cols, figsize=(18, 5 * num_rows_without_mean), squeeze=False)
+num_rows_rmse_without_mean = (
+    num_plots_rmse_without_mean + num_cols - 1
+) // num_cols  # Calculate required number of rows
+fig, axes = plt.subplots(
+    num_rows_rmse_without_mean, num_cols, figsize=(18, 5 * num_rows_rmse_without_mean), squeeze=False
+)
 
 # Flatten axes for easy indexing
 axes = axes.flatten()
 
 # Plotting
-for plot_index, (key, num_tiles_metrics) in enumerate(ordered_plot_data_without_mean):
+for plot_index, (key, num_tiles_metrics) in enumerate(ordered_plot_data_rmse_without_mean):
     input_memory, output_memory, input_datatype = key
     num_tiles = sorted(num_tiles_metrics.keys())
-    rmsre_values_without_mean = [num_tiles_metrics[nt] for nt in num_tiles]
+    rmse_values = [num_tiles_metrics[nt] for nt in num_tiles]
 
     ax = axes[plot_index]  # Get the axis for the current plot
-    ax.plot(num_tiles, rmsre_values_without_mean, "ro-", label="RMSRE (%)", alpha=0.7)
+    ax.plot(num_tiles, rmse_values, "bo-", label="RMSE (ns)", alpha=0.7)
 
     # Set title and labels
     ax.set_title(
-        f"RMSRE - Input: {input_memory}\nOutput: {output_memory}\nFormat: {input_datatype}", fontsize=12, pad=20
+        f"RMSE - Input: {input_memory}\nOutput: {output_memory}\nFormat: {input_datatype}", fontsize=12, pad=20
     )  # Multi-line title
     ax.set_xlabel("Num Tiles")
-    ax.set_ylabel("RMSRE (%)")
+    ax.set_ylabel("RMSE [ns]")  # Updated y-axis label
     ax.grid()
     ax.legend()
 
@@ -246,5 +250,5 @@ for i in range(plot_index + 1, len(axes)):
 # Adjust layout to prevent overlap
 plt.tight_layout(pad=3.0)
 plt.subplots_adjust(hspace=0.8)  # Increase vertical spacing
-plt.savefig(os.path.join(plots_dir, "rmsre_without_mean.png"))
-print(f"RMSRE without mean plot has been saved to {os.path.join(plots_dir, 'rmsre_without_mean.png')}.")
+plt.savefig(os.path.join(plots_dir, "rmse_without_mean.png"))
+print(f"RMSE without mean plot has been saved to {os.path.join(plots_dir, 'rmse_without_mean.png')}.")

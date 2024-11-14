@@ -34,9 +34,10 @@ else:
 
     last_csv_file = csv_files[-1]  # Get the most recently modified CSV file
 
-output_file = "tests/sweep_framework/perf_model/filtered_rows.csv"
-aggregated_file = "tests/sweep_framework/perf_model/aggregated_values.csv"
-fitting_file = "tests/sweep_framework/perf_model/fitting_data.csv"  # New file for fitting data
+output_file = "tests/sweep_framework/perf_model/filtered_rows_sharded.csv"
+aggregated_file = "tests/sweep_framework/perf_model/aggregated_values_sharded.csv"
+fitting_file = "tests/sweep_framework/perf_model/fitting_data_sharded.csv"  # New file for fitting data
+image_file = "tests/sweep_framework/perf_model/fitting_plot_sharded.png"
 
 # To hold data for plotting and aggregation
 agg_data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
@@ -178,4 +179,4 @@ with open(fitting_file, mode="w", newline="") as fit_file:
 print(f"Filtered data has been written to {output_file}.")
 print(f"Aggregated data has been written to {aggregated_file}.")
 print(f"Fitting data has been written to {fitting_file}.")
-print("Plots have been saved to perf_plot.png.")
+print(f"Plots have been saved to {image_file}.")

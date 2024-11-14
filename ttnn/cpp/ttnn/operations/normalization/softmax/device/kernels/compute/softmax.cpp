@@ -12,6 +12,7 @@
 #include "compute_kernel_api/bcast.h"
 #include "compute_kernel_api/softmax.h"
 #include "compute_kernel_api/reduce.h"
+#include "dprint.h"
 
 #include "debug/dprint.h"
 #include "debug/dprint_tensix.h"
