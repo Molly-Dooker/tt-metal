@@ -13,6 +13,7 @@
 #include "impl/dispatch/work_executor.hpp"
 #include "tt_metal/impl/allocator/basic_allocator.hpp"
 #include "tt_metal/impl/allocator/l1_banking_allocator.hpp"
+#include "tt_metal/impl/lightmetal/lightmetal.hpp"
 #include "tt_metal/impl/kernels/data_types.hpp"
 #include "tt_metal/impl/program/program_device_map.hpp"
 #include "tt_metal/jit_build/build.hpp"
@@ -61,19 +62,6 @@ static constexpr float  INF_WHB0 = 1.7014e+38;
 static constexpr float  INF_BH = INF_WHB0;
 
 inline namespace v0 {
-
-// Create a struct called LightMetalTraceConfig with 3 booleans:
-// TODO - Move this to another file called light_metal_trace.hpp or something.
-struct LightMetalTraceConfig {
-    bool capture_enabled = false;
-    bool auto_serialize_metal_trace = true;
-    std::string filename = "/tmp/light_metal_trace.bin";
-};
-
-struct LightMetalTrace {
-    std::vector<std::pair<uint32_t, detail::TraceDescriptor>> traces;
-    LightMetalTraceConfig config;
-};
 
 // A physical PCIexpress Tenstorrent device
 class Device {
@@ -244,10 +232,10 @@ class Device {
     std::vector<std::uint8_t> collect_trace(const uint32_t tid);
 
     // Light Metal
-    void light_metal_configure(const std::string& filename, const bool auto_serialize_metal_trace);
+    void light_metal_configure(const std::string& filename, const bool auto_serialize_metal_trace); // TODO - Could go away
     void light_metal_begin_capture();
     void light_metal_end_capture();
-    void light_metal_load_trace_id(const uint32_t tid, const uint8_t cq_id);
+    void light_metal_load_trace_id(const uint32_t tid, const uint8_t cq_id); // TODO - Should take TraceDescriptor
     void light_metal_save_trace_id(const uint32_t tid);
 
     std::vector<std::pair<uint32_t, detail::TraceDescriptor>> collect_traces(const std::vector<uint32_t>& tids);

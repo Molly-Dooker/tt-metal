@@ -1,0 +1,25 @@
+namespace tt.target.lightmetal;
+
+// Matches C++ struct detail::TraceDescriptor
+table TraceDescriptor {
+    trace_data: [uint32]; // Said we want ubyte, but requires conversion since Trace uses uint32.
+    num_completion_worker_cores: uint32;
+    num_traced_programs_needing_go_signal_multicast: uint32;
+    num_traced_programs_needing_go_signal_unicast: uint32;
+}
+
+// Associate key (trace_id) to value (TraceDescriptor)
+table TraceDescriptorByTraceId {
+    trace_id: uint32 (key);
+    desc: TraceDescriptor;
+}
+
+// Top level Binary, eventually containing everything to run.
+table LightMetalBinary {
+    // TODO - Git Hash, Versioning, etc.
+    // TODO - Commands
+    // TODO - Programs
+    trace_descriptors: [TraceDescriptorByTraceId];  // Metal "Traces"
+}
+
+root_type LightMetalBinary;

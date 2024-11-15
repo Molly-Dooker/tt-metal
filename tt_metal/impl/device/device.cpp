@@ -8,6 +8,7 @@
 #include "tt_metal/jit_build/genfiles.hpp"
 #include "tt_metal/impl/device/device.hpp"
 #include "tt_metal/impl/trace/trace.hpp"
+#include "tt_metal/impl/lightmetal/lightmetal.hpp"
 #include "tt_metal/common/core_descriptor.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
@@ -3350,187 +3351,6 @@ void Device::begin_trace(const uint8_t cq_id, const uint32_t tid) {
     this->hw_command_queues_[cq_id]->record_begin(tid, this->trace_buffer_pool_[tid]->desc);
 }
 
-// Updated serialize_trace_desc_to_memory to return a vector
-std::vector<std::uint8_t> serialize_trace_desc_to_memory(
-    const detail::TraceDescriptor& traceDesc, uint32_t trace_id) {
-    std::vector<std::uint8_t> buffer;
-
-    // Reserve space for trace_id, metadata, and vector data
-    buffer.reserve(sizeof(trace_id) + 3 * sizeof(uint32_t) +
-                   sizeof(uint32_t) + traceDesc.data.size() * sizeof(uint32_t));
-
-    log_info(tt::LogMetal, "KCM {} for trace_id {} with data_size: {}", __FUNCTION__, trace_id, traceDesc.data.size());
-
-    // Helper to append data to the buffer
-    auto append_to_buffer = [&](const void* data, std::size_t size) {
-        const auto* byteData = static_cast<const std::uint8_t*>(data);
-        buffer.insert(buffer.end(), byteData, byteData + size);
-    };
-
-    // Append trace_id
-    append_to_buffer(&trace_id, sizeof(trace_id));
-
-    // Serialize metadata fields
-    append_to_buffer(&traceDesc.num_completion_worker_cores, sizeof(traceDesc.num_completion_worker_cores));
-    append_to_buffer(&traceDesc.num_traced_programs_needing_go_signal_multicast, sizeof(traceDesc.num_traced_programs_needing_go_signal_multicast));
-    append_to_buffer(&traceDesc.num_traced_programs_needing_go_signal_unicast, sizeof(traceDesc.num_traced_programs_needing_go_signal_unicast));
-
-    // Serialize the size of the vector data
-    uint32_t size_in_bytes = static_cast<uint32_t>(traceDesc.data.size() * sizeof(uint32_t));
-    append_to_buffer(&size_in_bytes, sizeof(size_in_bytes));
-
-    // Serialize the vector data
-    if (!traceDesc.data.empty()) {
-        append_to_buffer(traceDesc.data.data(), size_in_bytes);
-    }
-
-    return buffer;
-}
-
-// Updated write_binary_data_to_file to accept vector
-void write_binary_data_to_file(const std::vector<std::uint8_t>& binaryData, const std::string& filename) {
-
-    log_info(tt::LogMetal, "KCM {} file: {}", __FUNCTION__, filename);
-    std::ofstream ofs(filename, std::ios::binary);
-    if (!ofs) {
-        std::cerr << "Error opening file for writing: " << filename << std::endl;
-        return;
-    }
-
-    ofs.write(reinterpret_cast<const char*>(binaryData.data()), binaryData.size());
-
-    ofs.close();
-    if (!ofs) {
-        std::cerr << "Error writing to file: " << filename << std::endl;
-    }
-}
-
-// Function to serialize multiple traces into a single memory buffer
-std::vector<std::uint8_t> serialize_traces_to_memory(
-    const std::vector<std::pair<uint32_t, detail::TraceDescriptor>>& traces) {
-    std::vector<std::uint8_t> buffer;
-
-    // Write the number of traces at the beginning
-    uint32_t num_traces = static_cast<uint32_t>(traces.size());
-    buffer.reserve(sizeof(num_traces));
-    auto append_to_buffer = [&](const void* data, std::size_t size) {
-        const auto* byteData = static_cast<const std::uint8_t*>(data);
-        buffer.insert(buffer.end(), byteData, byteData + size);
-    };
-    append_to_buffer(&num_traces, sizeof(num_traces));
-
-    // Serialize each trace
-    for (const auto& trace_pair : traces) {
-        uint32_t trace_id = trace_pair.first;
-        const detail::TraceDescriptor& traceDesc = trace_pair.second;
-
-        // Serialize individual trace
-        std::vector<std::uint8_t> serialized_trace = serialize_trace_desc_to_memory(traceDesc, trace_id);
-
-        // Append the size of the serialized trace
-        uint32_t trace_size = static_cast<uint32_t>(serialized_trace.size());
-        append_to_buffer(&trace_size, sizeof(trace_size));
-
-        // Append the serialized trace data
-        append_to_buffer(serialized_trace.data(), serialized_trace.size());
-    }
-
-    return buffer;
-}
-
-
-// Helper function to deserialize a single TraceDescriptor from a buffer
-std::pair<detail::TraceDescriptor, uint32_t> deserialize_trace_from_buffer(const uint8_t* data, size_t size) {
-    detail::TraceDescriptor traceDesc;
-    uint32_t trace_id = 0;
-    size_t offset = 0;
-
-    auto read_from_buffer = [&](void* dest, size_t n) {
-        if (offset + n > size) {
-            throw std::runtime_error("Buffer overrun during deserialization");
-        }
-        std::memcpy(dest, data + offset, n);
-        offset += n;
-    };
-
-    // Read trace_id
-    read_from_buffer(&trace_id, sizeof(trace_id));
-
-    // Read metadata fields
-    read_from_buffer(&traceDesc.num_completion_worker_cores, sizeof(traceDesc.num_completion_worker_cores));
-    read_from_buffer(&traceDesc.num_traced_programs_needing_go_signal_multicast, sizeof(traceDesc.num_traced_programs_needing_go_signal_multicast));
-    read_from_buffer(&traceDesc.num_traced_programs_needing_go_signal_unicast, sizeof(traceDesc.num_traced_programs_needing_go_signal_unicast));
-
-    // Read the size of the vector data in bytes
-    uint32_t size_in_bytes = 0;
-    read_from_buffer(&size_in_bytes, sizeof(size_in_bytes));
-
-    // Calculate the number of uint32_t elements in the vector
-    uint32_t num_elements = size_in_bytes / sizeof(uint32_t);
-    traceDesc.data.resize(num_elements);
-
-    // Read the vector data
-    if (num_elements > 0) {
-        read_from_buffer(traceDesc.data.data(), size_in_bytes);
-    }
-
-    return {traceDesc, trace_id};
-}
-
-
-// Better way to store in binary?
-// Right now does it only work when writing to binary all at once? Yes.
-// TODO - Switch to flatbuffer schema before optimizing.
-
-// Function to deserialize a specific trace by trace_id
-std::optional<detail::TraceDescriptor> deserialize_trace_by_id(const std::string& filename, uint32_t target_trace_id) {
-    std::ifstream ifs(filename, std::ios::binary);
-    if (!ifs) {
-        std::cerr << "Error opening file for reading: " << filename << std::endl;
-        return std::nullopt;
-    }
-
-    // Read the number of traces
-    uint32_t num_traces = 0;
-    ifs.read(reinterpret_cast<char*>(&num_traces), sizeof(num_traces));
-    if (!ifs) {
-        std::cerr << "Error reading number of traces from file: " << filename << std::endl;
-        return std::nullopt;
-    }
-
-    // Search for the target trace_id
-    for (uint32_t i = 0; i < num_traces; ++i) {
-        // Read the size of the serialized trace
-        uint32_t trace_size = 0;
-        ifs.read(reinterpret_cast<char*>(&trace_size), sizeof(trace_size));
-        if (!ifs) {
-            std::cerr << "Error reading trace size from file: " << filename << std::endl;
-            break;
-        }
-
-        // Read the serialized trace data
-        std::vector<std::uint8_t> trace_data(trace_size);
-        ifs.read(reinterpret_cast<char*>(trace_data.data()), trace_size);
-        if (!ifs) {
-            std::cerr << "Error reading trace data from file: " << filename << std::endl;
-            break;
-        }
-
-        // Deserialize the trace from the data
-        auto [traceDesc, trace_id] = deserialize_trace_from_buffer(trace_data.data(), trace_size);
-
-        if (trace_id == target_trace_id) {
-            ifs.close();
-            // KCM - This was returning a pair.
-            return std::move(traceDesc);
-        }
-    }
-
-    ifs.close();
-    // Trace with the given trace_id not found
-    return std::nullopt;
-}
-
 void Device::light_metal_configure(const std::string& filename, const bool auto_serialize) {
     this->light_metal_trace_.config.filename = filename;
     this->light_metal_trace_.config.auto_serialize_metal_trace = auto_serialize;
@@ -3545,18 +3365,12 @@ void Device::light_metal_begin_capture() {
 void Device::light_metal_end_capture() {
     log_info(tt::LogMetal, "KCM End Light Metal Capture");
     TT_ASSERT(this->light_metal_trace_.config.capture_enabled, "Light Metal Capture was already disabled");
-
     const auto &cfg = this->light_metal_trace_.config;
     if (cfg.capture_enabled && cfg.auto_serialize_metal_trace) {
-
-        auto num_traces = this->light_metal_trace_.traces.size();
-        log_info(tt::LogMetal, "KCM {} Going to serialize {} traces now to filename: {}", __FUNCTION__, num_traces, this->light_metal_trace_.config.filename);
-
-        // Serialize the traces and write to file
-        auto trace_binary_data = serialize_traces_to_memory(this->light_metal_trace_.traces);
-        write_binary_data_to_file(trace_binary_data, this->light_metal_trace_.config.filename);
+        // FIXME - Return this to caller and let caller write to file.
+        auto trace_binary_data = createLightMetalBinary(this->light_metal_trace_);
+        writeBinaryBlobToFile(this->light_metal_trace_.config.filename, trace_binary_data);
     }
-
     this->light_metal_trace_.config.capture_enabled = false;
 }
 
@@ -3592,15 +3406,16 @@ void Device::end_trace(const uint8_t cq_id, const uint32_t tid) {
 }
 
 // KCM - New API to load a trace binary from disk and write to device, simliar to what happens in end_trace() during capture.
-// FIXME - In the future store this metal trace in flatbuffer binary alongside trace_id.
 void Device::light_metal_load_trace_id(const uint32_t tid, const uint8_t cq_id) {
 
     log_info(tt::LogMetal, "KCM Inside {} for cq: {} file: {} got tid: {}", __FUNCTION__, (uint32_t)cq_id, this->light_metal_trace_.config.filename, tid);
-    auto result = deserialize_trace_by_id(this->light_metal_trace_.config.filename, tid);
 
-    if (result) {
-        auto trace_desc = result.value();
+    // FIXME - This is bringup hack to parse flatbuffer binary and extract TraceDescriptor by trace_id.
+    // would be replaced by updating this API to take TraceDescriptor directly.
+    auto traceDescOpt = getTraceByTraceId(this->light_metal_trace_.config.filename, tid);
 
+    if (traceDescOpt.has_value()) {
+        const auto& trace_desc = traceDescOpt.value();
         // Load the trace binary (TraceDescriptor serialized) and write to device.
         this->MarkAllocationsSafe(); // KCM - Copied from begin_trace
         this->trace_buffer_pool_.insert({tid, Trace::create_empty_trace_buffer()});
@@ -3611,7 +3426,7 @@ void Device::light_metal_load_trace_id(const uint32_t tid, const uint8_t cq_id) 
         Trace::initialize_buffer(this->command_queue(cq_id), this->trace_buffer_pool_[tid]);
         this->MarkAllocationsUnsafe(); // Copied from end_trace
     } else {
-        std::cerr << "Trace with ID " << tid << " not found." << std::endl;
+        std::cout << "Trace ID " << tid << " not found or an error occurred." << std::endl;
     }
 }
 
@@ -3620,7 +3435,10 @@ std::vector<std::uint8_t> Device::collect_trace(const uint32_t tid) {
     log_info(tt::LogMetal, "KCM Collect trace for tid {}", tid);
     TT_FATAL(this->trace_buffer_pool_.count(tid) > 0, "Trace instance {} must exist on device", tid);
     auto& trace_desc = this->trace_buffer_pool_[tid]->desc;
-    auto trace_data = serialize_trace_desc_to_memory(*trace_desc, tid);
+    // auto trace_data = serialize_trace_desc_to_memory(*trace_desc, tid);
+    // FIXME - Figure out what to do with these functions. Are they really needed?
+    // Return empty vector:
+    std::vector<std::uint8_t> trace_data;
     return trace_data;
 }
 
@@ -3628,8 +3446,8 @@ std::vector<std::uint8_t> Device::collect_trace(const uint32_t tid) {
 void Device::light_metal_save_trace_id(const uint32_t tid) {
     auto filename = this->light_metal_trace_.config.filename;
     log_info(tt::LogMetal, "KCM Saving trace for tid {} filename: {}", tid, filename);
-    auto trace_binary_data = collect_trace(tid);
-    write_binary_data_to_file(trace_binary_data, filename);
+    // auto trace_binary_data = collect_trace(tid);
+    // write_binary_data_to_file(trace_binary_data, filename);
 }
 
 // Nick does want ability to get binary data for a single trace.
