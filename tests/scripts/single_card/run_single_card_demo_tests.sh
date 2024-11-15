@@ -30,6 +30,9 @@ run_common_func_tests() {
   # Resnet
   WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest -n auto --disable-warnings models/demos/wormhole/resnet50/demo/demo.py; fail+=$?
 
+  #MNIST
+  pytest --disable-warnings models/demos/wormhole/mnist/demo/demo.py --timeout 600; fail+=$?
+
   # Distilbert
   pytest --disable-warnings models/demos/distilbert/demo/demo.py --timeout 600; fail+=$?
 
@@ -39,7 +42,7 @@ run_common_func_tests() {
   # Mnist
   pytest --disable-warnings models/demos/mnist/demo/demo.py --timeout 600; fail+=$?
 
-  #MNIST
+
   pytest --disable-warnings models/demos/wormhole/mnist/demo/demo.py --timeout 600; fail+=$?
   return $fail
 }
