@@ -11,8 +11,8 @@
 namespace packet_queue_host
 {
 
-constexpr uint32_t PACKET_QUEUE_SCRATCH_BUFFER_SLOT_BYTES = sizeof(uint32_t);
-static_assert(PACKET_QUEUE_SCRATCH_BUFFER_SLOT_BYTES == 4, "Size of uint32_t expected to be 4B for packet queue");
+constexpr uint32_t PACKET_QUEUE_SCRATCH_BUFFER_SLOT_BYTES = 64; // sizeof(uint32_t); Size is extended to accomodate for remote shadow values
+// static_assert(PACKET_QUEUE_SCRATCH_BUFFER_SLOT_BYTES == 4, "Size of uint32_t expected to be 4B for packet queue");
 
 constexpr size_t packet_queue_buffer_set_wptr = 0;
 constexpr size_t packet_queue_buffer_set_rptr_sent = 1;

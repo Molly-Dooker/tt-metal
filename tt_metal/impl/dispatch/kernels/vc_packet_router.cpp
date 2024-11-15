@@ -12,8 +12,6 @@ constexpr uint32_t rx_queue_start_addr_words = get_compile_time_arg_val(1);
 constexpr uint32_t rx_queue_size_words = get_compile_time_arg_val(2);
 constexpr uint32_t rx_queue_size_bytes = rx_queue_size_words * PACKET_WORD_SIZE_BYTES;
 
-static_assert(is_power_of_2(rx_queue_size_words), "rx_queue_size_words must be a power of 2");
-
 constexpr uint32_t router_lanes = get_compile_time_arg_val(3);
 
 // FIXME imatosevic - is there a way to do this without explicit indexes?
@@ -56,17 +54,6 @@ constexpr uint32_t remote_tx_queue_size_words[MAX_SWITCH_FAN_OUT] = {
     get_compile_time_arg_val(11),
     get_compile_time_arg_val(13),
     get_compile_time_arg_val(15)};
-
-static_assert(is_power_of_2(remote_tx_queue_size_words[0]), "remote_tx_queue_size_words must be a power of 2");
-static_assert(
-    (router_lanes < 2) || is_power_of_2(remote_tx_queue_size_words[1]),
-    "remote_tx_queue_size_words must be a power of 2");
-static_assert(
-    (router_lanes < 3) || is_power_of_2(remote_tx_queue_size_words[2]),
-    "remote_tx_queue_size_words must be a power of 2");
-static_assert(
-    (router_lanes < 4) || is_power_of_2(remote_tx_queue_size_words[3]),
-    "remote_tx_queue_size_words must be a power of 2");
 
 constexpr uint8_t remote_rx_x[MAX_SWITCH_FAN_OUT] = {
     (get_compile_time_arg_val(16) & 0xFF),
@@ -208,8 +195,6 @@ void kernel_main() {
     packet_output_queue_state_t output_queues[MAX_SWITCH_FAN_OUT];
 
     write_buffer_to_l1(kernel_status, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
-    write_buffer_to_l1(kernel_status, PQ_TEST_MISC_INDEX, 0xff000000);
-    write_buffer_to_l1(kernel_status, PQ_TEST_MISC_INDEX + 1, 0xbb000000 | router_lanes);
 
     for (uint32_t i = 0; i < router_lanes; i++) {
         input_queues[i].init(
@@ -229,9 +214,7 @@ void kernel_main() {
             input_packetize_upstream_sem[i],
             input_packetize_src_endpoint[i],
             input_packetize_dest_endpoint[i]);
-    }
 
-    for (uint32_t i = 0; i < router_lanes; i++) {
         output_queues[i].init(
             i + router_lanes,
             remote_tx_queue_start_addr_words[i],
@@ -329,6 +312,5 @@ void kernel_main() {
         write_buffer_to_l1(kernel_status, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
     } else {
         write_buffer_to_l1(kernel_status, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_PASS);
-        write_buffer_to_l1(kernel_status, PQ_TEST_MISC_INDEX, 0xff00005);
     }
 }

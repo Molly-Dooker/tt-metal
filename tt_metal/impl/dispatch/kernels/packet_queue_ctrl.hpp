@@ -31,7 +31,6 @@ constexpr uint32_t PQ_TEST_CYCLES_INDEX = 4;
 constexpr uint32_t PQ_TEST_ITER_INDEX = 6;
 constexpr uint32_t PQ_TEST_MISC_INDEX = 16;
 
-
 enum DispatchPacketFlag : uint32_t {
     PACKET_CMD_START = (0x1 << 1),
     PACKET_CMD_END = (0x1 << 2),
@@ -41,14 +40,10 @@ enum DispatchPacketFlag : uint32_t {
 
 enum DispatchRemoteNetworkType : uint8_t {
     NOC0 = 0,
-    NOC1 = 1,
+    NOC1_RESERVED = 1,
     ETH = 2,
     NONE = 3
 };
-
-inline bool is_remote_network_type_noc(DispatchRemoteNetworkType type) {
-    return type == NOC0 || type == NOC1;
-}
 
 struct dispatch_packet_header_t {
     uint32_t packet_size_bytes;
@@ -57,18 +52,6 @@ struct dispatch_packet_header_t {
     uint16_t packet_flags;
     uint16_t num_cmds;
     uint32_t tag;
-
-    inline bool check_packet_flags(uint32_t flags) const {
-        return (packet_flags & flags) == flags;
-    }
-
-    inline void set_packet_flags(uint32_t flags) {
-        packet_flags |= flags;
-    }
-
-    inline void clear_packet_flags(uint32_t flags) {
-        packet_flags &= ~flags;
-    }
 };
 
 static_assert(sizeof(dispatch_packet_header_t) == PACKET_WORD_SIZE_BYTES);
@@ -77,17 +60,17 @@ static_assert(sizeof(dispatch_packet_header_t) == PACKET_WORD_SIZE_BYTES);
 
 #define is_16b_aligned(x) (x % 16 == 0)
 
-inline uint32_t packet_switch_4B_pack(uint32_t b0, uint32_t b1, uint32_t b2, uint32_t b3) {
+static_assert(MAX_DEST_ENDPOINTS <= 32,
+              "MAX_DEST_ENDPOINTS must be <= 32 for the packing functions below to work");
+
+static_assert(MAX_SWITCH_FAN_OUT <= 4,
+              "MAX_SWITCH_FAN_OUT must be <= 4 for the packing functions below to work");
+
+uint32_t packet_switch_4B_pack(uint32_t b0, uint32_t b1, uint32_t b2, uint32_t b3) {
     return (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
 }
 
-static_assert(MAX_DEST_ENDPOINTS <= 32,
-              "MAX_DEST_ENDPOINTS must be <= 32 for the packing funcitons below to work");
-
-static_assert(MAX_SWITCH_FAN_OUT <= 4,
-              "MAX_SWITCH_FAN_OUT must be <= 4 for the packing funcitons below to work");
-
-inline uint64_t packet_switch_dest_pack(uint32_t* dest_output_map_array, uint32_t num_dests) {
+uint64_t packet_switch_dest_pack(uint32_t* dest_output_map_array, uint32_t num_dests) {
     uint64_t result = 0;
     for (uint32_t i = 0; i < num_dests; i++) {
         result |= ((uint64_t)(dest_output_map_array[i])) << (2*i);

@@ -8,11 +8,12 @@
 #include "tt_metal/llrt/rtoptions.hpp"
 #include "tt_metal/impl/dispatch/cq_commands.hpp"
 #include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
+#include "tt_metal/impl/dispatch/packet_queue_host_misc.cpp"
 #include "kernels/traffic_gen_test.hpp"
 #include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/test_common.hpp"
 
-using std::vector;
 using namespace tt;
+using namespace packet_queue_host;
 using json = nlohmann::json;
 
 
@@ -189,10 +190,8 @@ int main(int argc, char **argv) {
         CoreCoord r_tunneler_logical_core = device_r->get_ethernet_sockets(device_id_l)[0];
         CoreCoord r_tunneler_phys_core = device_r->ethernet_core_from_logical_core(r_tunneler_logical_core);
 
-
-
-        std::cout<<"Left Tunneler = "<<tunneler_logical_core.str()<<std::endl;
-        std::cout<<"Right Tunneler = "<<r_tunneler_logical_core.str()<<std::endl;
+        log_info("Left Tunneler = {}, Device Id = {}", tunneler_logical_core.str(), device_id_l);
+        log_info("Right Tunneler = {}, Device Id = {}", r_tunneler_logical_core.str(), device_id_r);
 
         tt_metal::Program program = tt_metal::CreateProgram();
         tt_metal::Program program_r = tt_metal::CreateProgram();
@@ -202,6 +201,20 @@ int main(int argc, char **argv) {
 
         CoreCoord demux_core = {demux_x, demux_y};
         CoreCoord demux_phys_core = device_r->worker_core_from_logical_core(demux_core);
+
+        // Left chip
+        packet_queue_host::packet_queue_buffer_set tx_buffers = make_buffer_set(device, num_src_endpoints);
+        packet_queue_host::packet_queue_buffer_set mux_input_buffers = make_buffer_set(device, MAX_SWITCH_FAN_IN);
+        packet_queue_host::packet_queue_buffer_set mux_output_buffers = make_buffer_set(device, MAX_SWITCH_FAN_OUT);
+        packet_queue_host::packet_queue_buffer_set tunneler_l_input_buffers = make_buffer_set(device_r, num_src_endpoints /* number of lanes */);
+        packet_queue_host::packet_queue_buffer_set tunneler_l_output_buffers = make_buffer_set(device_r, num_src_endpoints /* number of lanes */);
+
+        // Right chip
+        packet_queue_host::packet_queue_buffer_set tunneler_r_input_buffers = make_buffer_set(device, num_dest_endpoints /* number of lanes */);
+        packet_queue_host::packet_queue_buffer_set tunneler_r_output_buffers = make_buffer_set(device, num_dest_endpoints /* number of lanes */);
+        packet_queue_host::packet_queue_buffer_set demux_input_buffers = make_buffer_set(device_r, MAX_SWITCH_FAN_OUT);
+        packet_queue_host::packet_queue_buffer_set demux_output_buffers = make_buffer_set(device_r, MAX_SWITCH_FAN_IN);
+        packet_queue_host::packet_queue_buffer_set rx_buffers = make_buffer_set(device_r, num_dest_endpoints);
 
         if (check_txrx_timeout) {
             defines["CHECK_TIMEOUT"] = "";
@@ -234,7 +247,14 @@ int main(int argc, char **argv) {
                     tx_skip_pkt_content_gen, // 18: skip_pkt_content_gen
                     tx_pkt_dest_size_choice, // 19: pkt_dest_size_choice
                     tx_data_sent_per_iter_low, // 20: data_sent_per_iter_low
-                    tx_data_sent_per_iter_high // 21: data_sent_per_iter_high
+                    tx_data_sent_per_iter_high, // 21: data_sent_per_iter_high
+                    // TX Inputs
+                    std::get<packet_queue_buffer_set_wptr>(tx_buffers)[i]->address(), // 22: input_queue_local_wptr_addr
+                    std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers)[i]->address(), // 23: output_queue_rptr_sent_addr
+                    std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers)[i]->address(), // 24: output_queue_rptr_cleared_addr
+                    // TX Outputs
+                    // Connect the output to the mux (left chip)
+                    std::get<packet_queue_buffer_set_wptr>(mux_input_buffers)[i]->address(), // 25: remote_wptr_addr
                 };
 
             log_info(LogTest, "run traffic_gen_tx at x={},y={}", core.x, core.y);
@@ -275,7 +295,10 @@ int main(int argc, char **argv) {
                     src_endpoint_start_id + i, // 15: src_endpoint_start_id
                     dest_endpoint_start_id + i, // 16: dest_endpoint_start_id
                     timeout_mcycles * 1000 * 1000 * 4, // 17: timeout_cycles
-                    rx_disable_header_check // 18: disable_header_check
+                    rx_disable_header_check, // 18: disable_header_check
+                    std::get<packet_queue_buffer_set_wptr>(rx_buffers)[i]->address(), // 19: input_queue_local_wptr_addr
+                    std::get<packet_queue_buffer_set_rptr_sent>(demux_output_buffers)[i]->address(), // 20: remote_rptr_sent_addr
+                    std::get<packet_queue_buffer_set_rptr_cleared>(demux_output_buffers)[i]->address(), // 21: remote_rptr_cleared_addr
                 };
 
             log_info(LogTest, "run traffic_gen_rx at x={},y={}", core.x, core.y);
@@ -343,11 +366,38 @@ int main(int argc, char **argv) {
                                       (uint32_t)tx_phys_core[3].y,
                                       1,
                                       (uint32_t)DispatchRemoteNetworkType::NOC0), // 19: src 3 info
-                0, 0, //20, 21
+                0, 0, //20, 21 unused
                 test_results_addr, // 22: test_results_addr
                 test_results_size, // 23: test_results_size
                 timeout_mcycles * 1000 * 1000 * 4, // 24: timeout_cycles
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 25-35: packetize/depacketize settings
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 25-35: packetize/depacketize settings
+                // VC Packet Router (left chip) Inputs
+                std::get<packet_queue_buffer_set_wptr>(mux_input_buffers)[0]->address(),  // 36: vc_packet_router_in_local_wptr_addr[0]
+                std::get<packet_queue_buffer_set_wptr>(mux_input_buffers)[1]->address(),  // 37: vc_packet_router_in_local_wptr_addr[1]
+                std::get<packet_queue_buffer_set_wptr>(mux_input_buffers)[2]->address(),  // 38: vc_packet_router_in_local_wptr_addr[2]
+                std::get<packet_queue_buffer_set_wptr>(mux_input_buffers)[3]->address(),  // 39: vc_packet_router_in_local_wptr_addr[3]
+                std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers)[0]->address(),    // 40: vc_packet_router_in_remote_rptr_sent_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers)[1]->address(),    // 41: vc_packet_router_in_remote_rptr_sent_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers)[2]->address(),    // 42: vc_packet_router_in_remote_rptr_sent_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(tx_buffers)[3]->address(),    // 43: vc_packet_router_in_remote_rptr_sent_addr[3]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers)[0]->address(), // 44: vc_packet_router_in_remote_rptr_cleared_addr[0]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers)[1]->address(), // 45: vc_packet_router_in_remote_rptr_cleared_addr[1]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers)[2]->address(), // 46: vc_packet_router_in_remote_rptr_cleared_addr[2]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tx_buffers)[3]->address(), // 47: vc_packet_router_in_remote_rptr_cleared_addr[3]
+
+                // Outputs. Connect the output of the mux to the left tunneler
+                std::get<packet_queue_buffer_set_rptr_sent>(mux_output_buffers)[0]->address(),    // 48: vc_packet_router_out_local_rptr_sent_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(mux_output_buffers)[1]->address(),    // 49: vc_packet_router_out_local_rptr_sent_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(mux_output_buffers)[2]->address(),    // 50: vc_packet_router_out_local_rptr_sent_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(mux_output_buffers)[3]->address(),    // 51: vc_packet_router_out_local_rptr_sent_addr[3]
+                std::get<packet_queue_buffer_set_rptr_cleared>(mux_output_buffers)[0]->address(), // 52: vc_packet_router_out_local_rptr_cleared_addr[0]
+                std::get<packet_queue_buffer_set_rptr_cleared>(mux_output_buffers)[1]->address(), // 53: vc_packet_router_out_local_rptr_cleared_addr[1]
+                std::get<packet_queue_buffer_set_rptr_cleared>(mux_output_buffers)[2]->address(), // 54: vc_packet_router_out_local_rptr_cleared_addr[2]
+                std::get<packet_queue_buffer_set_rptr_cleared>(mux_output_buffers)[3]->address(), // 55: vc_packet_router_out_local_rptr_cleared_addr[3]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_l_input_buffers)[0]->address(),   // 56: vc_packet_router_out_remote_wptr_addr[0]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_l_input_buffers)[1]->address(),   // 57: vc_packet_router_out_remote_wptr_addr[1]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_l_input_buffers)[2]->address(),   // 58: vc_packet_router_out_remote_wptr_addr[2]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_l_input_buffers)[3]->address(),   // 59: vc_packet_router_out_remote_wptr_addr[3]
             };
 
         log_info(LogTest, "run mux at x={},y={}", mux_core.x, mux_core.y);
@@ -396,8 +446,7 @@ int main(int argc, char **argv) {
                 (tunneler_queue_size_bytes >> 4), // 21: remote_receiver_queue_size_words 3
                 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, // 22 - 31 Settings for remote reciver 4 - 8
                 0, // 32: remote_receiver_queue_start_addr_words 9
-                2, // 33: remote_receiver_queue_size_words 9.
-                   // Unused. Setting to 2 to get around size check assertion that does not allow 0.
+                2, // 33: remote_receiver_queue_size_words 9. // Unused. Setting to 2 to get around size check assertion that does not allow 0.
                 packet_switch_4B_pack(mux_phys_core.x,
                                       mux_phys_core.y,
                                       num_dest_endpoints,
@@ -418,7 +467,43 @@ int main(int argc, char **argv) {
                 tunneler_test_results_addr, // 44: test_results_addr
                 tunneler_test_results_size, // 45: test_results_size
                 timeout_mcycles * 1000 * 1000 * 4, // 46: timeout_cycles
-                0, //47: inner_stop_mux_d_bypass
+                0, // 47: inner_stop_mux_d_bypass
+                // VC Eth Tunneler (left) Inputs
+                // Connect the output of the mux to this eth tunneler
+                std::get<packet_queue_buffer_set_wptr>(tunneler_l_input_buffers)[0]->address(), // 48: vc_eth_tunneler_in_local_wptr_addr[0]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_l_input_buffers)[1]->address(), // 49: vc_eth_tunneler_in_local_wptr_addr[1]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_l_input_buffers)[2]->address(), // 50: vc_eth_tunneler_in_local_wptr_addr[2]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_l_input_buffers)[3]->address(), // 51: vc_eth_tunneler_in_local_wptr_addr[3]
+                0, 0, 0, 0, 0, 0, // 52 - 57: vc_eth_tunneler_in_local_wptr_addr[4 - 9]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_input_buffers)[0]->address(), // 58: vc_eth_tunneler_in_remote_rptr_sent_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_input_buffers)[1]->address(), // 59: vc_eth_tunneler_in_remote_rptr_sent_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_input_buffers)[2]->address(), // 60: vc_eth_tunneler_in_remote_rptr_sent_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_input_buffers)[3]->address(), // 61: vc_eth_tunneler_in_remote_rptr_sent_addr[3]
+                0, 0, 0, 0, 0, 0, // 62 - 67: vc_eth_tunneler_in_remote_rptr_sent_addr[4 - 9]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_input_buffers)[0]->address(), // 68: vc_eth_tunneler_in_remote_rptr_cleared_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_input_buffers)[1]->address(), // 69: vc_eth_tunneler_in_remote_rptr_cleared_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_input_buffers)[2]->address(), // 70: vc_eth_tunneler_in_remote_rptr_cleared_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_input_buffers)[3]->address(), // 71: vc_eth_tunneler_in_remote_rptr_cleared_addr[3]
+                0, 0, 0, 0, 0, 0, // 72 - 77: vc_eth_tunneler_in_remote_rptr_cleared_addr[4 - 9]
+
+                // Outputs. Connect the output to the right eth tunneler (cross chip)
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[0]->address(), // 78: vc_eth_tunneler_out_local_rptr_sent_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[1]->address(), // 79: vc_eth_tunneler_out_local_rptr_sent_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[2]->address(), // 80: vc_eth_tunneler_out_local_rptr_sent_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[3]->address(), // 81: vc_eth_tunneler_out_local_rptr_sent_addr[3]
+                0, 0, 0, 0, 0, 0, // 82 - 87: vc_eth_tunneler_out_local_rptr_sent_addr[4 - 9]
+
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_l_output_buffers)[0]->address(), // 88: vc_eth_tunneler_out_local_rptr_cleared_addr[0]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_l_output_buffers)[1]->address(), // 89: vc_eth_tunneler_out_local_rptr_cleared_addr[1]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_l_output_buffers)[2]->address(), // 90: vc_eth_tunneler_out_local_rptr_cleared_addr[2]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_l_output_buffers)[3]->address(), // 91: vc_eth_tunneler_out_local_rptr_cleared_addr[3]
+                0, 0, 0, 0, 0, 0, // 92 - 97: vc_eth_tunneler_out_local_rptr_cleared_addr[4 - 9]
+
+                std::get<packet_queue_buffer_set_wptr>(tunneler_r_input_buffers)[0]->address(), // 98: vc_eth_tunneler_out_remote_wptr_addr[0]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_r_input_buffers)[1]->address(), // 99: vc_eth_tunneler_out_remote_wptr_addr[1]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_r_input_buffers)[2]->address(), // 100: vc_eth_tunneler_out_remote_wptr_addr[2]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_r_input_buffers)[3]->address(), // 101: vc_eth_tunneler_out_remote_wptr_addr[3]
+                0, 0, 0, 0, 0, 0, // 102 - 107: vc_eth_tunneler_out_remote_wptr_addr[4 - 9]
             };
 
         auto tunneler_l_kernel = tt_metal::CreateKernel(
@@ -489,6 +574,42 @@ int main(int argc, char **argv) {
                 tunneler_test_results_size, // 45: test_results_size
                 timeout_mcycles * 1000 * 1000 * 4, // 46: timeout_cycles
                 0, //47: inner_stop_mux_d_bypass
+                // VC Eth Tunneler (right) Inputs
+                // Connect the output of the left eth tunnel to this eth tunneler
+                std::get<packet_queue_buffer_set_wptr>(tunneler_r_input_buffers)[0]->address(), // 48: vc_eth_tunneler_in_local_wptr_addr[0]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_r_input_buffers)[1]->address(), // 49: vc_eth_tunneler_in_local_wptr_addr[1]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_r_input_buffers)[2]->address(), // 50: vc_eth_tunneler_in_local_wptr_addr[2]
+                std::get<packet_queue_buffer_set_wptr>(tunneler_r_input_buffers)[3]->address(), // 51: vc_eth_tunneler_in_local_wptr_addr[3]
+                0, 0, 0, 0, 0, 0, // 52 - 57: vc_eth_tunneler_in_local_wptr_addr[4 - 9]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[0]->address(), // 58: vc_eth_tunneler_in_remote_rptr_sent_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[1]->address(), // 59: vc_eth_tunneler_in_remote_rptr_sent_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[2]->address(), // 60: vc_eth_tunneler_in_remote_rptr_sent_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[3]->address(), // 61: vc_eth_tunneler_in_remote_rptr_sent_addr[3]
+                0, 0, 0, 0, 0, 0, // 62 - 67: vc_eth_tunneler_in_remote_rptr_sent_addr[4 - 9]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[0]->address(), // 68: vc_eth_tunneler_in_remote_rptr_cleared_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[1]->address(), // 69: vc_eth_tunneler_in_remote_rptr_cleared_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[2]->address(), // 70: vc_eth_tunneler_in_remote_rptr_cleared_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_l_output_buffers)[3]->address(), // 71: vc_eth_tunneler_in_remote_rptr_cleared_addr[3]
+                0, 0, 0, 0, 0, 0, // 72 - 77: vc_eth_tunneler_in_remote_rptr_cleared_addr[4 - 9]
+
+                // Outputs. Connect the output to the demux
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_r_output_buffers)[0]->address(), // 78: vc_eth_tunneler_out_local_rptr_sent_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_r_output_buffers)[1]->address(), // 79: vc_eth_tunneler_out_local_rptr_sent_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_r_output_buffers)[2]->address(), // 80: vc_eth_tunneler_out_local_rptr_sent_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_r_output_buffers)[3]->address(), // 81: vc_eth_tunneler_out_local_rptr_sent_addr[3]
+                0, 0, 0, 0, 0, 0, // 82 - 87: vc_eth_tunneler_out_local_rptr_sent_addr[4 - 9]
+
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_r_output_buffers)[0]->address(), // 88: vc_eth_tunneler_out_local_rptr_cleared_addr[0]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_r_output_buffers)[1]->address(), // 89: vc_eth_tunneler_out_local_rptr_cleared_addr[1]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_r_output_buffers)[2]->address(), // 90: vc_eth_tunneler_out_local_rptr_cleared_addr[2]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_r_output_buffers)[3]->address(), // 91: vc_eth_tunneler_out_local_rptr_cleared_addr[3]
+                0, 0, 0, 0, 0, 0, // 92 - 97: vc_eth_tunneler_out_local_rptr_cleared_addr[4 - 9]
+
+                std::get<packet_queue_buffer_set_wptr>(demux_input_buffers)[0]->address(), // 98: vc_eth_tunneler_out_remote_wptr_addr[0]
+                std::get<packet_queue_buffer_set_wptr>(demux_input_buffers)[1]->address(), // 99: vc_eth_tunneler_out_remote_wptr_addr[1]
+                std::get<packet_queue_buffer_set_wptr>(demux_input_buffers)[2]->address(), // 100: vc_eth_tunneler_out_remote_wptr_addr[2]
+                std::get<packet_queue_buffer_set_wptr>(demux_input_buffers)[3]->address(), // 101: vc_eth_tunneler_out_remote_wptr_addr[3]
+                0, 0, 0, 0, 0, 0, // 102 - 107: vc_eth_tunneler_out_remote_wptr_addr[4 - 9]
             };
 
         auto tunneler_r_kernel = tt_metal::CreateKernel(
@@ -536,10 +657,6 @@ int main(int argc, char **argv) {
                 (rx_queue_size_bytes >> 4), // 13: remote_tx_queue_size_words 2
                 (rx_queue_start_addr >> 4), // 14: remote_tx_queue_start_addr_words 3
                 (rx_queue_size_bytes >> 4), // 15: remote_tx_queue_size_words 3
-                //(uint32_t)r_tunneler_phys_core.x, // 16: remote_rx_x
-                //(uint32_t)r_tunneler_phys_core.y, // 17: remote_rx_y
-                //2, // 18: remote_rx_queue_id
-                //(uint32_t)DispatchRemoteNetworkType::NOC0, // 19: tx_network_type
                 packet_switch_4B_pack(r_tunneler_phys_core.x,
                                       r_tunneler_phys_core.y,
                                       4,
@@ -561,7 +678,36 @@ int main(int argc, char **argv) {
                 test_results_addr, // 22: test_results_addr
                 test_results_size, // 23: test_results_size
                 timeout_mcycles * 1000 * 1000 * 4, // 24: timeout_cycles
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 25-35: packetize/depacketize settings
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 25-35: packetize/depacketize settings
+                // Demux Inputs
+                // Connect the right tunneler
+                // VC Packet Router (left chip) Inputs
+                std::get<packet_queue_buffer_set_wptr>(demux_input_buffers)[0]->address(),               // 36: vc_packet_router_in_local_wptr_addr[0]
+                std::get<packet_queue_buffer_set_wptr>(demux_input_buffers)[1]->address(),               // 37: vc_packet_router_in_local_wptr_addr[1]
+                std::get<packet_queue_buffer_set_wptr>(demux_input_buffers)[2]->address(),               // 38: vc_packet_router_in_local_wptr_addr[2]
+                std::get<packet_queue_buffer_set_wptr>(demux_input_buffers)[3]->address(),               // 39: vc_packet_router_in_local_wptr_addr[3]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_r_output_buffers)[0]->address(),    // 40: vc_packet_router_in_remote_rptr_sent_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_r_output_buffers)[1]->address(),    // 41: vc_packet_router_in_remote_rptr_sent_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_r_output_buffers)[2]->address(),    // 42: vc_packet_router_in_remote_rptr_sent_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(tunneler_r_output_buffers)[3]->address(),    // 43: vc_packet_router_in_remote_rptr_sent_addr[3]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_r_output_buffers)[0]->address(), // 44: vc_packet_router_in_remote_rptr_cleared_addr[0]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_r_output_buffers)[1]->address(), // 45: vc_packet_router_in_remote_rptr_cleared_addr[1]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_r_output_buffers)[2]->address(), // 46: vc_packet_router_in_remote_rptr_cleared_addr[2]
+                std::get<packet_queue_buffer_set_rptr_cleared>(tunneler_r_output_buffers)[3]->address(), // 47: vc_packet_router_in_remote_rptr_cleared_addr[3]
+
+                // Outputs. Connect the output of the demux to the traffic receiver
+                std::get<packet_queue_buffer_set_rptr_sent>(demux_output_buffers)[0]->address(),    // 48: vc_packet_router_out_local_rptr_sent_addr[0]
+                std::get<packet_queue_buffer_set_rptr_sent>(demux_output_buffers)[1]->address(),    // 49: vc_packet_router_out_local_rptr_sent_addr[1]
+                std::get<packet_queue_buffer_set_rptr_sent>(demux_output_buffers)[2]->address(),    // 50: vc_packet_router_out_local_rptr_sent_addr[2]
+                std::get<packet_queue_buffer_set_rptr_sent>(demux_output_buffers)[3]->address(),    // 51: vc_packet_router_out_local_rptr_sent_addr[3]
+                std::get<packet_queue_buffer_set_rptr_cleared>(demux_output_buffers)[0]->address(), // 52: vc_packet_router_out_local_rptr_cleared_addr[0]
+                std::get<packet_queue_buffer_set_rptr_cleared>(demux_output_buffers)[1]->address(), // 53: vc_packet_router_out_local_rptr_cleared_addr[1]
+                std::get<packet_queue_buffer_set_rptr_cleared>(demux_output_buffers)[2]->address(), // 54: vc_packet_router_out_local_rptr_cleared_addr[2]
+                std::get<packet_queue_buffer_set_rptr_cleared>(demux_output_buffers)[3]->address(), // 55: vc_packet_router_out_local_rptr_cleared_addr[3]
+                std::get<packet_queue_buffer_set_wptr>(rx_buffers)[0]->address(),                   // 56: vc_packet_router_out_remote_wptr_addr[0]
+                std::get<packet_queue_buffer_set_wptr>(rx_buffers)[1]->address(),                   // 57: vc_packet_router_out_remote_wptr_addr[1]
+                std::get<packet_queue_buffer_set_wptr>(rx_buffers)[2]->address(),                   // 58: vc_packet_router_out_remote_wptr_addr[2]
+                std::get<packet_queue_buffer_set_wptr>(rx_buffers)[3]->address(),                   // 59: vc_packet_router_out_remote_wptr_addr[3]
             };
 
         log_info(LogTest, "run demux at x={},y={}", demux_core.x, demux_core.y);
@@ -589,8 +735,8 @@ int main(int argc, char **argv) {
         std::chrono::duration<double> elapsed_seconds = (end-start);
         log_info(LogTest, "Ran in {:.2f}us", elapsed_seconds.count() * 1000 * 1000);
 
-        vector<vector<uint32_t>> tx_results;
-        vector<vector<uint32_t>> rx_results;
+        std::vector<std::vector<uint32_t>> tx_results;
+        std::vector<std::vector<uint32_t>> rx_results;
 
         for (uint32_t i = 0; i < num_src_endpoints; i++) {
             tx_results.push_back(
@@ -608,13 +754,13 @@ int main(int argc, char **argv) {
             pass &= (rx_results[i][PQ_TEST_STATUS_INDEX] == PACKET_QUEUE_TEST_PASS);
         }
 
-        vector<uint32_t> mux_results =
+        std::vector<uint32_t> mux_results =
             tt::llrt::read_hex_vec_from_core(
                 device->id(), mux_phys_core, test_results_addr, test_results_size);
         log_info(LogTest, "MUX status = {}", packet_queue_test_status_to_string(mux_results[PQ_TEST_STATUS_INDEX]));
         pass &= (mux_results[PQ_TEST_STATUS_INDEX] == PACKET_QUEUE_TEST_PASS);
 
-        vector<uint32_t> demux_results =
+        std::vector<uint32_t> demux_results =
             tt::llrt::read_hex_vec_from_core(
                 device_r->id(), demux_phys_core, test_results_addr, test_results_size);
         log_info(LogTest, "DEMUX status = {}", packet_queue_test_status_to_string(demux_results[PQ_TEST_STATUS_INDEX]));
