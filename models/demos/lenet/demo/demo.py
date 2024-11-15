@@ -5,12 +5,11 @@
 import pytest
 import torch
 import ttnn
-
-from torchvision import transforms, datasets
 from loguru import logger
 
-from torch.utils.data import DataLoader
-
+from models.utility_functions import (
+    disable_persistent_kernel_cache,
+)
 from ttnn.model_preprocessing import preprocess_model_parameters
 from models.demos.lenet.tt import tt_lenet
 from models.demos.lenet import lenet_utils
@@ -50,6 +49,7 @@ def run_demo_dataset(device, batch_size, iterations, model_location_generator, r
 
     accuracy = correct / (batch_size * iterations)
     logger.info(f"Dataset Inference Accuracy for {batch_size}x{iterations} Samples : {accuracy}")
+    assert accuracy >= 1.0, f"Expected accuracy : {1.0} Actual accuracy: {accuracy}"
 
 
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 32768}], indirect=True)
@@ -62,6 +62,7 @@ def test_demo_dataset(
     model_location_generator,
     reset_seeds,
 ):
+    disable_persistent_kernel_cache()
     return run_demo_dataset(
         reset_seeds=reset_seeds,
         device=device,
