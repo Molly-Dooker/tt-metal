@@ -90,6 +90,11 @@ class Conv:
             reallocate_halo_output=False,
             output_layout=self.output_layout,
         )
+        compute_config = ttnn.GetComputeKernelConfig(
+            math_fidelity=ttnn.MathFidelity.LoFi,
+            math_approx_mode=False,
+            fp32_dest_acc_en=False,
+        )
         if self.act_block_h is not None:
             conv_config.act_block_h_override = self.act_block_h
 
@@ -107,5 +112,6 @@ class Conv:
             input_height=self.input_params[1],
             input_width=self.input_params[2],
             conv_config=conv_config,
+            compute_config=compute_config,
         )
         return output_tensor
