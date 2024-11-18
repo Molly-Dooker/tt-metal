@@ -19,6 +19,13 @@
         }
       },
       {
+        "name": "default-no-tt-train",
+        "inherits": "default",
+        "cacheVariables": {
+          "BUILD_TT_TRAIN": {"value": "FALSE"}
+        }
+      },
+      {
         "name": "clang-tidy",
         "inherits": "default",
         "description": "Run Clang Tidy",
@@ -34,6 +41,12 @@
       {
         "name": "dev",
         "configurePreset": "default",
+        "configuration": "RelWithDebInfo",
+        "targets": ["all"]
+      },
+      {
+        "name": "dev-no-tt-train",
+        "configurePreset": "default-no-tt",
         "configuration": "RelWithDebInfo",
         "targets": ["all"]
       },
