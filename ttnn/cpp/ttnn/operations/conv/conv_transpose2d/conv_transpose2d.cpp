@@ -103,8 +103,10 @@ Result conv_transpose2d(
     std::array<uint32_t, 2> dilation,
     uint32_t groups,
     std::optional<const ttnn::Tensor> bias_tensor,
-    const std::optional<const conv2d::Conv2dConfig>& conv_config_)   {
+    const std::optional<const conv2d::Conv2dConfig>& conv_config_
+    const std::optional<const DeviceComputeKernelConfig>& compute_config_)   {
         conv2d::Conv2dConfig conv_config = conv_config_.value_or(conv2d::Conv2dConfig());
+        DeviceComputeKernelConfig compute_config = compute_config_.value_or(DeviceComputeKernelConfig());
 
         //Inverse of sliding_window.get_output_shape()
         SlidingWindowConfig sliding_window_config = SlidingWindowConfig{
@@ -142,34 +144,6 @@ Result conv_transpose2d(
         log_debug(LogOp, "Strided Input : {}x{}", strided_input_height, strided_input_width);
 
         log_debug(LogOp, "Padding : ({},{}) ({},{})", input_pad_top, input_pad_bottom, input_pad_left, input_pad_right);
-
-
-        DeviceComputeKernelConfig compute_kernel_config;
-        switch (device->arch()) {
-            case tt::ARCH::WORMHOLE_B0:
-                compute_kernel_config = WormholeComputeKernelConfig(
-                    {.math_fidelity = conv_config.math_fidelity,
-                    .math_approx_mode = conv_config.math_approx_mode_enabled,
-                    .fp32_dest_acc_en = conv_config.fp32_dest_acc_enabled,
-                    .packer_l1_acc = conv_config.packer_l1_accum_enabled});
-                break;
-
-            case tt::ARCH::GRAYSKULL:
-                compute_kernel_config = GrayskullComputeKernelConfig(
-                    {.math_fidelity = conv_config.math_fidelity, .math_approx_mode = conv_config.math_approx_mode_enabled});
-                break;
-
-            case tt::ARCH::BLACKHOLE:
-                compute_kernel_config = BlackholeComputeKernelConfig(
-                    {.math_fidelity = conv_config.math_fidelity,
-                    .math_approx_mode = conv_config.math_approx_mode_enabled,
-                    .fp32_dest_acc_en = conv_config.fp32_dest_acc_enabled,
-                    .packer_l1_acc = conv_config.packer_l1_accum_enabled});
-                break;
-
-            default:
-                TT_THROW("Invalid Device Arch, Got {}",device->arch());
-        }
 
         const bool mm_conv = conv2d::use_matmul_for_1x1_conv(kernel_size, stride, padding, dilation, groups);
 
@@ -211,6 +185,19 @@ Result conv_transpose2d(
             0,
             input_tensor_post_tm.memory_config());
 
+        if(conv_config.deallocate_activation) {
+            input_tensor_post_tm.deallocate();
+            log_debug(tt::LogOp, "Deallocate Input Tensor");
+        }
+        if (conv_config.reallocate_halo_output) {
+            auto move_output = ttnn::operations::core::reallocate(halo_output, halo_output.memory_config());
+            ttnn::operations::core::deallocate(halo_output);
+            halo_output = move_output;
+            log_debug(tt::LogOp, "Reallocate Halo Output");
+        }
+
+
+
         //Call Conv2d u_op with Stride = 1, Padding = 0.
         auto conv_out_memory_config = conv2d::create_sharded_memory_config_from_parallel_config(
             ttnn::Shape(std::array<uint32_t, 4>{
@@ -239,7 +226,7 @@ Result conv_transpose2d(
             conv_config.act_block_w_div,
             kernel_size[0],
             kernel_size[1],
-            conv_config.fp32_dest_acc_enabled,
+            get_fp32_dest_acc_en(compute_config),
             conv_config.enable_split_reader);
 
         //TODO: Flip the Weights
@@ -272,14 +259,14 @@ Result conv_transpose2d(
             groups,
             conv_config.output_layout == Layout::ROW_MAJOR,
             conv_config.activation == "relu",
-            conv_config.math_fidelity,
+            get_math_fidelity(compute_config),
             opt_conv_op_parallel_config,
             opt_conv_op_block_config,
             conv_out_memory_config,
             conv_config.dtype,
             {batch_size, input_height, input_width, in_channels},
             conv_config.input_channels_alignment == 16,
-            compute_kernel_config,
+            compute_config,
             conv_config.enable_act_double_buffer,
             conv_config.enable_split_reader,
             conv_config.enable_subblock_padding);
@@ -303,8 +290,9 @@ Result ConvTranpose2dOperation::invoke(
     std::array<uint32_t, 2> dilation,
     uint32_t groups,
     std::optional<const ttnn::Tensor> bias_tensor,
-    const std::optional<const conv2d::Conv2dConfig>& conv_config_){
-    return conv_transpose2d(input_tensor, weight_tensor, device, in_channels, out_channels, batch_size, input_height, input_width, kernel_size, stride, padding, output_padding, dilation, groups, std::move(bias_tensor), std::move(conv_config_));
+    const std::optional<const conv2d::Conv2dConfig>& conv_config_
+    const std::optional<const DeviceComputeKernelConfig>& compute_config_){
+    return conv_transpose2d(input_tensor, weight_tensor, device, in_channels, out_channels, batch_size, input_height, input_width, kernel_size, stride, padding, output_padding, dilation, groups, std::move(bias_tensor), std::move(conv_config_), std::move(compute_config_));
 }
 
 Result ConvTranpose2dOperation::invoke(
@@ -324,8 +312,9 @@ Result ConvTranpose2dOperation::invoke(
     std::array<uint32_t, 2> dilation,
     uint32_t groups,
     std::optional<const ttnn::Tensor> bias_tensor,
-    const std::optional<const conv2d::Conv2dConfig>& conv_config_){
-    return conv_transpose2d(input_tensor, weight_tensor, device, in_channels, out_channels, batch_size, input_height, input_width, kernel_size, stride, padding, output_padding, dilation, groups, std::move(bias_tensor), std::move(conv_config_));
+    const std::optional<const conv2d::Conv2dConfig>& conv_config_
+    const std::optional<const DeviceComputeKernelConfig>& compute_config_){
+    return conv_transpose2d(input_tensor, weight_tensor, device, in_channels, out_channels, batch_size, input_height, input_width, kernel_size, stride, padding, output_padding, dilation, groups, std::move(bias_tensor), std::move(conv_config_), std::move(compute_config_));
 }
 
 }
