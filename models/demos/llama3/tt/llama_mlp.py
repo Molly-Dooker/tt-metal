@@ -95,7 +95,7 @@ class TtLlamaMLP(LightweightModule):
             memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG,
         )
 
-        ttnn.deallocate(x)
+        # ttnn.deallocate(x)
         w2_in = ttnn.multiply(
             w1_out,
             w3_out,
@@ -109,8 +109,8 @@ class TtLlamaMLP(LightweightModule):
             # Reshard w2_in to a different core_grid configuration. Avoid using ttnn.reshard() due to incompatibility with trace mode
             w2_in = ttnn.reshard(w2_in, self.model_config["SHARDED_MLP2_INPUT_MEMCFG"])
 
-        ttnn.deallocate(w3_out)
-        ttnn.deallocate(w1_out)
+        # ttnn.deallocate(w3_out)
+        # ttnn.deallocate(w1_out)
 
         # This uses HiFi2 for full precision as it is dram-bound and uses bfp8 inputs
         w2_out = ttnn.linear(
@@ -123,7 +123,7 @@ class TtLlamaMLP(LightweightModule):
             memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG if mode == "decode" else ttnn.DRAM_MEMORY_CONFIG,
         )
 
-        ttnn.deallocate(w2_in)
+        # ttnn.deallocate(w2_in)
 
         if mode == "decode":
             w2_out = ttnn.sharded_to_interleaved(
@@ -142,7 +142,7 @@ class TtLlamaMLP(LightweightModule):
                 num_links=1,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG if mode == "prefill" else ttnn.L1_MEMORY_CONFIG,
             )
-            ttnn.deallocate(w2_out)
+            # ttnn.deallocate(w2_out)
             return w2_out_reduced
         else:
             return w2_out
