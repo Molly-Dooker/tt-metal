@@ -37,7 +37,10 @@ jobs:
           ./create_venv.sh
       - name: Run microbenchmark tests
         timeout-minutes: 90
-        run: ./tests/scripts/run_tests.sh --tt-arch $ARCH_NAME --pipeline-type microbenchmarks
+        run: |
+          ./tests/scripts/run_tests.sh --tt-arch $ARCH_NAME --pipeline-type microbenchmarks
+          echo "${{ matrix.runner-info.runs-on[0] }}"
+          ./tests/scripts/run_tunneler_tests.sh --machine-type ${{ matrix.runner-info.runs-on[0] }}
       - name: Upload microbenchmark report csvs
         uses: actions/upload-artifact@v4
         with:
