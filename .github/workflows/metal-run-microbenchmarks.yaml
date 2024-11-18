@@ -40,7 +40,7 @@ jobs:
         run: |
           ./tests/scripts/run_tests.sh --tt-arch $ARCH_NAME --pipeline-type microbenchmarks
           echo "${{ matrix.runner-info.runs-on[0] }}"
-          ./tests/scripts/run_tunneler_tests.sh --machine-type ${{ matrix.runner-info.runs-on[0] }}
+          TT_METAL_SLOW_DISPATCH_MODE=1 ./tests/scripts/run_tunneler_tests.sh --machine-type ${{ matrix.runner-info.runs-on[0] }}
       - name: Upload microbenchmark report csvs
         uses: actions/upload-artifact@v4
         with:
