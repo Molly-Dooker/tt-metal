@@ -4,17 +4,16 @@
 
 #pragma once
 
+#include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
+#include "noc_overlay_parameters.h"
 #include "dataflow_api.h"
 #include "ethernet/dataflow_api.h"
-#include "noc_overlay_parameters.h"
-#include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
+#include "debug/dprint.h"
+
+static_assert(PACKET_WORD_SIZE_BYTES == sizeof(eth_channel_sync_t),
+    "Packet word size bytes and eth_channel_sync_t are expected to be 16 for ack data");
 
 constexpr ProgrammableCoreType fd_core_type = static_cast<ProgrammableCoreType>(FD_CORE_TYPE);
-
-constexpr uint32_t NUM_WR_CMD_BUFS = 4;
-constexpr uint32_t DEFAULT_MAX_NOC_SEND_WORDS =
-    (NUM_WR_CMD_BUFS - 1) * (NOC_MAX_BURST_WORDS * NOC_WORD_BYTES) / PACKET_WORD_SIZE_BYTES;
-constexpr uint32_t DEFAULT_MAX_ETH_SEND_WORDS = 2 * 1024;
 
 uint64_t get_timestamp() {
     uint32_t timestamp_low = reg_read(RISCV_DEBUG_REG_WALL_CLOCK_L);
@@ -44,7 +43,7 @@ void set_64b_result(uint32_t* buf, uint64_t val, uint32_t index = 0) {
 }
 
 class packet_queue_state_t {
-    // All ptr values are in units of words (=packet size bytes)
+    // All ptr values are in units of packet size words
     uint32_t local_wptr;
     uint32_t local_rptr_sent;
     uint32_t local_rptr_cleared;
@@ -86,6 +85,13 @@ class packet_queue_state_t {
     // Handshake registers. The register to be used is determined by the queue ID
     volatile uint32_t* local_ready_status_ptr;
     uint32_t remote_ready_status_addr;
+
+#if defined(COMPILE_FOR_ERISC)
+    // Ethernet only. these fields must be set manually after init.
+    volatile uint32_t* staging_area_; // staging area located in eth unreserved base for data to be sent
+    volatile eth_channel_sync_t* local_ack_; // ack for data into this core
+    volatile eth_channel_sync_t* remote_ack_; // ack for data out of this core
+#endif
 
     DispatchRemoteNetworkType remote_update_network_type;
 
@@ -133,9 +139,9 @@ class packet_queue_state_t {
             this->remote_rptr_sent_addr_ = remote_rptr_sent_addr;
             this->remote_rptr_cleared_addr_ = remote_rptr_cleared_addr;
 
-            this->shadow_remote_wptr_addr_ = queue_wptr_addr + 16;
-            this->shadow_remote_rptr_sent_addr_ = queue_wptr_addr + 16 * 2;
-            this->shadow_remote_rptr_cleared_addr_ = queue_wptr_addr + 16 * 3;
+            this->shadow_remote_wptr_addr_ = queue_wptr_addr + PACKET_QUEUE_SCRATCH_BUFFER_SHADOW_WTPR_OFFSET;
+            this->shadow_remote_rptr_sent_addr_ = queue_wptr_addr + PACKET_QUEUE_SCRATCH_BUFFER_SHADOW_RTPR_SENT_OFFSET;
+            this->shadow_remote_rptr_cleared_addr_ = queue_wptr_addr + PACKET_QUEUE_SCRATCH_BUFFER_SHADOW_RTPR_CLEARED_OFFSET;
         } else {
             this->local_wptr_ = &this->local_wptr;
             this->local_rptr_sent_ = reinterpret_cast<volatile uint32_t*>(queue_rptr_sent_addr);
@@ -145,9 +151,9 @@ class packet_queue_state_t {
             this->remote_rptr_sent_addr_ = 0;
             this->remote_rptr_cleared_addr_ = 0;
 
-            this->shadow_remote_wptr_addr_ = queue_rptr_sent_addr + 16;
-            this->shadow_remote_rptr_sent_addr_ = queue_rptr_sent_addr + 16 * 2;
-            this->shadow_remote_rptr_cleared_addr_ = queue_rptr_sent_addr + 16 * 3;
+            this->shadow_remote_wptr_addr_ = queue_rptr_sent_addr + PACKET_QUEUE_SCRATCH_BUFFER_SHADOW_WTPR_OFFSET;
+            this->shadow_remote_rptr_sent_addr_ = queue_rptr_sent_addr + PACKET_QUEUE_SCRATCH_BUFFER_SHADOW_RTPR_SENT_OFFSET;
+            this->shadow_remote_rptr_cleared_addr_ = queue_rptr_cleared_addr + PACKET_QUEUE_SCRATCH_BUFFER_SHADOW_RTPR_CLEARED_OFFSET;
         }
 
         *reinterpret_cast<volatile uint32_t*>(this->shadow_remote_wptr_addr_) = 0;
@@ -183,39 +189,17 @@ class packet_queue_state_t {
 
     inline uint8_t get_queue_id() const { return this->queue_id; }
 
+    inline uint8_t get_remote_queue_id() const { return this->remote_queue_id; }
+
     inline uint32_t get_queue_local_wptr() const {
-#if defined(COMPILE_FOR_ERISC)
-        // Ensure bytes are received if local is set from the remote
-        // this->remote_update_network_type == DispatchRemoteNetworkType::ETH will be true on ERISC
-        if (!this->remote_wptr_addr_) {
-            eth_wait_for_bytes(1);
-            eth_receiver_done();
-        }
-#endif
         return *this->local_wptr_;
     }
 
     inline uint32_t get_queue_local_rptr_sent() const {
-#if defined(COMPILE_FOR_ERISC)
-        // Ensure bytes are received if local is set from the remote
-        // this->remote_update_network_type == DispatchRemoteNetworkType::ETH will be true on ERISC
-        if (!this->remote_rptr_sent_addr_) {
-            eth_wait_for_bytes(1);
-            eth_receiver_done();
-        }
-#endif
         return *this->local_rptr_sent_;
     }
 
     inline uint32_t get_queue_local_rptr_cleared() const {
-#if defined(COMPILE_FOR_ERISC)
-        // Ensure bytes are received if local is set from the remote
-        // this->remote_update_network_type == DispatchRemoteNetworkType::ETH will be true on ERISC
-        if (!this->remote_rptr_cleared_addr_) {
-            eth_wait_for_bytes(1);
-            eth_receiver_done();
-        }
-#endif
         return *this->local_rptr_cleared_;
     }
 
@@ -296,14 +280,36 @@ class packet_queue_state_t {
             }
 #if defined(COMPILE_FOR_ERISC)
             else {
+                *this->staging_area_ = *reinterpret_cast<volatile uint32_t*>(src_addr);
+                while (eth_txq_is_busy()) {}
                 internal_::eth_send_packet(
-                        0,
-                        src_addr >> 4,  // words
+                        0, // channel
+                        (uint32_t)(this->staging_area_) >> 4,  // words
                         dest_addr >> 4, // words
-                        1               // words (16B each). Be careful as we only need to send uint32_t but minimum is a word.
+                        PACKET_WORD_SIZE_BYTES >> 4 // words
                 );
-                erisc_info->channels[0].bytes_sent = 1; // Used for ack purposes.
-                eth_wait_for_receiver_done(); // will send the erisc_info and wait until they sent back bytes_sent = 0
+                this->remote_ack_->bytes_sent = PACKET_WORD_SIZE_BYTES;
+                while (eth_txq_is_busy()) {}
+                internal_::eth_send_packet(
+                    0,
+                    (uint32_t)(this->remote_ack_) >> 4,
+                    (uint32_t)(this->remote_ack_) >> 4,
+                    1
+                );
+                while (this->remote_ack_->bytes_sent != 0) {
+                    // While waiting for ack from remote make sure we don't have any acks we need to check
+                    if (this->local_ack_->bytes_sent != 0) {
+                        this->local_ack_->bytes_sent = 0;
+                        while (eth_txq_is_busy()) {}
+                        internal_::eth_send_packet(
+                            0,
+                            (uint32_t)(this->local_ack_) >> 4,
+                            (uint32_t)(this->local_ack_) >> 4,
+                            1
+                        );
+                    }
+                    run_routing();
+                }
             }
 #endif
         } else {

@@ -234,6 +234,8 @@ constexpr uint32_t vc_eth_tunneler_out_remote_wptr_addr[MAX_TUNNEL_LANES] = {
 
 #define SWITCH_THRESHOLD 16
 void kernel_main() {
+    rtos_context_switch_ptr = (void (*)())RtosTable[0];
+
     write_buffer_to_l1(kernel_status, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_STARTED);
     write_buffer_to_l1(kernel_status, PQ_TEST_MISC_INDEX, 0xff000000);
     write_buffer_to_l1(kernel_status, PQ_TEST_MISC_INDEX + 1, 0xbb000000);

@@ -34,6 +34,9 @@ struct eth_channel_sync_t {
     uint32_t reserved_2;
 };
 
+static_assert(sizeof(eth_channel_sync_t) == 16,
+    "eth_channel_sync_t is expected to be 16B. Do not change the fields without updating clients using this struct.");
+
 struct erisc_info_t {
     volatile uint32_t launch_user_kernel;
     volatile uint32_t unused_arg0;
