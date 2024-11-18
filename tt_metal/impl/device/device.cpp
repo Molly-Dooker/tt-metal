@@ -408,13 +408,25 @@ void Device::build_firmware() {
 
 void Device::initialize_device_bank_to_noc_tables(const HalProgrammableCoreType &core_type, CoreCoord phys_core)
 {
-    tt::Cluster::instance().write_core(&dram_bank_to_noc_xy_[0], dram_bank_to_noc_xy_.size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core),  MEM_BANK_TO_NOC_XY_SCRATCH);
-    uint64_t l1_noc_addr = MEM_BANK_TO_NOC_XY_SCRATCH + (dram_bank_to_noc_xy_.size() * sizeof(uint16_t));
-    tt::Cluster::instance().write_core(&l1_bank_to_noc_xy_[0], l1_bank_to_noc_xy_.size() * sizeof(uint16_t), tt_cxy_pair(this->id(), phys_core), l1_noc_addr);
+    const uint32_t dram_to_noc_sz_in_bytes = dram_bank_to_noc_xy_.size() * sizeof(uint16_t);
+    const uint32_t l1_to_noc_sz_in_bytes = l1_bank_to_noc_xy_.size() * sizeof(uint16_t);
+    const uint32_t dram_offset_sz_in_bytes = dram_bank_offset_map_.size() * sizeof(int32_t);
+    const uint32_t l1_offset_sz_in_bytes = l1_bank_offset_map_.size() * sizeof(int32_t);
 
-    tt::Cluster::instance().write_core(&dram_bank_offset_map_[0], dram_bank_offset_map_.size() * sizeof(int32_t), tt_cxy_pair(this->id(), phys_core), MEM_BANK_OFFSET_SCRATCH);
-    uint64_t l1_offset_addr = MEM_BANK_OFFSET_SCRATCH + (dram_bank_offset_map_.size() * sizeof(int32_t));
-    tt::Cluster::instance().write_core(&l1_bank_offset_map_[0], l1_bank_offset_map_.size() * sizeof(int32_t), tt_cxy_pair(this->id(), phys_core), l1_offset_addr);
+    const uint64_t mem_bank_to_noc_addr = hal.get_dev_addr(core_type, HalL1MemAddrType::BANK_TO_NOC_SCRATCH);
+    const uint32_t mem_bank_to_noc_size = hal.get_dev_size(core_type, HalL1MemAddrType::BANK_TO_NOC_SCRATCH);
+
+    TT_ASSERT((dram_to_noc_sz_in_bytes + l1_to_noc_sz_in_bytes + dram_offset_sz_in_bytes + l1_offset_sz_in_bytes) <= mem_bank_to_noc_size,
+        "Size of bank_to_noc table is greater than available space");
+
+    tt::Cluster::instance().write_core(&dram_bank_to_noc_xy_[0], dram_to_noc_sz_in_bytes, tt_cxy_pair(this->id(), phys_core), mem_bank_to_noc_addr);
+    uint64_t l1_noc_addr = mem_bank_to_noc_addr + dram_to_noc_sz_in_bytes;
+    tt::Cluster::instance().write_core(&l1_bank_to_noc_xy_[0], l1_to_noc_sz_in_bytes, tt_cxy_pair(this->id(), phys_core), l1_noc_addr);
+
+    uint64_t dram_offset_addr = l1_noc_addr + l1_to_noc_sz_in_bytes;
+    tt::Cluster::instance().write_core(&dram_bank_offset_map_[0], dram_offset_sz_in_bytes, tt_cxy_pair(this->id(), phys_core), dram_offset_addr);
+    uint64_t l1_offset_addr = dram_offset_addr + dram_offset_sz_in_bytes;
+    tt::Cluster::instance().write_core(&l1_bank_offset_map_[0], l1_offset_sz_in_bytes, tt_cxy_pair(this->id(), phys_core), l1_offset_addr);
 }
 
 void Device::initialize_firmware(const HalProgrammableCoreType &core_type, CoreCoord phys_core, launch_msg_t *launch_msg, go_msg_t* go_msg) {

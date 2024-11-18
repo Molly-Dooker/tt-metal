@@ -47,7 +47,7 @@ void __attribute__((noinline)) Application(void) {
 
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
 
-    noc_bank_table_init();
+    noc_bank_table_init(eth_l1_mem::address_map::ERISC_MEM_BANK_TO_NOC_SCRATCH);
 
     risc_init();
     noc_init(MEM_NOC_ATOMIC_RET_VAL_ADDR);

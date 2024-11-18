@@ -82,7 +82,7 @@ int main(int argc, char *argv[]) {
 
     do_crt1((uint32_t tt_l1_ptr *)MEM_NCRISC_INIT_LOCAL_L1_BASE_SCRATCH);
 
-    noc_bank_table_init();
+    noc_bank_table_init(MEM_BANK_TO_NOC_SCRATCH);
 
     risc_init();
 

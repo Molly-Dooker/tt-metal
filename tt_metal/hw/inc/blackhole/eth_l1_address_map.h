@@ -29,6 +29,10 @@ struct address_map {
     // Kernel config buffer is WIP
     // Size is presently based on the old sizes of the RTAs + CB config + Sems
     static constexpr std::int32_t ERISC_L1_KERNEL_CONFIG_SIZE = 96 * 4 + 8 * 16;
+  // Memory for (dram/l1)_bank_to_noc_xy arrays, size needs to be atleast 2 * NUM_NOCS * (NUM_DRAM_BANKS + NUM_L1_BANKS)
+  static constexpr std::int32_t ERISC_MEM_BANK_TO_NOC_XY_SIZE = 1024;
+  // Memory for bank_to_dram_offset and bank_to_l1_offset arrays, size needs to be atleast 4 * (NUM_DRAM_BANKS + NUM_L1_BANKS)
+  static constexpr std::int32_t ERISC_MEM_BANK_OFFSET_SIZE = 1024;
 
     // Base addresses
     static constexpr std::int32_t FIRMWARE_BASE = 0x9040;
@@ -69,6 +73,8 @@ struct address_map {
 
     // BIDIR Tunneling Kernel Space
     static constexpr std::int32_t ERISC_L1_TUNNEL_BUFFER_SIZE = ERISC_L1_UNRESERVED_SIZE / 2;
+    static constexpr std::int32_t ERISC_MEM_BANK_TO_NOC_SCRATCH = (ERISC_L1_KERNEL_CONFIG_BASE + ERISC_L1_KERNEL_CONFIG_SIZE + 31) & ~31; //Same as ERISC_L1_UNRESERVED_BASE
+    static constexpr std::int32_t ERISC_MEM_BANK_TO_NOC_SIZE = ERISC_MEM_BANK_TO_NOC_XY_SIZE + ERISC_MEM_BANK_OFFSET_SIZE;
 
     template <std::size_t A, std::size_t B>
     struct TAssertEquality {

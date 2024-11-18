@@ -346,7 +346,7 @@ int main() {
 
     do_crt1((uint32_t*)MEM_BRISC_INIT_LOCAL_L1_BASE_SCRATCH);
 
-    noc_bank_table_init();
+    noc_bank_table_init(MEM_BANK_TO_NOC_SCRATCH);
 
     mailboxes->launch_msg_rd_ptr = 0; // Initialize the rdptr to 0
     noc_index = 0;

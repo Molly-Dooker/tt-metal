@@ -105,7 +105,7 @@ int main() {
     do_crt1((uint32_t *)MEM_IERISC_INIT_LOCAL_L1_BASE_SCRATCH);
     uint32_t heartbeat = 0;
 
-    noc_bank_table_init();
+    noc_bank_table_init(MEM_IERISC_BANK_TO_NOC_SCRATCH);
 
     risc_init();
 

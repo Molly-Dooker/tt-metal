@@ -14,6 +14,7 @@
 #include "hostdevcommon/kernel_structs.h"
 #include "dev_msgs.h"
 #include "noc/noc_parameters.h"
+#include "debug/dprint.h"
 
 extern void (*__init_array_start[])();
 extern void (*__init_array_end[])();
@@ -72,17 +73,17 @@ inline void do_crt1(uint32_t tt_l1_ptr* data_image) {
     }
 }
 
-void noc_bank_table_init()
+void noc_bank_table_init(uint64_t mem_bank_to_noc_addr)
 {
-    int32_t num_dram_to_noc_words = (NUM_NOCS * NUM_DRAM_BANKS) << 1;
-    l1_to_local_mem_copy((uint*)dram_bank_to_noc_xy, (uint tt_l1_ptr*)MEM_BANK_TO_NOC_XY_SCRATCH, num_dram_to_noc_words);
-    int32_t num_l1_to_noc_words = (NUM_NOCS * NUM_L1_BANKS) << 1;
-    l1_to_local_mem_copy((uint*)l1_bank_to_noc_xy, (uint tt_l1_ptr*)(MEM_BANK_TO_NOC_XY_SCRATCH + num_dram_to_noc_words), num_l1_to_noc_words);
+    int32_t dram_to_noc_size_bytes = sizeof(dram_bank_to_noc_xy);
+    l1_to_local_mem_copy((uint*)dram_bank_to_noc_xy, (uint tt_l1_ptr*)mem_bank_to_noc_addr, dram_to_noc_size_bytes >> 2);
+    int32_t l1_to_noc_size_bytes = sizeof(l1_bank_to_noc_xy);
+    l1_to_local_mem_copy((uint*)l1_bank_to_noc_xy, (uint tt_l1_ptr*)(mem_bank_to_noc_addr + dram_to_noc_size_bytes), l1_to_noc_size_bytes >> 2);
 
-    int32_t num_dram_offset_words = NUM_DRAM_BANKS << 2;
-    l1_to_local_mem_copy((uint*)bank_to_dram_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH), num_dram_offset_words);
-    int32_t num_l1_offset_words = NUM_L1_BANKS << 2;
-    l1_to_local_mem_copy((uint*)bank_to_l1_offset, (uint tt_l1_ptr*)(MEM_BANK_OFFSET_SCRATCH + num_dram_offset_words), num_l1_offset_words);
+    int32_t dram_offsets_size_bytes = sizeof(bank_to_dram_offset);
+    l1_to_local_mem_copy((uint*)bank_to_dram_offset, (uint tt_l1_ptr*)(mem_bank_to_noc_addr + dram_to_noc_size_bytes + l1_to_noc_size_bytes), dram_offsets_size_bytes >> 2);
+    int32_t l1_offsets_size_bytes = sizeof(bank_to_l1_offset);
+    l1_to_local_mem_copy((uint*)bank_to_l1_offset, (uint tt_l1_ptr*)(mem_bank_to_noc_addr + dram_to_noc_size_bytes + l1_to_noc_size_bytes + dram_offsets_size_bytes), l1_offsets_size_bytes >> 2);
 }
 
 FORCE_INLINE
