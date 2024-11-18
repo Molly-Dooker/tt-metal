@@ -6,6 +6,9 @@ import sqlite3
 from pathlib import Path
 from tabulate import tabulate
 import argparse
+from tests.sweep_framework.framework import tt_smi_util
+
+ARCH = os.getenv("ARCH_NAME")
 
 
 def find_pytorch2_files(parent_folder):
@@ -27,19 +30,25 @@ def run_commands(module_name, args):
         f"python3 tests/sweep_framework/sweeps_runner.py --elastic {args.elastic} --module-name {module_name} --suite-name {args.suite_name}",
         f"python3 tests/sweep_framework/framework/export_to_sqlite.py --elastic {args.elastic} --dump_path {args.dump_path} --filter-string {module_name}",
     ]
-    for cmd in commands:
-        print(f"Running command: {cmd}")
-        attempts = 0
-        success = False
-        while attempts < 3 and not success:
-            attempts = attempts + 1
-            try:
+    attempts = 0
+    success = False
+    while attempts < 3 and not success:
+        attempts += 1
+        try:
+            for cmd in commands:
+                print(f"Running command: {cmd}")
                 subprocess.run(cmd, shell=True, check=True)
-                success = True
-            except subprocess.CalledProcessError as e:
-                print(f"Command failed with {e}. Attempt {attempts} of 3.")
-                if attempts == 3:
-                    print(f"Unable to process {cmd}.  Giving up....")
+            success = True
+        except subprocess.CalledProcessError as e:
+            print(f"Command failed with {e}. Attempt {attempts} of 3.")
+            try:
+                tt_smi_util.run_tt_smi(ARCH)
+            except Exception as ex:
+                print(f"Unable to call tt-smi reset {ex}.")
+            if attempts == 3:
+                print(f"Unable to process commands for module {module_name}. Giving up....")
+            else:
+                print("Retrying the commands from the beginning...")
 
 
 def process_directory(pytorch2_file, sweeps_dir, args):
@@ -47,7 +56,7 @@ def process_directory(pytorch2_file, sweeps_dir, args):
     pytorch2_filename = os.path.basename(pytorch2_file)
 
     # Find all .py files in the same directory given we want to run these traces as well.
-    py_files = [f for f in os.listdir(directory) if f.endswith(".py")]
+    py_files = [f for f in os.listdir(directory) if f.endswith("pytorch_2.py")]
 
     # Exclude the pytorch2.py file itself
     other_files = [f for f in py_files if f != pytorch2_filename]
@@ -56,11 +65,12 @@ def process_directory(pytorch2_file, sweeps_dir, args):
     module_name = get_module_name(pytorch2_file, sweeps_dir)
     run_commands(module_name, args)
 
-    # Run tracing for all other .py files in the same directory
-    for other_file in other_files:
-        other_file_path = os.path.join(directory, other_file)
-        other_module_name = get_module_name(other_file_path, sweeps_dir)
-        run_commands(other_module_name, args)
+    if not args.pytorch2_only:
+        # Run tracing for all other .py files in the same directory
+        for other_file in other_files:
+            other_file_path = os.path.join(directory, other_file)
+            other_module_name = get_module_name(other_file_path, sweeps_dir)
+            run_commands(other_module_name, args)
 
 
 def summarize_results(sqlite_databases):
@@ -104,6 +114,7 @@ def summarize_results(sqlite_databases):
         conn.close()
 
     headers = ["Module", "Total Tests", "Total Passed", "Pass Rate (%)"]
+    summary.sort(key=lambda x: x[0])
     print(tabulate(summary, headers=headers, tablefmt="github"))
 
     if total_tests > 0:
@@ -146,6 +157,19 @@ if __name__ == "__main__":
         default=f"{folder_to_scan}",
         help="Folder to scan for any sweep tests ending in pytorch2.py",
     )
+
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Only summarize results from sqlite, do not run all the tests again.",
+    )
+
+    parser.add_argument(
+        "--pytorch2-only",
+        action="store_true",
+        help="Only consider pytorch2.py sweeps",
+    )
+
     args = parser.parse_args(sys.argv[1:])
 
     folder_to_scan = os.path.abspath(args.folder)
@@ -156,9 +180,13 @@ if __name__ == "__main__":
     sweeps_dir = os.path.abspath(Path(__file__).parent.parent.parent / "sweep_framework/sweeps")
 
     # Run commands for each pytorch2.py file and other .py files in the same directory
-    for pytorch2_file in pytorch2_files:
-        process_directory(pytorch2_file, sweeps_dir, args)
+    if not args.summary:
+        for pytorch2_file in pytorch2_files:
+            process_directory(pytorch2_file, sweeps_dir, args)
 
-    sqlite_databases = [str(path) for path in Path(args.dump_path).rglob("*.sqlite")]
+    if args.pytorch2_only:
+        sqlite_databases = [str(path) for path in Path(args.dump_path).rglob("*_pytorch2.sqlite")]
+    else:
+        sqlite_databases = [str(path) for path in Path(args.dump_path).rglob("*.sqlite")]
 
     summarize_results(sqlite_databases)
