@@ -33,11 +33,7 @@ struct ConvTranpose2dOperation{
         std::array<uint32_t, 2> dilation,
         uint32_t groups,
         std::optional<const ttnn::Tensor> bias_tensor = std::nullopt,
-<<<<<<< HEAD
-        const std::optional<const conv2d::Conv2dConfig>& conv_config_ = std::nullopt);
-=======
-        std::optional<const Conv2dConfig> conv_config_ = std::nullopt);
->>>>>>> Expose conv2d weight/bias preparation as ops (#14049)
+        const std::optional<const Conv2dConfig>& conv_config_ = std::nullopt);
 
     static Result invoke(
         uint8_t queue_id,
@@ -56,7 +52,7 @@ struct ConvTranpose2dOperation{
         std::array<uint32_t, 2> dilation,
         uint32_t groups,
         std::optional<const ttnn::Tensor> bias_tensor = std::nullopt,
-        const std::optional<const Conv2dConfig> conv_config_ = std::nullopt);
+        const std::optional<const Conv2dConfig>& conv_config_ = std::nullopt);
 };
 
 }  // namespace conv_transpose2d
