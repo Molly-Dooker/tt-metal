@@ -1,5 +1,5 @@
 # LLMs in TT-NN
-Authors: 
+Authors:
 ## Contents
 - [LLMs in TT-NN](#llms-in-tt-nn)
   - [Contents](#contents)
@@ -7,7 +7,7 @@ Authors:
   - [2. Modules](#2-modules)
     - [2.1 Embedding](#21-embedding)
     - [2.2 RoPE](#22-rope)
-    - [2.3 Norm](#23-norm) 
+    - [2.3 Norm](#23-norm)
     - [2.4 Attention](#24-attention)
     - [2.5 MLP](#25-mlp)
     - [2.6 Decoder](#26-decoder)
@@ -52,12 +52,60 @@ Authors:
     - which dims are parallelized
 ### 2.5 MLP
 ### 2.6 Decoder
+<div align="center">
+<img src="decoder.png" alt="Decoder Diagram" title="Decoder Title" width="350" height="400">
+<figcaption>Llama3.1 Decoder</figcaption>
+</div> <br>
+If the components explained in previous sections (MLP, Attention, RMSNorm) are implemented, bringing up the decoder should be relatively straightforward. According to the diagram (based on the Llama3.1 example), the components are stacked sequentially during the forward pass. Only thing to worry about is whether addition of MLP and Attention outputs should be stored in L1 or in DRAM. <br><br> Decode forward pass implementation below follows diagram above and has nothing that is not already explained in previous sections. Also, it's crucial to deallocate tensors after their usage to optimize memory. However, in this explanation, tensor deallocation has been omitted for clarity and to keep the code as straightforward as possible.
+<br><br><br>
+
+```py
+def forward(
+        self,
+        x: ttnn.Tensor,
+        current_pos,
+        rot_mat=None,
+        transformation_mats=None,
+        user_id=0,
+        mode="decode",
+        page_table=None,
+    ) -> ttnn.Tensor:
+        if mode == "prefill":
+            skip_mem_cfg = ttnn.DRAM_MEMORY_CONFIG
+        elif mode == 'decode':
+            skip_mem_cfg = self.model_config["DEC_SKIP_OUTPUT_MEMCFG"]
+        # Attention RMSNorm
+        attn_norm = self.attention_norm(x)
+        # Attention
+        r = self.attention.forward(
+            attn_norm,
+            current_pos,
+            rot_mat,
+            transformation_mats,
+            user_id,
+            mode,
+            page_table,
+        )
+        # Residual add of inputs and attention output
+        h = ttnn.add(x, r, memory_config=skip_mem_cfg)
+        # MLP and RMSNorm
+        r = self.feed_forward.forward(self.ffn_norm(h), mode)
+        # Residual add of attention output and mlp output
+        out = ttnn.add(h, r, memory_config=skip_mem_cfg)
+
+        return out
+```
+
 ### 2.7 LM Head
+
+
+
+
 ## 3. Features
 ### 3.1 Generative Decoding
 ### 3.2 Prefill and Decode
   - submodules, tests
-  - how to combine prefill and decode, 
+  - how to combine prefill and decode,
   - slicing prefill to fit in L1
 ### 3.3 Multi-Device
   - device mesh
@@ -74,10 +122,10 @@ Authors:
 ### 4.3 Multiple CQs
   - how to feed back output to input and read output asyncronously
 ### 4.4 Op Configs
-  - Writing correct program configs and shard specs 
+  - Writing correct program configs and shard specs
   - Deciding how many cores to run an op on
     - Why did we use 16 cores for MLP
-  - Which matmul to use when @Colman Glagovich 
+  - Which matmul to use when @Colman Glagovich
     - 1d, 2d, dram-sharded, ...
   - Implicitly padding weights in program config for matmuls
 ### 4.5 Accuracy
@@ -97,7 +145,7 @@ Authors:
 #### 4.10.1 Error Messages
   - Running out of L1
   - Shard spec and program config mismatches
-  - For some TTNN ops (e.g. ttnn.all_gather) it's not supported to pass -1 in the dim argument. 
+  - For some TTNN ops (e.g. ttnn.all_gather) it's not supported to pass -1 in the dim argument.
     - You'll see an error related to op invocation where the arguments don't match
 #### 4.10.2 Shard Spec Mismatches
 #### 4.10.3 Ethernet Dispatch Cores
