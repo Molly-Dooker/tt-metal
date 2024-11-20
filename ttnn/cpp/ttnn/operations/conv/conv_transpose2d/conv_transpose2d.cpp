@@ -142,6 +142,24 @@ Result conv_transpose2d(
 
         log_debug(LogOp, "Padding : ({},{}) ({},{})", input_pad_top, input_pad_bottom, input_pad_left, input_pad_right);
 
+        const bool mm_conv = conv2d::use_matmul_for_1x1_conv(kernel_size, stride, padding, dilation, groups);
+        const auto compute_grid_size = device->compute_with_storage_grid_size();
+
+        if (!input_tensor.is_sharded() && !conv_config.shard_layout.has_value()) {
+            // In this case we deduce the shard layout.
+            conv2d::adjust_conv_op_config_for_auto_shard(
+                mm_conv,
+                batch_size,
+                in_channels,
+                out_channels,
+                output_height,
+                output_width,
+                weight_tensor.get_shape()[3],
+                full_input_width,
+                compute_grid_size,
+                conv_config,
+                input_tensor.layout());
+        }
 
         DeviceComputeKernelConfig compute_kernel_config;
         switch (device->arch()) {
@@ -169,8 +187,6 @@ Result conv_transpose2d(
             default:
                 TT_THROW("Invalid Device Arch, Got {}",device->arch());
         }
-
-        const bool mm_conv = conv2d::use_matmul_for_1x1_conv(kernel_size, stride, padding, dilation, groups);
 
         //Call Halo Transpose
         auto [input_tensor_post_tm, parallel_config, output_parallel_config, tensor_manipulated, use_non_tile_height] = conv2d::shard_or_reshard_tensor_if_required(

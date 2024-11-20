@@ -172,6 +172,19 @@ std::tuple<ttnn::Tensor, sliding_window::ParallelConfig, sliding_window::Paralle
     uint32_t out_channels,
     bool is_mm_conv);
 
+void adjust_conv_op_config_for_auto_shard(
+    bool is_mm_conv,
+    uint32_t batch_size,
+    uint32_t in_channels,
+    uint32_t out_channels,
+    uint32_t output_height,
+    uint32_t output_width,
+    uint32_t weights_width,
+    uint32_t input_width,
+    const CoreCoord& compute_grid_size,
+    Conv2dConfig& conv_config,
+    Layout input_tensor_layout);
+
 void validate_weight_and_bias_tensors(const ttnn::Tensor& weight_tensor, std::optional<const ttnn::Tensor>& bias_tensor);
 
 // Converts convolution weights to tilized 2d matrix layout.
