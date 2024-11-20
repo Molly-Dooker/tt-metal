@@ -20,6 +20,7 @@ parameters = {
             # Contains following params
             # [batch_size, input_channels, input_height, input_width, output_channels, kernel_height, kernel_width, stride_h, stride_w, pad_h, pad_w, dilation_h, dilation_w, out_pad_h, out_pad_w]
             [20, 16, 50, 100, 33, 3, 3, 2, 2, 0, 0, 1, 1, 0, 0],
+            [1, 16, 50, 100, 33, 3, 3, 2, 2, 0, 0, 1, 1, 0, 0],
             [1, 1024, 14, 14, 512, 2, 2, 2, 2, 0, 0, 1, 1, 0, 0],
             [1, 128, 112, 112, 64, 2, 2, 2, 2, 0, 0, 1, 1, 0, 0],
             [1, 128, 64, 64, 64, 2, 2, 2, 2, 0, 0, 1, 1, 0, 0],
