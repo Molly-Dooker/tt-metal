@@ -2,18 +2,16 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import os
 import math
 import ttnn
 import torch
-import torch.nn as nn
+from tqdm import tqdm
 from models.demos.llama3.tt.llama_decoder import TtTransformerBlock
 from models.demos.llama3.tt.multimodal.llama_cross_block import TtLlamaCrossAttentionTransformerBlock
 from models.demos.llama3.tt.llama_model import LMHead
 from models.demos.llama3.tt.distributed_norm import DistributedNorm
 from models.common.rmsnorm import RMSNorm
 import ttnn
-from typing import Optional
 from models.common.lightweightmodule import LightweightModule
 from models.demos.llama3.tt.llama_embedding import TtLlamaEmbedding
 from models.demos.llama3.tt.llama_rope import TtLlamaRotarySetup
@@ -135,7 +133,7 @@ class TtLlamaCrossAttentionTransformerText(LightweightModule):
         # transformer blocks
         self.layers = []
         self.cross_attention_layers = []
-        for i in range(configuration.n_layers):
+        for i in tqdm(range(configuration.n_layers), desc="Loading text transformer layers"):
             layer_id = i
             block = TtTransformerBlock(
                 configuration,

@@ -218,7 +218,7 @@ def test_llama_multimodal_demo_text(
                         xattn_caches,
                     )
                 else:
-                    logits = generator.decode_forward(
+                    logits = generator.decode_forward_single_user(
                         position_id,
                         next_token_tensor,
                         batch_xattn_masks,
