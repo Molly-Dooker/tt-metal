@@ -16,6 +16,7 @@ import ttnn
 from typing import Optional
 from models.common.lightweightmodule import LightweightModule
 from models.demos.llama3.tt.llama_embedding import TtLlamaEmbedding
+from models.demos.llama3.tt.llama_rope import TtLlamaRotarySetup
 
 from models.utility_functions import (
     nearest_32,
@@ -121,12 +122,30 @@ class TtLlamaCrossAttentionTransformerText(LightweightModule):
         self.num_frozen_embeddings = self.tok_embeddings.num_embeddings
         self._thresh = self.num_frozen_embeddings - 1
 
+        self.rope_setup = TtLlamaRotarySetup(
+            mesh_device,
+            configuration.max_batch_size,
+            configuration.head_dim,
+            configuration.max_seq_len,
+            configuration.rope_theta,
+            configuration.use_scaled_rope,
+        )
+        self.trans_mats_dict = self.rope_setup.get_both_trans_mats()
+
         # transformer blocks
         self.layers = []
         self.cross_attention_layers = []
         for i in range(configuration.n_layers):
             layer_id = i
-            block = TtTransformerBlock(configuration, mesh_device, dtype, state_dict, layer_id, weight_cache_path)
+            block = TtTransformerBlock(
+                configuration,
+                mesh_device,
+                dtype,
+                state_dict,
+                layer_id,
+                weight_cache_path,
+                transformation_mats=self.trans_mats_dict,
+            )
             self.layers.append(block)
             if layer_id in self.fusion_schedule:
                 xa_layer_id = self.fusion_schedule.index(layer_id)
@@ -252,7 +271,7 @@ class TtLlamaCrossAttentionTransformerText(LightweightModule):
         full_text_row_masked_out_mask_11SD: ttnn.Tensor,
         xattn_caches,
         current_pos,
-        rot_mat=None,
+        rot_mats=None,
         transformation_mats=None,
         user_id=0,
         mode="decode",
@@ -280,7 +299,7 @@ class TtLlamaCrossAttentionTransformerText(LightweightModule):
             h = layer(
                 h,
                 current_pos,
-                rot_mat=rot_mat,
+                rot_mats=rot_mats,
                 transformation_mats=transformation_mats,
                 user_id=user_id,
                 mode=mode,
