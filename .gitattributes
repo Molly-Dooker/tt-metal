@@ -1,2 +1,5 @@
 *tokenizer.json filter=lfs diff=lfs merge=lfs -text
 tt-train/sources/examples/nano_gpt/data/shakespeare.txt filter=lfs diff=lfs merge=lfs -text
+tech_reports/FlashAttention/images/FlashDecode/steps.png filter=lfs diff=lfs merge=lfs -text
+tech_reports/FlashAttention/images/FlashDecode/flash_decode128k.svg filter=lfs diff=lfs merge=lfs -text
+tech_reports/FlashAttention/images/FlashDecode/parallelization_kv.gif filter=lfs diff=lfs merge=lfs -text
