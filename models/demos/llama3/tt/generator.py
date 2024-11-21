@@ -57,7 +57,6 @@ class LlamaGenerator:
         from models.demos.llama3.demo.simple_vision_demo import create_multimodal_model
 
         max_seq_len = 512  # TODO: Increase to 131072 once it's verified to work
-        max_batch_size = 1  # TODO: remove this once batch > 1 is supported
         model_args, model = create_multimodal_model(mesh_device, max_batch_size, max_seq_len)
         return cls(model, model_args, mesh_device, vllm=True)
 
@@ -195,62 +194,6 @@ class LlamaGenerator:
 
         return logits
 
-    def prefill_forward(
-        self,
-        tokens: torch.Tensor,
-        images: List[PIL.Image.Image],
-        start_pos,
-        page_table=None,
-        kv_cache=None,
-        prompt_lens=None,
-    ):
-        # TODO: modify vLLM to return list of tokens for prefill instead of tensor with padding
-
-        batch, batch_seq_len = tokens.shape
-        output_logits = torch.zeros(batch, 1, self.model_args.vocab_size)
-
-        max_gen_len = self.model_args.max_seq_len - 1  # TODO: double check what this should be
-
-        xattn_caches_out = []
-        cross_attention_masks_out = []
-        full_text_row_masked_out_masks = []
-
-        for user_id in range(batch):
-            vision_image = images[user_id : user_id + 1]
-            prompt_tokens = [int(tokens[user_id, i]) for i in range(prompt_lens[user_id])]
-            vision_mask = create_vision_mask(prompt_tokens, self.vision_token)
-
-            prefill_len = len(prompt_tokens)
-            total_len = prefill_len + max_gen_len  # Prepares mask for full length of output
-            prompt_tokens_tensor = torch.tensor(prompt_tokens, dtype=torch.long).reshape(1, -1)  # B, S
-
-            xattn_caches = self.model.setup_cache(max_batch_size=1)  # allocate cache for one user
-
-            (
-                xattn_caches,
-                cross_attention_masks,
-                full_text_row_masked_out_mask,
-                logits,
-            ) = self.prefill_forward_single_user(
-                vision_image,
-                vision_mask,
-                prompt_tokens_tensor,
-                xattn_caches,
-                user_id=0,
-                total_len=total_len,
-                prefill_len=prefill_len,
-            )
-
-            xattn_caches_out.append(xattn_caches)
-            cross_attention_masks_out.append(cross_attention_masks)
-            full_text_row_masked_out_masks.append(full_text_row_masked_out_mask)
-
-            output_logits[user_id] = logits[:, -1:, :]
-
-        logger.info(f"Finished prefill for all users up to {batch_seq_len} tokens, Starting decode...")
-
-        return output_logits, xattn_caches_out, cross_attention_masks_out, full_text_row_masked_out_masks
-
     def prefill_forward_single_user(
         self,
         vision_images,
@@ -299,6 +242,61 @@ class LlamaGenerator:
 
         return xattn_caches, cross_attention_masks, full_text_row_masked_out_mask, logits
 
+    # TODO: merge this function with prefill_forward
+    def prefill_forward_vllm(
+        self,
+        tokens: torch.Tensor,
+        images: List[PIL.Image.Image],
+        xattn_caches,
+        start_pos,
+        page_table=None,
+        kv_cache=None,
+        prompt_lens=None,
+    ):
+        # TODO: modify vLLM to return list of tokens for prefill instead of tensor with padding
+
+        batch, batch_seq_len = tokens.shape
+        output_logits = torch.zeros(batch, 1, self.model_args.vocab_size)
+
+        max_gen_len = self.model_args.max_seq_len - 1  # TODO: double check what this should be
+
+        cross_attention_masks_out = []
+        full_text_row_masked_out_masks = []
+
+        for user_id in range(batch):
+            logger.info(f"Prefilling User {user_id}")
+            vision_image = images[user_id : user_id + 1]
+            prompt_tokens = [int(tokens[user_id, i]) for i in range(prompt_lens[user_id])]
+            vision_mask = create_vision_mask(prompt_tokens, self.vision_token)
+
+            prefill_len = len(prompt_tokens)
+            total_len = prefill_len + max_gen_len  # Prepares mask for full length of output
+            prompt_tokens_tensor = torch.tensor(prompt_tokens, dtype=torch.long).reshape(1, -1)  # B, S
+
+            (
+                xattn_caches,
+                cross_attention_masks,
+                full_text_row_masked_out_mask,
+                logits,
+            ) = self.prefill_forward_single_user(
+                vision_image,
+                vision_mask,
+                prompt_tokens_tensor,
+                xattn_caches,
+                user_id=user_id,
+                total_len=total_len,
+                prefill_len=prefill_len,
+            )
+
+            cross_attention_masks_out.append(cross_attention_masks)
+            full_text_row_masked_out_masks.append(full_text_row_masked_out_mask)
+
+            output_logits[user_id] = logits[:, -1:, :]
+
+        logger.info(f"Finished prefill for all users up to {batch_seq_len} tokens, Starting decode...")
+
+        return output_logits, cross_attention_masks_out, full_text_row_masked_out_masks
+
     def prefill_forward(self, vision_images, vision_masks, tokens: torch.Tensor, xattn_caches, total_lens, prompt_lens):
         """
         Batched version of prefill_forward_single_user for vision model.
@@ -342,32 +340,6 @@ class LlamaGenerator:
         kv_cache=None,
         prompt_lens=None,
     ):
-        logits = []
-        N = len(xattn_caches)
-        # TODO: remove loop once batch > 1 is supported
-        for user_id in range(N):
-            logits_user = self.decode_forward_single_user(
-                int(start_pos[user_id]),
-                tokens[user_id : user_id + 1],
-                cross_attention_masks[user_id],
-                full_text_row_masked_out_mask[user_id],
-                xattn_caches[user_id],
-            )
-            logits.append(logits_user)
-        logits = torch.cat(logits, dim=0)
-        return logits
-
-    def decode_forward_single_user(
-        self,
-        position_id,
-        tokens,
-        cross_attention_masks,
-        full_text_row_masked_out_mask,
-        xattn_caches,
-        page_table=None,
-        kv_cache=None,
-        prompt_lens=None,
-    ):
         """
         Performs text decode step.
         Returns logits
@@ -385,7 +357,7 @@ class LlamaGenerator:
             tt_position_id,
             tt_rot_mats,
         ) = self.model.prepare_inputs_decode(
-            tokens, cross_attention_masks, full_text_row_masked_out_mask, position_id=position_id
+            tokens, cross_attention_masks, full_text_row_masked_out_mask, position_id=start_pos
         )
 
         tt_logits = self.model.ttnn_decode_forward(
@@ -625,14 +597,14 @@ class LlamaGenerator:
         )
 
         for gen_idx in range(max_gen_len - 1):
-            position_id = prefill_len + gen_idx
+            position_id = torch.tensor([prefill_len + gen_idx])
             next_token_tensor = next_token.reshape(1, 1)  # B, S
 
-            logits = self.decode_forward_single_user(
+            logits = self.decode_forward(
                 position_id,
                 next_token_tensor,
-                cross_attention_masks,
-                full_text_row_masked_out_mask,
+                [cross_attention_masks],
+                [full_text_row_masked_out_mask],
                 xattn_caches,
             )
 
