@@ -84,6 +84,10 @@ SECTIONS
    . = ALIGN(4);
    __ldm_bss_end = .;
   } > REGION_APP_DATA :data
+  /* Place uninitialized variables here, so we don't zero them out. */
+  .uninit : {
+    *(.uninit)
+  } > REGION_APP_DATA :data
   . = ALIGN(32 / 8);
 
   .riscv.attributes 0 : { *(.riscv.attributes) } :attributes
