@@ -128,6 +128,15 @@ TEST_F(SingleDeviceTraceFixture, EnqueueProgramTraceCapture) {
     auto input = Buffer::create(this->device_, 2048, 2048, BufferType::DRAM);
     auto output = Buffer::create(this->device_, 2048, 2048, BufferType::DRAM);
 
+    // Some initial LightMetalBinary setup/configuration for testing purposes.
+    bool serialize_trace = std::getenv("TT_METAL_SERIALIZE_TRACE");
+    bool deserialize_trace = std::getenv("TT_METAL_DESERIALIZE_TRACE");
+    std::string trace_bin_path = "/tmp/light_metal_trace_capture_ttmetal.bin";
+    bool auto_serialize_metal_trace = true;
+    log_info(LogTest, "KCM Starting test. serialize: {} deserialize: {} filename: {}",serialize_trace, deserialize_trace, trace_bin_path);
+
+    LightMetalConfigure(this->device_, trace_bin_path, auto_serialize_metal_trace);
+
     CommandQueue& command_queue = this->device_->command_queue();
 
     Program simple_program = create_simple_unary_program(*input, *output);
@@ -147,9 +156,31 @@ TEST_F(SingleDeviceTraceFixture, EnqueueProgramTraceCapture) {
 
     EnqueueWriteBuffer(command_queue, *input, input_data.data(), true);
 
-    uint32_t tid = BeginTraceCapture(this->device_, command_queue.id());
-    EnqueueProgram(command_queue, simple_program, false);
-    EndTraceCapture(this->device_, command_queue.id(), tid);
+    uint32_t tid;
+
+    if (deserialize_trace) {
+        tid = 0;
+        LightMetalLoadTraceId(this->device_, tid, command_queue.id());
+
+    } else {
+
+        LightMetalBeginCapture(this->device_);
+
+        tid = BeginTraceCapture(this->device_, command_queue.id());
+        EnqueueProgram(command_queue, simple_program, false);
+        EndTraceCapture(this->device_, command_queue.id(), tid);
+
+        log_info(tt::LogTest, "KCM Done capturing trace");
+
+        LightMetalEndCapture(this->device_);
+
+        // Early exit, don't run if serializing to disk. Eventually will remove this, and LightMetalCapture will capture everything.
+        if (serialize_trace) {
+            log_info(tt::LogTest, "Early exiting now since we are serializing to disk.");
+            return;
+        }
+    }
+
     // Create and Enqueue a Program with a live trace to ensure that a warning is generated
     auto input_temp = Buffer::create(this->device_, 2048, 2048, BufferType::DRAM);
     auto output_temp = Buffer::create(this->device_, 2048, 2048, BufferType::DRAM);

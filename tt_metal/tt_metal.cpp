@@ -1279,6 +1279,22 @@ void ReplayTrace(Device *device, const uint8_t cq_id, const uint32_t tid, const 
 
 void ReleaseTrace(Device *device, const uint32_t tid) { device->release_trace(tid); }
 
+void LightMetalConfigure(Device *device, const std::string &filename, const bool auto_serialize_metal_trace) {
+    device->light_metal_configure(filename, auto_serialize_metal_trace);
+}
+
+void LightMetalBeginCapture(Device *device) {
+    device->light_metal_begin_capture();
+}
+
+void LightMetalEndCapture(Device *device) {
+    device->light_metal_end_capture();
+}
+
+void LightMetalLoadTraceId(Device *device, const uint32_t trace_id, const uint8_t cq_id) {
+    device->light_metal_load_trace_id(trace_id, cq_id);
+}
+
 void Synchronize(Device *device, const std::optional<uint8_t> cq_id) {
     if (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr) {
         if (cq_id.has_value()) {

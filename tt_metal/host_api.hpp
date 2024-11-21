@@ -648,6 +648,20 @@ void ReleaseTrace(Device *device, const uint32_t tid);
  */
 void EnqueueTrace(CommandQueue &cq, uint32_t trace_id, bool blocking);
 
+
+// Configure Light Metal Binary
+void LightMetalConfigure(Device *device, const std::string &filename, const bool auto_serialize_metal_trace);
+
+// Starts Light Metal Binary capture
+// KCM - Do we want to remove Device and enable/disable capture for all devices?
+void LightMetalBeginCapture(Device *device);
+
+// Ends Light Metal Binary capture
+void LightMetalEndCapture(Device *device);
+
+// KCM - Consider flipping the order of these arguments to match other APIs
+void LightMetalLoadTraceId(Device *device, const uint32_t trace_id, const uint8_t cq_id);
+
 /**
  * Read device side profiler data and dump results into device side CSV log
  *

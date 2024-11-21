@@ -3393,15 +3393,15 @@ void Device::end_trace(const uint8_t cq_id, const uint32_t tid) {
         trace_data.push_back(((uint32_t*)command_sequence.data())[i]);
     }
 
-    // If Capturing enabled, serialize it now.
+    // Capture Trace if light metal trace capturing is enabled. Still write it to device because we will eventually
+    // want light-metal-binary capture to be pure observer and not change behavior.
     const auto &cfg = this->light_metal_trace_.config;
     if (cfg.capture_enabled && cfg.auto_serialize_metal_trace) {
         log_info(tt::LogMetal, "KCM {} Light Metal auto-capture tid: {} filename: ", __FUNCTION__, tid, cfg.filename);
         this->light_metal_trace_.traces.emplace_back(tid, *trace_desc);
-    } else {
-        Trace::initialize_buffer(this->command_queue(cq_id), this->trace_buffer_pool_[tid]);
     }
 
+    Trace::initialize_buffer(this->command_queue(cq_id), this->trace_buffer_pool_[tid]);
     this->MarkAllocationsUnsafe();
 }
 
