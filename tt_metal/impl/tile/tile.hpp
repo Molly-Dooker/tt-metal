@@ -4,8 +4,6 @@
 
 #pragma once
 
-#include <optional>
-
 #include "common/bfloat16.hpp"
 #include "common/tt_backend_api_types.hpp"
 #include "tt_metal/common/constants.hpp"

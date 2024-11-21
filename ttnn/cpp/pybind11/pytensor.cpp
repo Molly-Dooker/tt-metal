@@ -76,6 +76,59 @@ Tensor create_owned_tensor(
     return Tensor(std::move(storage), shape, data_type, layout, optional_tile);
 }
 
+OwnedBuffer create_owned_buffer_from_vector_of_floats(std::vector<float> &&data, DataType data_type) {
+    switch (data_type) {
+        case DataType::FLOAT32: {
+            return owned_buffer::create<float>(std::move(data));
+        }
+        case DataType::BFLOAT16: {
+            std::vector<::bfloat16> bfloat16_data(data.size());
+            std::transform(std::begin(data), std::end(data), std::begin(bfloat16_data), [](float value) {
+                return ::bfloat16(value);
+            });
+            return owned_buffer::create<::bfloat16>(std::move(bfloat16_data));
+        }
+        default: {
+            TT_THROW("Cannot create a host buffer!");
+        }
+    }
+}
+
+Tensor convert_float_vector_to_tt_tensor(
+    std::vector<float> &&data,
+    const std::array<uint32_t, 4> &shape,
+    DataType data_type,
+    Layout layout,
+    const std::optional<Device *> device,
+    const std::optional<MemoryConfig> &memory_config,
+    const std::optional<Tile> &tile) {
+    if (data_type == DataType::BFLOAT8_B || data_type == DataType::BFLOAT4_B) {
+        if (layout != Layout::TILE) {
+            log_warning(tt::LogAlways, "Tensor layout must be Layout::TILE for bfloat8_b or bfloat4_b! Tensor layout will be {} instead of the requested {}!", Layout::TILE, layout);
+        }
+        auto owned_buffer = create_owned_buffer_from_vector_of_floats(std::move(data), DataType::FLOAT32);
+        auto float_tensor = Tensor(OwnedStorage{owned_buffer}, shape, DataType::FLOAT32, Layout::ROW_MAJOR, tile).to(Layout::TILE);
+        auto output_float_data = owned_buffer::get_as<float>(float_tensor).get();
+        auto output_packed_data =
+            data_type == DataType::BFLOAT8_B
+                ? pack_fp32_vec_as_bfp8_tiles(output_float_data, /*row_major_input=*/false, /*is_exp_a=*/false, tile)
+                : pack_fp32_vec_as_bfp4_tiles(output_float_data, /*row_major_input=*/false, /*is_exp_a=*/false, tile);
+        auto output_buffer = owned_buffer::create<uint32_t>(std::move(output_packed_data));
+        auto tensor = Tensor(
+            std::move(OwnedStorage{std::move(output_buffer)}), shape, data_type, Layout::TILE, tile);
+        if (device.has_value()) {
+            return tensor.to(device.value(), memory_config.value_or(MemoryConfig{}));
+        }
+        return tensor;
+    }
+    auto owned_buffer = create_owned_buffer_from_vector_of_floats(std::move(data), data_type);
+    auto tensor = Tensor(OwnedStorage{owned_buffer}, shape, data_type, layout, tile);
+    if (device.has_value()) {
+        return tensor.to(device.value(), memory_config.value_or(MemoryConfig{}));
+    }
+    return tensor;
+}
+
 Tensor create_tt_tensor_from_py_data(
     std::size_t num_elements,
     std::size_t py_data_ptr,
@@ -147,20 +200,7 @@ Tensor create_tt_tensor_from_py_data(
                 return create_owned_tensor(data_ptr, num_elements, shape, data_type, Layout::ROW_MAJOR, optional_tile);
             }
         }
-        case DataType::BFLOAT8_B: {
-            auto data_ptr = reinterpret_cast<float *>(py_data_ptr);
-            auto data = std::vector<float>(data_ptr, data_ptr + num_elements);
-            auto buffer = owned_buffer::create<float>(std::move(data));
-            auto tile = optional_tile.value_or(Tile());
-            auto tensor = Tensor(OwnedStorage{buffer}, shape, DataType::FLOAT32, Layout::ROW_MAJOR, optional_tile)
-                              .to(Layout::TILE);
-            auto output_float_data = owned_buffer::get_as<float>(tensor).get();
-            auto output_packed_data = pack_fp32_vec_as_bfp8_tiles(
-                output_float_data, /*row_major_input=*/false, /*is_exp_a=*/false, tile);
-            auto output_buffer = owned_buffer::create<uint32_t>(std::move(output_packed_data));
-            return Tensor(
-                std::move(OwnedStorage{std::move(output_buffer)}), shape, data_type, Layout::TILE, tile);
-        }
+        case DataType::BFLOAT8_B:
         case DataType::BFLOAT4_B: {
             auto data_ptr = reinterpret_cast<float *>(py_data_ptr);
             auto data = std::vector<float>(data_ptr, data_ptr + num_elements);
@@ -169,8 +209,10 @@ Tensor create_tt_tensor_from_py_data(
             auto tensor = Tensor(OwnedStorage{buffer}, shape, DataType::FLOAT32, Layout::ROW_MAJOR, optional_tile)
                               .to(Layout::TILE);
             auto output_float_data = owned_buffer::get_as<float>(tensor).get();
-            auto output_packed_data = pack_fp32_vec_as_bfp4_tiles(
-                output_float_data, /*row_major_input=*/false, /*is_exp_a=*/false, tile);
+            auto output_packed_data =
+                data_type == DataType::BFLOAT8_B
+                    ? pack_fp32_vec_as_bfp8_tiles(output_float_data, /*row_major_input=*/false, /*is_exp_a=*/false, tile)
+                    : pack_fp32_vec_as_bfp4_tiles(output_float_data, /*row_major_input=*/false, /*is_exp_a=*/false, tile);
             auto output_buffer = owned_buffer::create<uint32_t>(std::move(output_packed_data));
             return Tensor(
                 std::move(OwnedStorage{std::move(output_buffer)}), shape, data_type, Layout::TILE, tile);
@@ -374,32 +416,6 @@ Tensor convert_python_tensors_to_tt_tensors(
     return output;
 }
 
-OwnedBuffer create_owned_buffer_from_vector_of_floats(std::vector<float> &&data, DataType data_type) {
-    switch (data_type) {
-        case DataType::BFLOAT8_B: {
-            auto uint32_vector = pack_fp32_vec_as_bfp8_tiles(data, /*row_major_input=*/false, /*is_exp_a=*/false);
-            return owned_buffer::create<uint32_t>(std::move(uint32_vector));
-        }
-        case DataType::BFLOAT4_B: {
-            auto uint32_vector = pack_fp32_vec_as_bfp4_tiles(data, /*row_major_input=*/false, /*is_exp_a=*/false);
-            return owned_buffer::create<uint32_t>(std::move(uint32_vector));
-        }
-        case DataType::FLOAT32: {
-            return owned_buffer::create<float>(std::move(data));
-        }
-        case DataType::BFLOAT16: {
-            std::vector<::bfloat16> bfloat16_data(data.size());
-            std::transform(std::begin(data), std::end(data), std::begin(bfloat16_data), [](float value) {
-                return ::bfloat16(value);
-            });
-            return owned_buffer::create<::bfloat16>(std::move(bfloat16_data));
-        }
-        default: {
-            TT_THROW("Cannot create a host buffer!");
-        }
-    }
-}
-
 std::pair<std::variant<OwnedBuffer, BorrowedBuffer>, DataType> get_buffer_and_dtype_from_tensor(const Tensor &tt_tensor) {
     TT_ASSERT(tt_tensor.storage_type() == StorageType::OWNED or tt_tensor.storage_type() == StorageType::BORROWED);
 
@@ -426,34 +442,16 @@ std::pair<std::variant<OwnedBuffer, BorrowedBuffer>, DataType> get_buffer_and_dt
 
     const auto tile = tt_tensor.get_tensor_spec().tile();
     auto tt_dtype = tt_tensor.get_dtype();
-    if (tt_dtype == DataType::BFLOAT8_B) {
+    if (tt_dtype == DataType::BFLOAT8_B || tt_dtype == DataType::BFLOAT4_B) {
         TT_ASSERT(
             std::holds_alternative<OwnedBuffer>(buffer),
             "Unexpected type {}",
             tt::stl::get_active_type_name_in_variant(buffer));
         auto uint32_data = std::get<owned_buffer::Buffer<std::uint32_t>>(std::get<OwnedBuffer>(buffer)).get();
         auto float_unpacked_data =
-            unpack_bfp8_tiles_into_float_vec(uint32_data, /*row_major_output=*/false, /*is_exp_a=*/false, tile);
-        auto input_float_buffer = owned_buffer::create<float>(std::move(float_unpacked_data));
-        auto float_tensor = Tensor(
-                                OwnedStorage{input_float_buffer},
-                                tt_tensor.get_shape(),
-                                DataType::FLOAT32,
-                                tt_tensor.get_layout(),
-                                tile)
-                                .to(Layout::ROW_MAJOR);
-        auto output_float_data = owned_buffer::get_as<float>(float_tensor).get();
-        buffer = owned_buffer::create<float>(std::move(output_float_data));
-        tt_dtype = DataType::FLOAT32;
-    }
-    if (tt_dtype == DataType::BFLOAT4_B) {
-        TT_ASSERT(
-            std::holds_alternative<OwnedBuffer>(buffer),
-            "Unexpected type {}",
-            tt::stl::get_active_type_name_in_variant(buffer));
-        auto uint32_data = std::get<owned_buffer::Buffer<std::uint32_t>>(std::get<OwnedBuffer>(buffer)).get();
-        auto float_unpacked_data =
-            unpack_bfp4_tiles_into_float_vec(uint32_data, /*row_major_output=*/false, /*is_exp_a=*/false, tile);
+            tt_dtype == DataType::BFLOAT8_B
+                ? unpack_bfp8_tiles_into_float_vec(uint32_data, /*row_major_output=*/false, /*is_exp_a=*/false, tile)
+                : unpack_bfp4_tiles_into_float_vec(uint32_data, /*row_major_output=*/false, /*is_exp_a=*/false, tile);
         auto input_float_buffer = owned_buffer::create<float>(std::move(float_unpacked_data));
         auto float_tensor = Tensor(
                                 OwnedStorage{input_float_buffer},
@@ -674,10 +672,7 @@ void pytensor_module(py::module &m_tensor) {
                           const std::array<uint32_t, 4> &shape,
                           DataType data_type,
                           Layout layout,
-                          const std::optional<Tile> &tile) {
-                auto owned_buffer = detail::create_owned_buffer_from_vector_of_floats(std::move(data), data_type);
-                return Tensor(OwnedStorage{owned_buffer}, shape, data_type, layout, tile);
-            }),
+                          const std::optional<Tile> &tile) { return detail::convert_float_vector_to_tt_tensor(std::move(data), shape, data_type, layout, std::nullopt, std::nullopt, tile); }),
             py::arg("data"),
             py::arg("shape"),
             py::arg("data_type"),
@@ -715,11 +710,7 @@ void pytensor_module(py::module &m_tensor) {
                           DataType data_type,
                           Layout layout,
                           Device *device,
-                          const std::optional<Tile> &tile) {
-                auto owned_buffer = detail::create_owned_buffer_from_vector_of_floats(std::move(data), data_type);
-                auto tensor = Tensor(OwnedStorage{owned_buffer}, shape, data_type, layout, tile);
-                return tensor.to(device, MemoryConfig{});
-            }),
+                          const std::optional<Tile> &tile) { return detail::convert_float_vector_to_tt_tensor(std::move(data), shape, data_type, layout, device, std::nullopt, tile); }),
             py::keep_alive<1, 6>(),
             py::arg("data"),
             py::arg("shape"),
@@ -769,11 +760,7 @@ void pytensor_module(py::module &m_tensor) {
                           Layout layout,
                           Device *device,
                           const MemoryConfig &memory_config,
-                          const std::optional<Tile> &tile) {
-                auto owned_buffer = detail::create_owned_buffer_from_vector_of_floats(std::move(data), data_type);
-                auto tensor = Tensor(OwnedStorage{owned_buffer}, shape, data_type, layout, tile);
-                return tensor.to(device, memory_config);
-            }),
+                          const std::optional<Tile> &tile) { return detail::convert_float_vector_to_tt_tensor(std::move(data), shape, data_type, layout, device, memory_config, tile); }),
             py::keep_alive<1, 7>(),
             py::arg("data"),
             py::arg("shape"),
