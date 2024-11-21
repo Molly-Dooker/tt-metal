@@ -131,6 +131,14 @@ uint32_t get_num_cores_nhw_from_parallel_config(const sliding_window::ParallelCo
 
 uint32_t get_num_cores_channels_from_parallel_config(const sliding_window::ParallelConfig& pconfig);
 
+ttnn::operations::matmul::MatmulProgramConfig determine_matmul_op_config_from_conv_op_config(
+    OptimizedConvParallelizationConfig conv_parallelization_config,
+    OptimizedConvBlockConfig conv_blocking_config,
+    bool height_sharded,
+    string activation,
+    bool transpose_mcast,
+    uint32_t grid_size_along_c);
+
 MemoryConfig create_sharded_memory_config_from_parallel_config(const ttnn::Shape& tensor_shape, sliding_window::ParallelConfig& parallel_config, uint32_t tile_size);
 
 OptimizedConvParallelizationConfig determine_conv_op_parallel_config_from_conv_output_mem_config(
