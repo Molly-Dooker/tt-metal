@@ -273,7 +273,6 @@ Result conv_transpose2d(
                 input_width);
         }
         if(mm_conv) {
-            log_warning(LogOp, "Running conv_transpose2d via Matmul");
             // run conv as matmul
             uint32_t num_cores_c = conv2d::get_num_cores_channels_from_parallel_config(parallel_config);
             auto matmul_program_config = conv2d::determine_matmul_op_config_from_conv_op_config(
