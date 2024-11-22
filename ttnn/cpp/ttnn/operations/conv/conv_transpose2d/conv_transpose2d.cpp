@@ -118,6 +118,12 @@ Result conv_transpose2d(
             .is_transpose = true
         };
 
+
+        // ConvTranspose2d is implemented via the Conv2d u_op with flipped weights.
+        //The input tensor is first passed to the halo op that paddeds the input.
+        //In the scenario, where stride > 1, the halo op will add interleaved 0s to the input tensor.
+        //The Conv2d u_op is then called with stride = 1, padding = 0.
+        //SlidingWindowConfig has a is_transpose flag that is set to true to indicate that the Conv2d u_op & Halo u_op is being called for ConvTranspose2d.
         uint32_t output_height = (input_height - 1) * stride[0] - 2 * padding[0] + dilation[0] * (kernel_size[0] - 1) + output_padding[0] + 1;
         uint32_t output_width  = (input_width  - 1) * stride[1] - 2 * padding[1] + dilation[1] * (kernel_size[1] - 1) + output_padding[1] + 1;
 
