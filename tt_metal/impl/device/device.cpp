@@ -9,6 +9,7 @@
 #include "tt_metal/impl/device/device.hpp"
 #include "tt_metal/impl/trace/trace.hpp"
 #include "tt_metal/impl/lightmetal/lightmetal.hpp"
+#include "tt_metal/impl/lightmetal/lightmetal_replay.hpp"
 #include "tt_metal/common/core_descriptor.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "tt_metal/detail/tt_metal.hpp"

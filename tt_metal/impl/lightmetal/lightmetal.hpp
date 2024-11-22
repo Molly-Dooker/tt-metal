@@ -47,14 +47,5 @@ std::vector<std::uint8_t> createLightMetalBinary(LightMetalTrace& light_metal_tr
 // Write an arbitrary binary blob to file.
 bool writeBinaryBlobToFile(const std::string& filename, const std::vector<uint8_t>& blob);
 
-// Convert from Flatbuffer TraceDescriptor to C++ struct
-detail::TraceDescriptor fromFlatBuffer(const tt::target::lightmetal::TraceDescriptor* fb_desc);
-
-// Read an arbitrary binary blob from file.
-std::vector<uint8_t> readBinaryBlobFromFile(const std::string& filename);
-
-// Deserialize a specific trace by trace_id.
-std::optional<detail::TraceDescriptor> getTraceByTraceId(const std::string& filename, uint32_t target_trace_id);
-
 }  // namespace v0
 }  // namespace tt::tt_metal

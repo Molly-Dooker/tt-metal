@@ -13,8 +13,10 @@ int main(int argc, char* argv[]) {
     TT_FATAL(argc == 2, "Invalid number of supplied arguments. Usage: ./lightmetal_runner <binary_file>");
     std::string filename = argv[1];
 
-    // Execute the contents of the light metal binary.
-    bool failed = tt::tt_metal::executeLightMetalBinary(filename);
+    // Read the binary file into blob, and execute the Light Metal binary blob.
+    std::vector<uint8_t> binary_blob;
+    tt::tt_metal::readBinaryBlobFromFile(filename, binary_blob);
+    bool failed = tt::tt_metal::executeLightMetalBinary(binary_blob);
 
     if (failed) {
         log_fatal("Binary {} failed to execute or encountered errors.", filename);
