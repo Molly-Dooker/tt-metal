@@ -57,7 +57,7 @@ def get_batch_sampler(temperature, top_p, tokenizer):
     return sample
 
 
-def create_multimodal_model(mesh_device, max_batch_size, max_seq_len, dtype=ttnn.bfloat16):
+def create_multimodal_model(mesh_device, max_batch_size, max_seq_len, dtype=ttnn.bfloat16, vllm=False):
     from models.demos.llama3.tt.multimodal.llama_vision_model import CrossAttentionTransformer
     from models.demos.llama3.tt.model_config import TtModelArgs
 
@@ -73,6 +73,7 @@ def create_multimodal_model(mesh_device, max_batch_size, max_seq_len, dtype=ttnn
         weight_cache_path=tt_model_args.weight_cache_path(dtype),
         dtype=dtype,
         configuration=tt_model_args,
+        vllm=vllm,
     )
     return tt_model_args, model
 

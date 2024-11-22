@@ -128,6 +128,7 @@ class CrossAttentionTransformer(torch.nn.Module):
         weight_cache_path,
         dtype,
         configuration,
+        vllm=False,
     ) -> None:
         super().__init__()
 
@@ -159,6 +160,7 @@ class CrossAttentionTransformer(torch.nn.Module):
             weight_cache_path=configuration.weight_cache_path(ttnn.bfloat8_b),
             dtype=ttnn.bfloat8_b,
             configuration=configuration,
+            vllm=vllm,
         )
         self.image_res = configuration.vision_chunk_size
         self.max_num_chunks = configuration.vision_max_num_chunks
@@ -279,13 +281,14 @@ class CrossAttentionTransformer(torch.nn.Module):
         h = self.text_model.get_partially_trainable_embedding(tokens)
         return h
 
-    def prepare_inputs_prefill(self, tokens, cross_attention_masks, full_text_row_masked_out_mask, prefill_len):
+    def prepare_inputs_prefill(
+        self, tokens, cross_attention_masks, full_text_row_masked_out_mask, padded_seq_len, page_table=None
+    ):
         B = tokens.shape[0]
         assert B == 1, f"Only batch 1 is supported, got {B}"
         S = tokens.shape[1]
         position_ids = torch.arange(S, dtype=torch.long)
         h = self.prepare_inputs_common(position_ids, tokens)
-        padded_seq_len = _get_padded_prefill_seqlen(S)
 
         tt_position_id = ttnn.from_torch(
             position_ids,
@@ -359,6 +362,17 @@ class CrossAttentionTransformer(torch.nn.Module):
             mesh_mapper=ttnn.ShardTensorToMesh(self.mesh_device, dim=-1),
         )
 
+        if isinstance(page_table, torch.Tensor):
+            # Support vLLM tensor page_table input
+            page_table = ttnn.as_tensor(
+                page_table,
+                device=self.mesh_device,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                dtype=ttnn.int32,
+                layout=ttnn.ROW_MAJOR_LAYOUT,
+                mesh_mapper=ttnn.ReplicateTensorToMesh(self.mesh_device),
+            )
+
         return (
             tt_h,
             tt_xattn_mask,
@@ -367,16 +381,22 @@ class CrossAttentionTransformer(torch.nn.Module):
             tt_position_id,
             rot_mats,
             # transformation_mats,
+            page_table,
         )
 
-    def prepare_inputs_decode(self, tokens, cross_attention_masks, full_text_row_masked_out_mask, position_id):
+    def prepare_inputs_decode(
+        self, tokens, cross_attention_masks, full_text_row_masked_out_mask, position_id, page_table=None
+    ):
         (
             tt_h,
             tt_xattn_mask,
             tt_full_text_mask_expand_1NSH,
             tt_position_id,
             tt_rope_id,
-        ) = self.prepare_decode_inputs_host(tokens, cross_attention_masks, full_text_row_masked_out_mask, position_id)
+            tt_page_table,
+        ) = self.prepare_decode_inputs_host(
+            tokens, cross_attention_masks, full_text_row_masked_out_mask, position_id, page_table=page_table
+        )
 
         (
             tt_h,
@@ -384,7 +404,10 @@ class CrossAttentionTransformer(torch.nn.Module):
             tt_full_text_mask_expand_1NSH,
             tt_position_id,
             tt_rope_id,
-        ) = self.copy_host_to_device((tt_h, tt_xattn_mask, tt_full_text_mask_expand_1NSH, tt_position_id, tt_rope_id))
+            tt_page_table,
+        ) = self.copy_host_to_device(
+            (tt_h, tt_xattn_mask, tt_full_text_mask_expand_1NSH, tt_position_id, tt_rope_id, tt_page_table)
+        )
 
         tt_rot_mats, tt_xattn_mask, tt_full_text_mask_expand_1NSH = self.transform_decode_inputs_device(
             tt_rope_id,
@@ -399,9 +422,12 @@ class CrossAttentionTransformer(torch.nn.Module):
             tt_full_text_mask_expand_1NSH,
             tt_position_id,
             tt_rot_mats,
+            tt_page_table,
         )
 
-    def prepare_decode_inputs_host(self, tokens, cross_attention_masks, full_text_row_masked_out_mask, position_ids):
+    def prepare_decode_inputs_host(
+        self, tokens, cross_attention_masks, full_text_row_masked_out_mask, position_ids, page_table=None
+    ):
         B = tokens.shape[0]
         assert (
             B == self.configuration.max_batch_size
@@ -461,6 +487,15 @@ class CrossAttentionTransformer(torch.nn.Module):
 
         # transformation_mats = None
 
+        if isinstance(page_table, torch.Tensor):
+            # Support vLLM tensor page_table input
+            page_table = ttnn.as_tensor(
+                page_table,
+                dtype=ttnn.int32,
+                layout=ttnn.ROW_MAJOR_LAYOUT,
+                mesh_mapper=ttnn.ReplicateTensorToMesh(self.mesh_device),
+            )
+
         return (
             tt_h,
             tt_xattn_mask,
@@ -469,6 +504,7 @@ class CrossAttentionTransformer(torch.nn.Module):
             tt_rope_id,
             # rot_mats,
             # transformation_mats,
+            page_table,
         )
 
     def copy_host_to_device(self, host_tensors, device_tensors=None):
@@ -478,7 +514,7 @@ class CrossAttentionTransformer(torch.nn.Module):
         if device_tensors is None:
             ret = []
             for i in range(len(host_tensors)):
-                on_device = ttnn.to_device(host_tensors[i], device=self.mesh_device)
+                on_device = ttnn.to_device(host_tensors[i], device=self.mesh_device) if host_tensors[i] else None
                 ret.append(on_device)
             return ret
         else:
@@ -532,7 +568,7 @@ class CrossAttentionTransformer(torch.nn.Module):
         return (tt_rot_mats, tt_xattn_mask, tt_full_text_mask_expand_1NSH)
 
     def process_output_prefill(self, tt_out, B, S):
-        padded_seq_len = _get_padded_prefill_seqlen(S)
+        padded_seq_len = self.get_padded_prefill_seqlen(S)
         tt_out = ttnn.to_torch(ttnn.get_device_tensors(tt_out)[0]).float()
         tt_out = tt_out[0].reshape(B, padded_seq_len, -1)[:, :S, :]
         return tt_out
@@ -552,6 +588,8 @@ class CrossAttentionTransformer(torch.nn.Module):
         text_only_inference: bool = False,
         user_id=0,
         vision_tokens=None,
+        page_table=None,
+        kv_cache=None,
     ) -> torch.Tensor:
         """
         This method takes torch tensors in, returns torch tensors.
@@ -572,11 +610,13 @@ class CrossAttentionTransformer(torch.nn.Module):
             tt_position_id,
             rot_mats,
             transformation_mats,
+            tt_page_table,
         ) = prepare_fn(
             tokens,
             cross_attention_masks,
             full_text_row_masked_out_mask,
             pos_arg,
+            page_table=page_table,
         )
 
         logits = self.text_model.forward(
@@ -590,6 +630,8 @@ class CrossAttentionTransformer(torch.nn.Module):
             transformation_mats=transformation_mats,
             user_id=user_id,
             mode=mode,
+            page_table=tt_page_table,
+            kv_cache=kv_cache,
             text_only_inference=text_only_inference,
             vision_tokens=vision_tokens,
         )
@@ -609,6 +651,8 @@ class CrossAttentionTransformer(torch.nn.Module):
         rot_mats,
         user_id,
         vision_tokens,
+        page_table=None,
+        kv_cache=None,
     ):
         """
         This method runs prefill forward. It takes ttnn tensors in, returns ttnn tensors.
@@ -624,6 +668,8 @@ class CrossAttentionTransformer(torch.nn.Module):
             transformation_mats=None,  # Attention holds its own trans mats
             user_id=user_id,
             mode="prefill",
+            page_table=page_table,
+            kv_cache=kv_cache,
             vision_tokens=vision_tokens,
         )
         tt_out = ttnn.to_layout(logits, ttnn.ROW_MAJOR_LAYOUT)
@@ -637,6 +683,8 @@ class CrossAttentionTransformer(torch.nn.Module):
         xattn_caches,
         position_id,
         rot_mats,
+        page_table=None,
+        kv_cache=None,
     ):
         """
         This method runs decode forward. It takes ttnn tensors in, returns ttnn tensors.
@@ -650,9 +698,23 @@ class CrossAttentionTransformer(torch.nn.Module):
             current_pos=position_id,
             rot_mats=rot_mats,
             mode="decode",
+            page_table=page_table,
+            kv_cache=kv_cache,
         )
         tt_out = ttnn.to_layout(logits, ttnn.ROW_MAJOR_LAYOUT)
         return tt_out
+
+    def get_padded_prefill_seqlen(self, seq_len):
+        """
+        If seq_len is less than 128, pad to 128
+        If seq_len is more than 128, pad to whichever is smaller: a power of 2 or a multiple of 1024
+        """
+        if seq_len < 128:
+            return 128
+        else:
+            mult_1024 = 1024 * math.ceil(seq_len / 1024)
+            pow_2 = 2 ** math.ceil(math.log2(seq_len))
+            return min(mult_1024, pow_2)
 
 
 def _stack_images(
@@ -712,16 +774,3 @@ def _pad_masks(
                 out_masks[idx, mask_elem[0] : mask_elem[1], mask_idx, :mask_num_chunks].fill_(0.0)
 
     return out_masks
-
-
-def _get_padded_prefill_seqlen(seq_len):
-    """
-    If seq_len is less than 128, pad to 128
-    If seq_len is more than 128, pad to whichever is smaller: a power of 2 or a multiple of 1024
-    """
-    if seq_len < 128:
-        return 128
-    else:
-        mult_1024 = 1024 * math.ceil(seq_len / 1024)
-        pow_2 = 2 ** math.ceil(math.log2(seq_len))
-        return min(mult_1024, pow_2)

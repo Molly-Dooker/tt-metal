@@ -20,6 +20,7 @@ class TtTransformerBlock(LightweightModule):
         weight_cache_path,
         transformation_mats,
         paged_attention_config=None,
+        vllm=False,
     ):
         super().__init__()
 
@@ -49,6 +50,7 @@ class TtTransformerBlock(LightweightModule):
             transformation_mats=transformation_mats,
             configuration=args,
             paged_attention_config=paged_attention_config,
+            vllm=vllm,
         )
         self.feed_forward = TtLlamaMLP(
             mesh_device=mesh_device,
@@ -99,6 +101,7 @@ class TtTransformerBlock(LightweightModule):
         user_id=0,
         mode="decode",
         page_table=None,
+        kv_cache=None,
     ) -> ttnn.Tensor:
         # x is fractured across devices and interleaved in DRAM (for prefill) and L1 (for decode)
         # FIXME: move to sharded residuals once support for this is added
@@ -118,7 +121,8 @@ class TtTransformerBlock(LightweightModule):
             transformation_mats,
             user_id,
             mode,
-            page_table,
+            page_table=page_table,
+            kv_cache=kv_cache,
         )
 
         # Here x and attn_out are both fractured across devices

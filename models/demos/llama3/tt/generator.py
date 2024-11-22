@@ -44,11 +44,10 @@ class LlamaGenerator:
         self.model = model
         self.model_args = model_args
         self.mesh_device = mesh_device
-        self.vllm = vllm
         self.tokenizer = tokenizer
         self.formatter = formatter
 
-        if self.vllm:
+        if vllm:
             # TODO: if possible, obtain these from llama3 api since tokenizer is None
             self.vision_token = 128256
 
@@ -57,7 +56,7 @@ class LlamaGenerator:
         from models.demos.llama3.demo.simple_vision_demo import create_multimodal_model
 
         max_seq_len = 512  # TODO: Increase to 131072 once it's verified to work
-        model_args, model = create_multimodal_model(mesh_device, max_batch_size, max_seq_len)
+        model_args, model = create_multimodal_model(mesh_device, max_batch_size, max_seq_len, vllm=True)
         return cls(model, model_args, mesh_device, vllm=True)
 
     @property
@@ -203,6 +202,8 @@ class LlamaGenerator:
         user_id,
         total_len,
         prefill_len,
+        page_table=None,
+        kv_cache=None,
     ):
         """
         Performs vision encode step then text prefill.
@@ -215,6 +216,17 @@ class LlamaGenerator:
             total_len=total_len,
         )
 
+        padded_seq_len = self.model.get_padded_prefill_seqlen(prefill_len)
+
+        if page_table is not None:
+            block_size = get_block_size(kv_cache)
+            num_padding_blocks = num_blocks_in_seq(padded_seq_len, block_size) - num_blocks_in_seq(
+                prefill_len, block_size
+            )
+            page_table = torch.cat(
+                [page_table, torch.zeros(page_table.shape[0], num_padding_blocks, dtype=torch.int32)], dim=-1
+            )
+
         (
             tt_h,
             tt_xattn_mask,
@@ -222,8 +234,13 @@ class LlamaGenerator:
             tt_full_text_mask_expand_11SD,
             tt_position_id,
             rot_mats,
+            tt_page_table,
         ) = self.model.prepare_inputs_prefill(
-            tokens, cross_attention_masks, full_text_row_masked_out_mask, prefill_len=prefill_len
+            tokens,
+            cross_attention_masks,
+            full_text_row_masked_out_mask,
+            padded_seq_len=padded_seq_len,
+            page_table=page_table,
         )
 
         tt_logits = self.model.ttnn_prefill_forward(
@@ -236,7 +253,11 @@ class LlamaGenerator:
             rot_mats,
             user_id,
             vision_tokens,
+            page_table=tt_page_table,
+            kv_cache=kv_cache,
         )
+
+        del tt_page_table
 
         logits = self.model.process_output_prefill(tt_logits, B, prefill_len)
 
@@ -249,7 +270,7 @@ class LlamaGenerator:
         images: List[PIL.Image.Image],
         xattn_caches,
         start_pos,
-        page_table=None,
+        page_table: torch.Tensor = None,
         kv_cache=None,
         prompt_lens=None,
     ):
@@ -269,7 +290,7 @@ class LlamaGenerator:
             prompt_tokens = [int(tokens[user_id, i]) for i in range(prompt_lens[user_id])]
             vision_mask = create_vision_mask(prompt_tokens, self.vision_token)
 
-            prefill_len = len(prompt_tokens)
+            prefill_len = prompt_lens[user_id]
             total_len = prefill_len + max_gen_len  # Prepares mask for full length of output
             prompt_tokens_tensor = torch.tensor(prompt_tokens, dtype=torch.long).reshape(1, -1)  # B, S
 
@@ -286,6 +307,8 @@ class LlamaGenerator:
                 user_id=user_id,
                 total_len=total_len,
                 prefill_len=prefill_len,
+                page_table=page_table,
+                kv_cache=kv_cache,
             )
 
             cross_attention_masks_out.append(cross_attention_masks)
@@ -356,8 +379,9 @@ class LlamaGenerator:
             tt_full_text_mask_expand_1NSH,
             tt_position_id,
             tt_rot_mats,
+            tt_page_table,
         ) = self.model.prepare_inputs_decode(
-            tokens, cross_attention_masks, full_text_row_masked_out_mask, position_id=start_pos
+            tokens, cross_attention_masks, full_text_row_masked_out_mask, position_id=start_pos, page_table=page_table
         )
 
         tt_logits = self.model.ttnn_decode_forward(
@@ -367,6 +391,8 @@ class LlamaGenerator:
             xattn_caches,
             tt_position_id,
             tt_rot_mats,
+            page_table=tt_page_table,
+            kv_cache=kv_cache,
         )
 
         logits = self.model.process_output_decode(tt_logits, B, S)
@@ -389,6 +415,7 @@ class LlamaGenerator:
             tt_full_text_mask_expand_1NSH,
             tt_position_id,
             tt_rot_mats,
+            tt_page_table,
         ) = self.model.prepare_inputs_decode(
             tokens, cross_attention_masks, full_text_row_masked_out_mask, position_id=position_id
         )
