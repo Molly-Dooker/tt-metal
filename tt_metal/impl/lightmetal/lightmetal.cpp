@@ -41,8 +41,16 @@ std::vector<uint8_t> createLightMetalBinary(LightMetalTrace& light_metal_trace) 
         log_info(tt::LogMetal, "KCM {} for trace_id: {}", __FUNCTION__, trace_id);
     }
 
+    // Add a dummy command for illustrative purposes here. This function will be EOL'd soon.
+    std::vector<flatbuffers::Offset<tt::target::Command>> command_vec;
+    auto replay_trace = tt::target::CreateReplayTrace(builder, /*cq_id=*/1, /*tid=*/42, /*blocking=*/true);
+    auto replay_command = tt::target::CreateCommand(builder, tt::target::CommandUnion::CommandUnion_ReplayTrace, replay_trace.Union());
+    command_vec.emplace_back(replay_command);
+
+    // Create the LigtMetalBinary
     auto sorted_trace_descriptors = builder.CreateVectorOfSortedTables(&trace_desc_vec);
-    auto light_metal_binary = CreateLightMetalBinary(builder, sorted_trace_descriptors);
+    auto commands_vector = builder.CreateVector(command_vec);
+    auto light_metal_binary = CreateLightMetalBinary(builder, commands_vector, sorted_trace_descriptors);
     builder.Finish(light_metal_binary);
 
     const uint8_t* buffer_ptr = builder.GetBufferPointer();

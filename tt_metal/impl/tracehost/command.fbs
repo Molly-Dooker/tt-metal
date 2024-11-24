@@ -1,0 +1,27 @@
+// Define schema for tracing host API calls, called Commands in this context.
+
+namespace tt.target;
+
+table ReplayTrace {
+    // FIXME Device.
+    cq_id: int;
+    tid: int;
+    blocking: bool;
+}
+
+table EnqueueTrace {
+    // FIXME Device.
+    cq_id: int;
+    tid: int;
+    blocking: bool;
+}
+
+union CommandUnion {
+    ReplayTrace,
+    EnqueueTrace
+    // EnqueueWriteBuffer
+}
+
+table Command {
+    cmd: CommandUnion;
+}

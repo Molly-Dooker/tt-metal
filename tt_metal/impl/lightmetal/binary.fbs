@@ -1,3 +1,5 @@
+include "tracehost/command.fbs";
+
 namespace tt.target.lightmetal;
 
 // Matches C++ struct detail::TraceDescriptor
@@ -19,6 +21,7 @@ table LightMetalBinary {
     // TODO - Git Hash, Versioning, etc.
     // TODO - Commands
     // TODO - Programs
+    commands: [tt.target.Command];
     trace_descriptors: [TraceDescriptorByTraceId];  // Metal "Traces"
 }
 
