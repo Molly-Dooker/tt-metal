@@ -749,3 +749,4 @@ inline void dbg_instrn_buf_clear_override_en() {
 
 extern "C" void wzerorange(uint32_t* start, uint32_t* end);
 inline void wzeromem(uint32_t start, uint32_t len) { wzerorange((uint32_t*)start, (uint32_t*)(start + len)); }
+void l1_to_local_mem_copy(uint32_t* dst, uint32_t __attribute__((rvtt_l1_ptr))* src, int32_t len);
