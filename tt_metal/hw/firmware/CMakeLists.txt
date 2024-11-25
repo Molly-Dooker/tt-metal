@@ -9,90 +9,100 @@ set(PROCS
     trisc0
     trisc1
     trisc2
-    ierisc
-    slave_ierisc
+    erisc
+    idle_erisc
+    slave_idle_erisc
 )
-set(TYPES firmware)
 
 include(FetchContent)
 FetchContent_Declare(
     sfpi
     URL
-        https://github.com/tenstorrent/sfpi/releases/download/v5.0.0/sfpi-release.tgz
-    URL_HASH MD5=10cacabe92846076cb4d7596e46d06be
+        https://github.com/tenstorrent/sfpi/releases/download/v6.0.0/sfpi-release.tgz
+    URL_HASH MD5=d837d26a2312d27815179995fdea83bd
     SOURCE_DIR
     ${PROJECT_SOURCE_DIR}/runtime/sfpi
 )
 FetchContent_MakeAvailable(sfpi)
 
-foreach(ARCH IN LISTS ARCHS)
-    set(FW_INCLUDES "${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}")
-    set(FW_OUTPUT_DIR "${PROJECT_SOURCE_DIR}/runtime/hw/firmware/${ARCH}")
-    foreach(PROC IN LISTS PROCS)
-        foreach(TYPE IN LISTS TYPES)
-            set(FW_OUTPUT_FILE "${FW_OUTPUT_DIR}/${TYPE}_${PROC}.ld")
-            #string(TOUPPER ${PROC} PROC_DEFINE)
-            #string(TOUPPER ${TYPE} TYPE_DEFINE)
+# Function appends b0 if its wormhole
+function(get_alias INPUT_STRING OUTPUT_VAR)
+    if("${INPUT_STRING}" STREQUAL "wormhole")
+        set(${OUTPUT_VAR} "wormhole_b0" PARENT_SCOPE)
+    else()
+        set(${OUTPUT_VAR} "${INPUT_STRING}" PARENT_SCOPE)
+    endif()
+endfunction()
 
-            # custom command to preprocess/generate the output file
-            add_custom_command(
-                OUTPUT
-                    ${FW_OUTPUT_FILE}
-                COMMAND
-                    ${CMAKE_COMMAND} -E make_directory ${FW_OUTPUT_DIR}
-                COMMAND
-                    ${CMAKE_CXX_COMPILER} -DLD_TARGET=${PROC_DEFINE} -DLD_TYPE=${TYPE_DEFINE} -DTARGET_${PROC_DEFINE}
-                    -DTYPE_${TYPE_DEFINE} -DCOMPILE_FOR_${PROC_DEFINE} -I${FW_INCLUDES} -E -P -x c -o ${FW_OUTPUT_FILE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/main.ld
-                DEPENDS
-                    ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/main.ld
-                    ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/memory.ld
-                    ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/sections.ld
-                    ${DEV_MEM_MAP}
-                COMMENT "Preprocessing toolchain/${PROC}.ld"
-                VERBATIM
-            )
-
-            # add output file to the custom target
-            list(APPEND PREPROCESSED_LD_FILES ${FW_OUTPUT_FILE})
-        endforeach()
-    endforeach()
-endforeach()
-
-# Set project name
-project(FirmwareProject)
-
-# Define the toolchain file for cross-compiling (make sure to replace with your specific toolchain file)
-# Example: toolchain-arm-none-eabi.cmake (This is specific for ARM Cortex-M)
-#set(CMAKE_TOOLCHAIN_FILE "${CMAKE_SOURCE_DIR}/toolchain-arm-none-eabi.cmake")
-
-# Specify the MCU (example for STM32, change this for your specific MCU)
-#set(MCU "STM32F407VG")
+function(get_source INPUT_STRING OUTPUT_VAR)
+    string(FIND "${INPUT_STRING}" "trisc" substring_found)
+    if(substring_found EQUAL "-1")
+        set(${OUTPUT_VAR} "${INPUT_STRING}" PARENT_SCOPE)
+    else()
+        set(${OUTPUT_VAR} "trisc" PARENT_SCOPE)
+    endif()
+endfunction()
 
 # Define the compiler command
 set(GPP_CMD ${PROJECT_SOURCE_DIR}/runtime/sfpi/compiler/bin/riscv32-unknown-elf-g++)
 
-set(GPP_DEFINES -DTENSIX_FIRMWARE)
+set(GPP_DEFINES_common
+    -DTENSIX_FIRMWARE
+    -DPCIE_NOC1_X=9
+    -DPCIE_NOC1_Y=6
+    -DPCIE_NOC_X=0
+    -DPCIE_NOC_Y=3
+    -DLOCAL_MEM_EN=0
+    -DFW_BUILD
+    -DDISPATCH_MESSAGE_ADDR=99152
+)
+set(GPP_DEFINES_grayskull
+    -DARCH_GRAYSKULL
+    -DLOG_BASE_2_OF_NUM_DRAM_BANKS=3
+    -DLOG_BASE_2_OF_NUM_L1_BANKS=7
+    -DNUM_DRAM_BANKS=8
+    -DNUM_L1_BANKS=128
+)
+set(GPP_DEFINES_wormhole
+    -DARCH_WORMHOLE
+    -DLOG_BASE_2_OF_NUM_DRAM_BANKS=3
+    -DLOG_BASE_2_OF_NUM_L1_BANKS=7
+    -DNUM_DRAM_BANKS=8
+    -DNUM_L1_BANKS=128
+)
+set(GPP_DEFINES_blackhole
+    -DARCH_BLACKHOLE
+    -DLOG_BASE_2_OF_NUM_DRAM_BANKS=3
+    -DLOG_BASE_2_OF_NUM_L1_BANKS=7
+    -DNUM_DRAM_BANKS=8
+    -DNUM_L1_BANKS=128
+)
+set(GPP_DEFINES_brisc -DCOMPILE_FOR_BRISC)
+set(GPP_DEFINES_ncrisc -DCOMPILE_FOR_BRISC)
+set(GPP_DEFINES_trisc0 -DCOMPILE_FOR_TRISC=0)
+set(GPP_DEFINES_trisc1 -DCOMPILE_FOR_TRISC=1)
+set(GPP_DEFINES_trisc2 -DCOMPILE_FOR_TRISC=2)
+set(GPP_DEFINES_erisc
+    -DCOMPILE_FOR_ERISC
+    -DERISC
+    -DRISC_B0_HW
+)
+set(GPP_DEFINES_idle_erisc
+    -DCOMPILE_FOR_IDLE_ERISC=0
+    -DERISC
+    -DRISC_B0_HW
+)
+set(GPP_DEFINES_slave_idle_erisc
+    -DCOMPILE_FOR_IDLE_ERISC=1
+    -DERISC
+    -DRISC_B0_HW
+)
 
-#set(CMAKE_C_FLAGS "-mcpu=cortex-m4 -mthumb -std=c99 -Wall -Wextra")
-set(GPP_FLAGS_grayskull
-    -mgrayskull
-    -march=rv32iy
-    -mtune=rvtt-b1
-    -mabi=ilp32
-)
-set(GPP_FLAGS_wormhole
-    -mwormhole
-    -march=rv32imw
-    -mtune=rvtt-b1
-    -mabi=ilp32
-)
-set(GPP_FLAGS_blackhole
-    -mblackhole
-    -march=rv32iml
-    -mtune=rvtt-b1
-    -mabi=ilp32
-)
+# Define flags for each architecture
+set(GPP_FLAGS_grayskull -mcpu=tt-gs)
+set(GPP_FLAGS_wormhole -mcpu=tt-wh)
+set(GPP_FLAGS_blackhole -mcpu=tt-bh)
+
 # Define common flags for all architectures
 set(GPP_FLAGS_common
     -std=c++17
@@ -127,82 +137,106 @@ set(GPP_FLAGS_erisc
     -Os
     -fno-delete-null-pointer-checks
 )
-set(GPP_FLAGS_ierisc
+set(GPP_FLAGS_idle_erisc
     -Os
     -fno-delete-null-pointer-checks
 )
-set(GPP_FLAGS_slave_ierisc
+set(GPP_FLAGS_slave_idle_erisc
     -Os
     -fno-delete-null-pointer-checks
 )
 
-# Set GPP_FLAGS based on ARCH
-set(GPP_FLAGS
-    ${GPP_FLAGS_${ARCH}}
-    ${GPP_FLAGS_${PROCS}}
-    ${GPP_FLAGS_common}
-)
-# Dump object files to this directory
-set(FW_LIB_DIR ${PROJECT_SOURCE_DIR}/runtime/hw/lib/${ARCH})
+# Build object files all combination of ARCH and PROC
+foreach(ARCH IN LISTS ARCHS)
+    get_alias(${ARCH} ARCH_B0)
+    set(FW_OUTPUT_DIR "${PROJECT_SOURCE_DIR}/runtime/hw/firmware/${ARCH}")
+    foreach(PROC IN LISTS PROCS)
+        if("${ARCH}" STREQUAL "grayskull" AND "${PROC}" STREQUAL "erisc")
+            continue() # Skip the iteration, grayskull doesn;t have idle_erisc or slave_idle_erisc
+        elseif("${ARCH}" STREQUAL "grayskull" AND "${PROC}" STREQUAL "idle_erisc")
+            continue() # Skip the iteration, grayskull doesn;t have idle_erisc or slave_idle_erisc
+        elseif(NOT "${ARCH}" STREQUAL "blackhole" AND "${PROC}" STREQUAL "slave_idle_erisc")
+            continue() # Skip the iteration, grayskull doesn;t have idle_erisc or slave_idle_erisc
+        endif()
 
-# Set the build type to Release or Debug
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
-endif()
+        # Set GPP_FLAGS based on ARCH
+        set(GPP_FLAGS
+            ${GPP_FLAGS_${ARCH}}
+            ${GPP_FLAGS_${PROC}}
+            ${GPP_FLAGS_common}
+        )
 
-# Set the output directory for the built firmware (bin/ or build/)
-set(CMAKE_BINARY_DIR "${CMAKE_SOURCE_DIR}/build")
+        set(GPP_DEFINES
+            ${GPP_DEFINES_${ARCH}}
+            ${GPP_DEFINES_${PROC}}
+            ${GPP_DEFINES_common}
+        )
 
-# Specify the source directory and include directories
-include_directories(
-    ${CMAKE_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/src
-)
+        # Includes independent from ARCH
+        set(GPP_INCLUDES
+            -I.
+            -I..
+            -I${PROJECT_SOURCE_DIR}
+            -I${PROJECT_SOURCE_DIR}/tt_metal
+            -I${PROJECT_SOURCE_DIR}/tt_metal/include
+            -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc
+            -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/debug
+            -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/ethernet
+            -I${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src
+        )
+        # Architecture specific include paths
+        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH})
+        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/${ARCH_B0}_defines)
+        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/noc)
+        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/${ARCH})
+        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/common)
+        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/llk_io)
+        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk_${ARCH_B0}/common/inc)
+        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk_${ARCH_B0}/llk_lib)
 
-# Define the source files for the firmware
-file(
-    GLOB SOURCES
-    ${CMAKE_SOURCE_DIR}/src/*.c
-    ${CMAKE_SOURCE_DIR}/src/*.cpp
-)
+        # These are the set of object files we are to build foreach ARCH and each PROC
+        set(FWLIB "${PROC}")
 
-# Create the executable target (firmware binary)
-add_executable(${PROJECT_NAME}.elf ${SOURCES})
+        # Map each .o to its source file
+        get_source(${PROC} PROC_SOURCE)
+        set(${FWLIB}_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src/${PROC_SOURCE}.cc")
 
-# Linker script (make sure to specify your MCU-specific linker script)
-set(LINKER_SCRIPT "${CMAKE_SOURCE_DIR}/ldscripts/${MCU}.ld")
+        set(FW_OUTPUT_FILE "${FW_OUTPUT_DIR}/${FWLIB}.o")
+        add_custom_command(
+            OUTPUT
+                ${FW_OUTPUT_FILE}
+            COMMAND
+                ${CMAKE_COMMAND} -E make_directory ${FW_OUTPUT_DIR}
+            COMMAND
+                ${GPP_CMD} ${GPP_FLAGS} ${GPP_DEFINES} ${GPP_INCLUDES} -c -o ${FW_OUTPUT_DIR}/${FWLIB}.o
+                ${${FWLIB}_SOURCE}
+            DEPENDS
+                ${${FWLIB}_SOURCE}
+            COMMENT "Building hw lib ${FW_OUTPUT_FILE}"
+            VERBATIM
+        )
+        list(APPEND PREPROCESSED_O_FILES ${FW_OUTPUT_FILE})
+    endforeach()
+endforeach()
 
-# Link the firmware with the appropriate startup code and linker script
-target_link_libraries(
-    ${PROJECT_NAME}.elf
-    -T${LINKER_SCRIPT}
-    -L${CMAKE_SOURCE_DIR}/libs
-)
-
-# Set the output directory for the firmware binary
-set_target_properties(
-    ${PROJECT_NAME}.elf
-    PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY
-            ${CMAKE_BINARY_DIR}
-)
-
-# Convert ELF to BIN or HEX (optional, can be used for flashing)
-add_custom_command(
-    TARGET ${PROJECT_NAME}.elf
-    POST_BUILD
-    COMMAND
-        ${CMAKE_OBJCOPY} -O binary ${PROJECT_NAME}.elf ${PROJECT_NAME}.bin
-    COMMAND
-        ${CMAKE_OBJCOPY} -O ihex ${PROJECT_NAME}.elf ${PROJECT_NAME}.hex
-    COMMENT "Converting ELF to BIN and HEX"
-)
-
-# Specify post-build commands to flash the MCU (optional, example for OpenOCD)
+# custom target that depends on all the output files
 add_custom_target(
-    flash
-    COMMAND
-        openocd -f interface/stlink-v2.cfg -f target/stm32f4x.cfg -c "program ${PROJECT_NAME}.bin verify reset exit"
+    firmware_output
+    ALL
     DEPENDS
-        ${PROJECT_NAME}.bin
+        ${PREPROCESSED_O_FILES}
+    #${FIRMWARE_BINARY_FILES}
+)
+
+add_library(firmware_binary INTERFACE)
+add_library(Metalium::Metal::Firmware ALIAS firmware_binary)
+
+set(currentArch "$ENV{ARCH_NAME}")
+string(REPLACE "wormhole_b0" "wormhole" currentArch "${currentArch}")
+target_include_directories(
+    firmware_binary
+    INTERFACE
+        inc
+        inc/${currentArch}
+        $<$<STREQUAL:${currentArch},wormhole>:${CMAKE_CURRENT_SOURCE_DIR}/inc/wormhole/wormhole_b0_defines>
 )

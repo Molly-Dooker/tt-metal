@@ -60,6 +60,7 @@ set_target_properties(
 )
 
 add_subdirectory(hw)
+add_subdirectory(hw/firmware)
 add_subdirectory(common)
 add_subdirectory(jit_build)
 add_subdirectory(llrt)

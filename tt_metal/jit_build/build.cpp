@@ -560,7 +560,7 @@ void JitBuildState::compile_one(
     cmd += "-c -o " + obj + " " + src;
 
     if (this->is_fw_) {
-    log_info(tt::LogBuildKernels, "    g++ compile cmd: {}", cmd);
+    log_info(tt::LogBuildKernels, " FW  g++ compile cmd: {}", cmd);
     }
     log_debug(tt::LogBuildKernels, "    g++ compile cmd: {}", cmd);
 
