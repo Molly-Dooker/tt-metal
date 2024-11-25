@@ -10,6 +10,7 @@
 #include "tt_metal/impl/trace/trace.hpp"
 #include "tt_metal/impl/lightmetal/lightmetal.hpp"
 #include "tt_metal/impl/lightmetal/lightmetal_replay.hpp"
+#include "tt_metal/impl/lightmetal/lightmetal_capture_context.hpp"
 #include "tt_metal/common/core_descriptor.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
@@ -3354,25 +3355,25 @@ void Device::begin_trace(const uint8_t cq_id, const uint32_t tid) {
 
 void Device::light_metal_configure(const std::string& filename, const bool auto_serialize) {
     this->light_metal_trace_.config.filename = filename;
-    this->light_metal_trace_.config.auto_serialize_metal_trace = auto_serialize;
 }
 
 void Device::light_metal_begin_capture() {
     log_info(tt::LogMetal, "KCM Begin Light Metal Capture");
-    TT_ASSERT(!this->light_metal_trace_.config.capture_enabled, "Light Metal Capture was already enabled");
-    this->light_metal_trace_.config.capture_enabled = true;
+    auto& lm_capture_ctx = LightMetalCaptureContext::getInstance();
+    TT_ASSERT(!lm_capture_ctx.isTracing(), "Light Metal Capture was already enabled.");
+    lm_capture_ctx.reset();            // Clear previous traces if any
+    lm_capture_ctx.setTracing(true);   // Enable tracing
 }
 
+// End Light Metal capture, and serialize to flatbuffer binary now.
+// FIXME - Eventually want to return blob to caller instead of writing to disk here.
 void Device::light_metal_end_capture() {
     log_info(tt::LogMetal, "KCM End Light Metal Capture");
-    TT_ASSERT(this->light_metal_trace_.config.capture_enabled, "Light Metal Capture was already disabled");
-    const auto &cfg = this->light_metal_trace_.config;
-    if (cfg.capture_enabled && cfg.auto_serialize_metal_trace) {
-        // FIXME - Return this to caller and let caller write to file.
-        auto trace_binary_data = createLightMetalBinary(this->light_metal_trace_);
-        writeBinaryBlobToFile(this->light_metal_trace_.config.filename, trace_binary_data);
-    }
-    this->light_metal_trace_.config.capture_enabled = false;
+    auto& lm_capture_ctx = LightMetalCaptureContext::getInstance();
+    TT_ASSERT(lm_capture_ctx.isTracing(), "Light Metal Capture was not enabled.");
+    lm_capture_ctx.setTracing(false); // Disable tracing
+    auto blob = lm_capture_ctx.createLightMetalBinary();
+    writeBinaryBlobToFile(this->light_metal_trace_.config.filename, blob);
 }
 
 void Device::end_trace(const uint8_t cq_id, const uint32_t tid) {
@@ -3396,10 +3397,11 @@ void Device::end_trace(const uint8_t cq_id, const uint32_t tid) {
 
     // Capture Trace if light metal trace capturing is enabled. Still write it to device because we will eventually
     // want light-metal-binary capture to be pure observer and not change behavior.
-    const auto &cfg = this->light_metal_trace_.config;
-    if (cfg.capture_enabled && cfg.auto_serialize_metal_trace) {
-        log_info(tt::LogMetal, "KCM {} Light Metal auto-capture tid: {} filename: ", __FUNCTION__, tid, cfg.filename);
-        this->light_metal_trace_.traces.emplace_back(tid, *trace_desc);
+    auto& lm_capture_ctx = LightMetalCaptureContext::getInstance();
+    if (lm_capture_ctx.isTracing()) {
+        // KCM - Consider wrapping this in a function to hide details from user.
+        auto trace_desc_by_id = toFlatBuffer(lm_capture_ctx.getBuilder(), *trace_desc, tid);
+        lm_capture_ctx.getTraceDescsVector().emplace_back(trace_desc_by_id);
     }
 
     Trace::initialize_buffer(this->command_queue(cq_id), this->trace_buffer_pool_[tid]);

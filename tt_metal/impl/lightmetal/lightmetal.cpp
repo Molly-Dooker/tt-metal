@@ -30,48 +30,6 @@ TraceDescriptorByTraceIdOffset toFlatBuffer(flatbuffers::FlatBufferBuilder& buil
     );
 }
 
-std::vector<uint8_t> createLightMetalBinary(LightMetalTrace& light_metal_trace) {
-    flatbuffers::FlatBufferBuilder builder;
-
-    std::vector<flatbuffers::Offset<tt::target::lightmetal::TraceDescriptorByTraceId>> trace_desc_vec;
-    trace_desc_vec.reserve(light_metal_trace.traces.size()); // Reserve space for performance
-
-    for (const auto& [trace_id, trace_desc] : light_metal_trace.traces) {
-        trace_desc_vec.emplace_back(toFlatBuffer(builder, trace_desc, trace_id));
-        log_info(tt::LogMetal, "KCM {} for trace_id: {}", __FUNCTION__, trace_id);
-    }
-
-    // Add a dummy command for illustrative purposes here. This function will be EOL'd soon.
-    std::vector<flatbuffers::Offset<tt::target::Command>> command_vec;
-    auto replay_trace = tt::target::CreateReplayTrace(builder, /*cq_id=*/1, /*tid=*/42, /*blocking=*/true);
-    auto replay_command = tt::target::CreateCommand(builder, tt::target::CommandUnion::CommandUnion_ReplayTrace, replay_trace.Union());
-    command_vec.emplace_back(replay_command);
-
-    // Create the LigtMetalBinary
-    auto sorted_trace_descriptors = builder.CreateVectorOfSortedTables(&trace_desc_vec);
-    auto commands_vector = builder.CreateVector(command_vec);
-    auto light_metal_binary = CreateLightMetalBinary(builder, commands_vector, sorted_trace_descriptors);
-    builder.Finish(light_metal_binary);
-
-    const uint8_t* buffer_ptr = builder.GetBufferPointer();
-    size_t buffer_size = builder.GetSize();
-    return {buffer_ptr, buffer_ptr + buffer_size};
-}
-
-bool writeBinaryBlobToFile(const std::string& filename, const std::vector<uint8_t>& blob) {
-    std::ofstream outFile(filename, std::ios::binary);
-    if (!outFile) {
-        std::cerr << "Unable to open file: " << filename << " for writing." << std::endl;
-        return false;
-    }
-
-    if (!outFile.write(reinterpret_cast<const char*>(blob.data()), blob.size())) {
-        std::cerr << "Failed to write binary data to file: " << filename << std::endl;
-        return false;
-    }
-
-    return true;
-}
 
 }  // namespace v0
 }  // namespace tt::tt_metal

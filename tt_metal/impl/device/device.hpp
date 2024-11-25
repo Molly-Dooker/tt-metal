@@ -21,6 +21,7 @@
 #include "llrt/hal.hpp"
 #include "tt_metal/impl/dispatch/command_queue_interface.hpp"
 #include "program_cache.hpp"
+#include "tt_metal/impl/lightmetal/lightmetal_capture_context.hpp"
 
 namespace tt {
 
@@ -365,6 +366,10 @@ class Device {
     std::unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> trace_buffer_pool_;
     std::map<std::string, std::string> device_kernel_defines_;
     LightMetalTrace light_metal_trace_;
+
+    // An idea, could be used instead of getInstance, but does this make
+    // sense here on Device? Maybe not, where else could it go?
+    // LightMetalCaptureContext* lightMetalCaptureCtx;
 
 };
 

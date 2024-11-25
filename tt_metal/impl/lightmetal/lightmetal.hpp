@@ -41,11 +41,5 @@ using TraceDescriptorByTraceIdOffset = flatbuffers::Offset<tt::target::lightmeta
 // Convert TraceDescriptor + trace_id to flatbuffer
 TraceDescriptorByTraceIdOffset toFlatBuffer(flatbuffers::FlatBufferBuilder& builder, const detail::TraceDescriptor& traceDesc, const uint32_t trace_id);
 
-// Take built-up light metal trace data and serialize it to a flatbuffer binary.
-std::vector<std::uint8_t> createLightMetalBinary(LightMetalTrace& light_metal_trace);
-
-// Write an arbitrary binary blob to file.
-bool writeBinaryBlobToFile(const std::string& filename, const std::vector<uint8_t>& blob);
-
 }  // namespace v0
 }  // namespace tt::tt_metal
