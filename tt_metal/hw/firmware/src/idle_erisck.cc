@@ -20,14 +20,18 @@
 #include "dataflow_api.h"
 
 #include <kernel_includes.hpp>
+    extern "C" void exit(int);
 
 void kernel_launch(uint32_t kernel_base_addr) {
     DeviceZoneScopedMainChildN("ERISC-KERNEL");
 
     extern uint32_t __kernel_init_local_l1_base[];
     extern uint32_t __fw_export_end_text[];
-    do_crt1((uint32_t tt_l1_ptr
-                 *)(kernel_base_addr + (uint32_t)__kernel_init_local_l1_base - (uint32_t)__fw_export_end_text));
+    uint32_t x = kernel_base_addr + (uint32_t)__kernel_init_local_l1_base - (uint32_t)__fw_export_end_text;
+    do_crt1((uint32_t tt_l1_ptr*)x);
+    extern uint32_t __kernel_data_lma[];
+    if ((uint32_t)&__kernel_data_lma != x)
+        return;
 
     noc_local_state_init(NOC_INDEX);
 

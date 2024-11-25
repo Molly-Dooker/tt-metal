@@ -550,10 +550,8 @@ void ElfFile::Impl::XIPify() {
 
             unsigned kind = PCREL;
             switch (type) {
-            case R_RISCV_LO12_I:
-            case R_RISCV_LO12_S:
-                    kind = ABS;
-                    [[fallthrough]];
+                case R_RISCV_LO12_I:
+                case R_RISCV_LO12_S: kind = ABS; [[fallthrough]];
 
                 case R_RISCV_PCREL_LO12_I:
                 case R_RISCV_PCREL_LO12_S:
@@ -566,7 +564,8 @@ void ElfFile::Impl::XIPify() {
                     // these relocs point to the hi20 reloc.  Record
                     // them all and filter later.
 
-                    lo[kind].push_back(&reloc); break;
+                    lo[kind].push_back(&reloc);
+                    break;
 
                 case R_RISCV_HI20: kind = ABS; [[fallthrough]];
                 case R_RISCV_PCREL_HI20:

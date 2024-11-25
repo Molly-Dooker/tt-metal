@@ -95,7 +95,11 @@ SECTIONS
 #if defined(TYPE_FIRMWARE)
   PROVIDE(__global_pointer$ = ORIGIN(REGION_DATA) + 0x7f0);
 #endif
-  .data DATA_START : ALIGN(4)
+  .data DATA_START :
+#if defined (TYPE_KERNEL)
+        AT(__kernel_data_lma)
+#endif
+	ALIGN(4)
   {
      . = .; /* Force section emission.  */
      __ldm_data_start = .;
