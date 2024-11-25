@@ -22,11 +22,12 @@ namespace tt {
      (((a) >= NOC_OVERLAY_START_ADDR) && ((a) < NOC_OVERLAY_START_ADDR + NOC_STREAM_REG_SPACE_SIZE * NOC_NUM_STREAMS)) || \
      (((a) >= NOC0_REGS_START_ADDR) && ((a) < NOC0_REGS_START_ADDR + 0x1000)) || \
      (((a) >= NOC1_REGS_START_ADDR) && ((a) < NOC1_REGS_START_ADDR + 0x1000)) || \
-     ((a) == RISCV_DEBUG_REG_SOFT_RESET_0))
+     ((a) == RISCV_DEBUG_REG_SOFT_RESET_0) || \
+     ((a) == 0xFFB14000 || (a) == 0xFFB14008))
 #define DEBUG_VALID_WORKER_ADDR(a, l) (DEBUG_VALID_L1_ADDR(a, l) || (DEBUG_VALID_REG_ADDR(a) && (l) == 4))
 #define DEBUG_VALID_DRAM_ADDR(a, l, b, e) (((a) >= b) && ((a) + (l) <= e))
 
-#define DEBUG_VALID_ETH_ADDR(a, l) (((a) >= HAL_MEM_ETH_BASE) && ((a) + (l) <= HAL_MEM_ETH_BASE + HAL_MEM_ETH_SIZE))
+#define DEBUG_VALID_ETH_ADDR(a, l) ((((a) >= HAL_MEM_ETH_BASE) && ((a) + (l) <= HAL_MEM_ETH_BASE + HAL_MEM_ETH_SIZE)) || (DEBUG_VALID_REG_ADDR(a) && (l) == 4))
 
 static bool coord_found_p(std::vector<CoreCoord>coords, CoreCoord core) {
     for (CoreCoord item : coords) {
