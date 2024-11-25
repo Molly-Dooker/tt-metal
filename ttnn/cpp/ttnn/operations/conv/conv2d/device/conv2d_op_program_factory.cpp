@@ -95,12 +95,12 @@ operation::ProgramWithCallbacks multi_core_height_sharded_conv2d(
 
 operation::ProgramWithCallbacks multi_core_conv2d_impl(
     const Tensor& a,
-    const Tensor& b,
+    const Tensor &b,
     std::optional<const Tensor> bias,
     sliding_window::SlidingWindowConfig sliding_window_config,
     uint32_t output_channels,
     uint32_t groups,
-    bool untilize_out, bool fuse_relu, MathFidelity math_fidelity,
+    bool untilize_out, bool fuse_relu,
     const OptimizedConvParallelizationConfig& parallelization_config,
     const OptimizedConvBlockConfig& block_config,
     DataType dtype,

@@ -17,25 +17,6 @@ namespace conv2d {
 
 using namespace tt;
 
-namespace {
-namespace CMAKE_UNIQUE_NAMESPACE {
-const uint32_t act_cb = CBIndex::c_0;
-const uint32_t weight_cb = CBIndex::c_1;
-const uint32_t bias_cb = CBIndex::c_2;
-const uint32_t sharded_act_cb = CBIndex::c_3;
-const uint32_t cb_for_reader_indices = CBIndex::c_4;
-const uint32_t cb_for_l1_array = CBIndex::c_5;
-const uint32_t act_cb_row_major_bfloat16 = CBIndex::c_6;
-const uint32_t act_cb_second_reader = CBIndex::c_7;
-const uint32_t matmul_partials_cb = CBIndex::c_24;
-const uint32_t tilize_mode_tilized_act_cb = CBIndex::c_25;
-const uint32_t untilize_mode_reblock_cb = CBIndex::c_26;
-const uint32_t out0_cb = CBIndex::c_16;
-const uint32_t temp_sum_cb = CBIndex::c_27;
-}
-}
-
-
 operation::ProgramWithCallbacks multi_core_optimized_conv_width_sharded_v2_impl(
     tt_metal::Program& program,
     const Tensor& a,
