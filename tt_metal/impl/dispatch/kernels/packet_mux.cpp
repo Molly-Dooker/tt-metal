@@ -5,6 +5,7 @@
 #include "dataflow_api.h"
 #include "tt_metal/impl/dispatch/kernels/cq_helpers.hpp"
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
+#include "debug/dprint.h"
 
 packet_input_queue_state_t input_queues[MAX_SWITCH_FAN_IN];
 packet_output_queue_state_t output_queue;

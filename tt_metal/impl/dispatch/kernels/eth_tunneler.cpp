@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "debug/dprint.h"
 #include "ethernet/dataflow_api.h"
+#include "tt_metal/impl/dispatch/kernels/cq_helpers.hpp"
 #include "dataflow_api.h"
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
 
@@ -74,55 +74,31 @@ tt_l1_ptr uint32_t* const test_results = reinterpret_cast<tt_l1_ptr uint32_t*>(t
 constexpr uint32_t timeout_cycles = get_compile_time_arg_val(14);
 constexpr uint32_t inner_stop_mux_d_bypass = get_compile_time_arg_val(15);
 
-// Device id of the chip running this eth tunneler
-constexpr uint32_t device_id = get_compile_time_arg_val(16);
-// Device id of the other chip running this eth tunneler
-constexpr uint32_t remote_device_id = get_compile_time_arg_val(17);
-
-// Initialize the handshake address. The address can be the same for the input/output
-// queues as in the kernel main loop, only one queue will use that space at a time.
-// Even though both eth tunnelers will be communicating with each other, we establish that the
-// "sender" will be the one with the lower device id and the "receiver" is the one with the
-// higher device id.
-// The lower device id will use ERISC_UNRESERVED_BASE as their ack address
-// The higher device id will use ERISC_UNRESERVED_BASE + 16.
-//
-// If the same address is used then a deadlock could occur. Both ack values will be 1
-// and they will be waiting for each other
-constexpr uint32_t local_ack_addr =
-    device_id < remote_device_id ? PACKET_QUEUE_ACK_LOW_DEVICE_ADDR:
-    PACKET_QUEUE_ACK_HIGH_DEVICE_ADDR;
-
-constexpr uint32_t remote_ack_addr =
-    device_id < remote_device_id ? PACKET_QUEUE_ACK_HIGH_DEVICE_ADDR :
-   PACKET_QUEUE_ACK_LOW_DEVICE_ADDR;
-
 // Eth tunneler inputs
 constexpr uint32_t eth_tunneler_in_local_wptr_addr[NUM_TUNNEL_QUEUES] = {
+    get_compile_time_arg_val(16),
+    get_compile_time_arg_val(17)};
+
+constexpr uint32_t eth_tunneler_in_remote_rptr_sent_addr[NUM_TUNNEL_QUEUES] = {
     get_compile_time_arg_val(18),
     get_compile_time_arg_val(19)};
 
-constexpr uint32_t eth_tunneler_in_remote_rptr_sent_addr[NUM_TUNNEL_QUEUES] = {
+constexpr uint32_t eth_tunneler_in_remote_rptr_cleared_addr[NUM_TUNNEL_QUEUES] = {
     get_compile_time_arg_val(20),
     get_compile_time_arg_val(21)};
 
-constexpr uint32_t eth_tunneler_in_remote_rptr_cleared_addr[NUM_TUNNEL_QUEUES] = {
+// Eth tunneler outputs
+constexpr uint32_t eth_tunneler_out_local_rptr_sent_addr[NUM_TUNNEL_QUEUES] = {
     get_compile_time_arg_val(22),
     get_compile_time_arg_val(23)};
 
-// Eth tunneler outputs
-constexpr uint32_t eth_tunneler_out_local_rptr_sent_addr[NUM_TUNNEL_QUEUES] = {
+constexpr uint32_t eth_tunneler_out_local_rptr_cleared_addr[NUM_TUNNEL_QUEUES] = {
     get_compile_time_arg_val(24),
     get_compile_time_arg_val(25)};
 
-constexpr uint32_t eth_tunneler_out_local_rptr_cleared_addr[NUM_TUNNEL_QUEUES] = {
+constexpr uint32_t eth_tunneler_out_remote_wptr_addr[NUM_TUNNEL_QUEUES] = {
     get_compile_time_arg_val(26),
     get_compile_time_arg_val(27)};
-
-constexpr uint32_t eth_tunneler_out_remote_wptr_addr[NUM_TUNNEL_QUEUES] = {
-    get_compile_time_arg_val(28),
-    get_compile_time_arg_val(29)};
-
 
 void kernel_main() {
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
@@ -133,14 +109,6 @@ void kernel_main() {
     write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX + 2, 0xAABBCCDD);
     write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX + 3, 0xDDCCBBAA);
     write_buffer_to_l1(test_results, PQ_TEST_MISC_INDEX + 4, endpoint_id_start_index);
-
-    // Ack for data leaving this core
-    auto local_ack = reinterpret_cast<volatile eth_channel_sync_t*>(local_ack_addr);
-    // Ack for data coming into this core
-    auto remote_ack = reinterpret_cast<volatile eth_channel_sync_t*>(remote_ack_addr);
-
-    local_ack->bytes_sent = 0;
-    remote_ack->bytes_sent = 0;
 
     for (uint32_t i = 0; i < tunnel_lanes; i++) {
         input_queues[i].init(
@@ -168,15 +136,28 @@ void kernel_main() {
             eth_tunneler_out_local_rptr_sent_addr[i],
             eth_tunneler_out_local_rptr_cleared_addr[i],
             eth_tunneler_out_remote_wptr_addr[i]);
-
-        input_queues[i].staging_area_ = reinterpret_cast<volatile uint32_t*>(PACKET_QUEUE_ETH_STAGE_ADDR);
-        input_queues[i].local_ack_ = local_ack;
-        input_queues[i].remote_ack_ = remote_ack;
-
-        output_queues[i].staging_area_ = reinterpret_cast<volatile uint32_t*>(PACKET_QUEUE_ETH_STAGE_ADDR);
-        output_queues[i].local_ack_ = local_ack;
-        output_queues[i].remote_ack_ = remote_ack;
     }
+
+    input_queues[0].tunneler_local_recv_ptr=
+            reinterpret_cast<volatile uint32_t*>(STREAM_REG_ADDR(2, STREAM_REMOTE_SRC_REG_INDEX));
+    input_queues[0].tunneler_local_sent_ptr =
+        reinterpret_cast<volatile uint32_t*>(STREAM_REG_ADDR(3, STREAM_REMOTE_SRC_REG_INDEX));
+
+    input_queues[0].remote_tunneler_recv_addr = STREAM_REG_ADDR(4, STREAM_REMOTE_SRC_REG_INDEX);
+    input_queues[0].remote_tunneler_sent_addr = STREAM_REG_ADDR(5, STREAM_REMOTE_SRC_REG_INDEX);
+
+    output_queues[0].tunneler_local_recv_ptr =
+        reinterpret_cast<volatile uint32_t*>(STREAM_REG_ADDR(4, STREAM_REMOTE_SRC_REG_INDEX));
+    output_queues[0].tunneler_local_sent_ptr =
+        reinterpret_cast<volatile uint32_t*>(STREAM_REG_ADDR(5, STREAM_REMOTE_SRC_REG_INDEX));
+
+    output_queues[0].remote_tunneler_recv_addr = STREAM_REG_ADDR(2, STREAM_REMOTE_SRC_REG_INDEX);
+    output_queues[0].remote_tunneler_sent_addr = STREAM_REG_ADDR(3, STREAM_REMOTE_SRC_REG_INDEX);
+
+    *input_queues[0].tunneler_local_recv_ptr = 0;
+    *input_queues[0].tunneler_local_sent_ptr = 0;
+    *output_queues[0].tunneler_local_recv_ptr = 0;
+    *output_queues[0].tunneler_local_sent_ptr = 0;
 
     if (!wait_all_src_dest_ready(input_queues, tunnel_lanes, output_queues, tunnel_lanes, timeout_cycles)) {
         write_buffer_to_l1(test_results, PQ_TEST_STATUS_INDEX, PACKET_QUEUE_TEST_TIMEOUT);
@@ -191,7 +172,9 @@ void kernel_main() {
     uint64_t iter = 0;
     uint64_t start_timestamp = get_timestamp();
     uint32_t progress_timestamp = start_timestamp & 0xFFFFFFFF;
+    uint32_t heartbeat = 0;
     while (!all_outputs_finished && !timeout) {
+        IDLE_ERISC_HEARTBEAT_AND_RETURN(heartbeat);
         iter++;
         if (timeout_cycles > 0) {
             uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
@@ -200,19 +183,17 @@ void kernel_main() {
                 break;
             }
         }
+
         all_outputs_finished = true;
         for (uint32_t i = 0; i < tunnel_lanes; i++) {
-            // Acknowledge any data received
-            if (local_ack->bytes_sent != 0) {
-                local_ack->bytes_sent = 0;
-                while (eth_txq_is_busy()) {}
-                internal_::eth_send_packet(
-                    0,
-                    (uint32_t)(local_ack) >> 4,
-                    (uint32_t)(local_ack) >> 4,
-                    1
-                );
+            input_queues[i].handle_recv();
+            output_queues[i].handle_recv();
+
+            if (input_queues[i].is_waiting_for_ack() || output_queues[i].is_waiting_for_ack()) {
+                all_outputs_finished = false;
+                continue;
             }
+
             if (input_queues[i].get_curr_packet_valid()) {
                 bool full_packet_sent;
                 uint32_t words_sent =

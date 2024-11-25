@@ -42,13 +42,13 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_demux_queue_size_bytes = 0x20000;
 
     constexpr uint32_t default_tunneler_queue_start_addr = 0x19000;
-    constexpr uint32_t default_tunneler_queue_size_bytes = 0x10000;
+    constexpr uint32_t default_tunneler_queue_size_bytes = 0x8000;
 
     constexpr uint32_t default_test_results_addr = 0x100000;
     constexpr uint32_t default_test_results_size = 0x40000;
 
-    constexpr uint32_t default_tunneler_test_results_addr = 0x29000;
-    constexpr uint32_t default_tunneler_test_results_size = 0x8000;
+    constexpr uint32_t default_tunneler_test_results_addr = 0x39000; // 0x8000 * 4 + 0x19000; 0x10000 * 4 + 0x19000 = 0x59000 > 0x40000 (256kB)
+    constexpr uint32_t default_tunneler_test_results_size = 0x7000; // 256kB total L1 in ethernet core - 0x39000
 
     constexpr uint32_t default_timeout_mcycles = 1000;
     constexpr uint32_t default_rx_disable_data_check = 0;
@@ -194,7 +194,7 @@ int main(int argc, char **argv) {
         CoreCoord demux_core = {demux_x, demux_y};
         CoreCoord demux_phys_core = device_r->worker_core_from_logical_core(demux_core);
 
-        // Left side
+        // Right side
         packet_queue_host::packet_queue_buffer_set tx_buffers = make_buffer_set(device, num_src_endpoints);
         packet_queue_host::packet_queue_buffer_set mux_input_buffers = make_buffer_set(device, num_src_endpoints);
         packet_queue_host::packet_queue_buffer_set mux_output_buffers = make_buffer_set(device, 1);
@@ -349,8 +349,6 @@ int main(int argc, char **argv) {
                 tunneler_test_results_size, // 13: test_results_size
                 timeout_mcycles * 1000 * 1000 * 4, // 14: timeout_cycles
                 0, // 15: inner_stop_mux_d_bypass
-                device_id_l, // 16: device_id
-                device_id_r, // 17: remote_device_id
                 // Eth tunneler inputs. Connect the mux to this eth tunneler
                 std::get<packet_queue_buffer_set_wptr>(tunneler_l_input_buffers)[0]->address(), // 18: eth_tunneler_in_local_wptr_addr[0]
                 0, // 19: eth_tunneler_in_local_wptr_addr[1]
@@ -404,8 +402,6 @@ int main(int argc, char **argv) {
                 tunneler_test_results_size, // 13: test_results_size
                 timeout_mcycles * 1000 * 1000 * 4, // 14: timeout_cycles
                 0, // 15: inner_stop_mux_d_bypass
-                device_id_r, // 16: device_id
-                device_id_l, // 17: remote_device_id
                 // Eth tunneler inputs. Connect the left tunneler to this eth tunneler (right)
                 std::get<packet_queue_buffer_set_wptr>(tunneler_r_input_buffers)[0]->address(), // 18: eth_tunneler_in_local_wptr_addr[0]
                 0, // 19: eth_tunneler_in_local_wptr_addr[1]
@@ -542,7 +538,6 @@ int main(int argc, char **argv) {
                 std::get<packet_queue_buffer_set_wptr>(rx_buffers)[1]->address(), // 42: demux_out_remote_wptr_addr[1]
                 std::get<packet_queue_buffer_set_wptr>(rx_buffers)[2]->address(), // 43: demux_out_remote_wptr_addr[2]
                 std::get<packet_queue_buffer_set_wptr>(rx_buffers)[3]->address(), // 44: demux_out_remote_wptr_addr[3]
-
             };
 
         log_info(LogTest, "run demux at x={},y={}", demux_core.x, demux_core.y);

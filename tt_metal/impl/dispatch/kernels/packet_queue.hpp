@@ -10,6 +10,8 @@
 #include "ethernet/dataflow_api.h"
 #include "debug/dprint.h"
 
+// Assuming there are at least 32 registers availabe for status0 and status1
+static_assert(ETH_NOC_NUM_STREAMS >= 32, "packet_queue assertion ETH_NOC_NUM_STREAMS >= 32");
 static_assert(PACKET_WORD_SIZE_BYTES == sizeof(eth_channel_sync_t),
     "Packet word size bytes and eth_channel_sync_t are expected to be 16 for ack data");
 
@@ -43,7 +45,12 @@ void set_64b_result(uint32_t* buf, uint64_t val, uint32_t index = 0) {
 }
 
 class packet_queue_state_t {
-    // All ptr values are in units of packet size words
+    // Remote L1 addresses
+    uint8_t remote_queue_id;
+
+    uint32_t remote_wptr_update_addr;
+    uint32_t remote_rptr_sent_update_addr;
+    uint32_t remote_rptr_cleared_update_addr;
     uint32_t local_wptr;
     uint32_t local_rptr_sent;
     uint32_t local_rptr_cleared;
@@ -52,9 +59,6 @@ class packet_queue_state_t {
     volatile uint32_t* local_wptr_;
     volatile uint32_t* local_rptr_cleared_;
     volatile uint32_t* local_rptr_sent_;
-
-    // Remote L1 NoC addresses
-    uint8_t remote_queue_id;
 
     uint64_t remote_wptr_addr_;
     uint64_t remote_rptr_sent_addr_;
@@ -87,12 +91,14 @@ class packet_queue_state_t {
     uint32_t remote_ready_status_addr;
 
 #if defined(COMPILE_FOR_ERISC)
-    // Ethernet only. these fields must be set manually after init.
-    volatile uint32_t* staging_area_; // staging area located in eth unreserved base for data to be sent
-    volatile eth_channel_sync_t* local_ack_; // ack for data into this core
-    volatile eth_channel_sync_t* remote_ack_; // ack for data out of this core
-#endif
+    // Eth tunneler ACK status
+    // Warning: These registers seem to only support 24 bits of data
+    volatile uint32_t* tunneler_local_recv_ptr;
+    uint32_t remote_tunneler_recv_addr;
 
+    volatile uint32_t* tunneler_local_sent_ptr;
+    uint32_t remote_tunneler_sent_addr;
+#endif
     DispatchRemoteNetworkType remote_update_network_type;
 
     void init(
@@ -127,9 +133,6 @@ class packet_queue_state_t {
         this->cb_mode_remote_sem_id = cb_mode_remote_sem_id;
         this->cb_mode_page_size_words = (((uint32_t)0x1) << cb_mode_log_page_size) / PACKET_WORD_SIZE_BYTES;
 
-        this->local_rptr_sent = 0;
-        this->local_rptr_cleared = 0;
-        this->local_wptr = 0;
         if (queue_is_input) {
             this->local_wptr_ = reinterpret_cast<volatile uint32_t*>(queue_wptr_addr);
             this->local_rptr_sent_ = &this->local_rptr_sent;
@@ -167,6 +170,7 @@ class packet_queue_state_t {
         this->remote_ready_status_addr = STREAM_REG_ADDR(remote_queue_id, STREAM_REMOTE_SRC_REG_INDEX);
         this->local_ready_status_ptr =
             reinterpret_cast<volatile uint32_t*>(STREAM_REG_ADDR(queue_id, STREAM_REMOTE_SRC_REG_INDEX));
+        *this->local_ready_status_ptr = 0;
     }
 
     inline uint32_t wrap_ptr(uint32_t value) const {
@@ -268,54 +272,56 @@ class packet_queue_state_t {
         return this->queue_size_words - this->get_queue_wptr_offset_words();
     }
 
-    inline void remote_l1_update(uint32_t src_addr, uint32_t dest_addr, bool use_reg = false, uint32_t reg_inline_value = 0) {
+    inline void remote_l1_update(uint32_t src_addr, uint32_t dest_addr) {
         if ((this->remote_update_network_type == DispatchRemoteNetworkType::NONE) || this->cb_mode) {
             return;
-        } else if (this->remote_update_network_type == DispatchRemoteNetworkType::ETH) {
-            if (use_reg) {
-                eth_write_remote_reg(
-                    get_noc_addr(this->remote_x, this->remote_y, dest_addr),
-                    reg_inline_value
-                );
-            }
+        }
 #if defined(COMPILE_FOR_ERISC)
-            else {
-                *this->staging_area_ = *reinterpret_cast<volatile uint32_t*>(src_addr);
-                while (eth_txq_is_busy()) {}
-                internal_::eth_send_packet(
-                        0, // channel
-                        (uint32_t)(this->staging_area_) >> 4,  // words
-                        dest_addr >> 4, // words
-                        PACKET_WORD_SIZE_BYTES >> 4 // words
-                );
-                this->remote_ack_->bytes_sent = PACKET_WORD_SIZE_BYTES;
-                while (eth_txq_is_busy()) {}
-                internal_::eth_send_packet(
-                    0,
-                    (uint32_t)(this->remote_ack_) >> 4,
-                    (uint32_t)(this->remote_ack_) >> 4,
-                    1
-                );
-                while (this->remote_ack_->bytes_sent != 0) {
-                    // While waiting for ack from remote make sure we don't have any acks we need to check
-                    if (this->local_ack_->bytes_sent != 0) {
-                        this->local_ack_->bytes_sent = 0;
-                        while (eth_txq_is_busy()) {}
-                        internal_::eth_send_packet(
-                            0,
-                            (uint32_t)(this->local_ack_) >> 4,
-                            (uint32_t)(this->local_ack_) >> 4,
-                            1
-                        );
-                    }
-                    run_routing();
-                }
-            }
+        else if (this->remote_update_network_type == DispatchRemoteNetworkType::ETH) {
+            // Write to remote L1
+            internal_::eth_send_packet_unsafe(
+                0, // tx queue
+                src_addr >> 4, // src in words
+                dest_addr >> 4, // dest in words
+                1 // words
+            );
+
+            // Signal to the remote L1 that data has been written. This must come after the previous packet
+            internal_::eth_write_remote_reg(
+                0,
+                this->remote_tunneler_recv_addr,
+                1
+            );
+
+            // We can't update the data at src address until the packet is received by the remote
+            // setting this flag will let the main loop know to skip this queue
+            *this->tunneler_local_sent_ptr = 1;
+        }
 #endif
-        } else {
+        else {
             noc_inline_dw_write(
                 get_noc_addr(this->remote_x, this->remote_y, dest_addr),
-                use_reg ? reg_inline_value : *reinterpret_cast<volatile uint32_t*>(src_addr)
+                *reinterpret_cast<volatile uint32_t*>(src_addr)
+            );
+        }
+    }
+
+    inline void remote_reg_update(uint32_t dest_addr, uint32_t reg_inline_value) {
+        if ((this->remote_update_network_type == DispatchRemoteNetworkType::NONE) || this->cb_mode) {
+            return;
+        }
+#if defined(COMPILE_FOR_ERISC)
+        else if (this->remote_update_network_type == DispatchRemoteNetworkType::ETH) {
+            eth_write_remote_reg(
+                dest_addr,
+                reg_inline_value
+            );
+        }
+#endif
+        else {
+            noc_inline_dw_write(
+                get_noc_addr(this->remote_x, this->remote_y, dest_addr),
+                reg_inline_value
             );
         }
     }
@@ -339,18 +345,30 @@ class packet_queue_state_t {
     }
 
     void send_remote_ready_notification() {
-        this->remote_l1_update(0 /* ignored */, this->remote_ready_status_addr, true, PACKET_QUEUE_REMOTE_READY_FLAG);
+        this->remote_reg_update(this->remote_ready_status_addr, PACKET_QUEUE_REMOTE_READY_FLAG);
     }
 
     void send_remote_finished_notification() {
-        this->remote_l1_update(0 /* ignored */, this->remote_ready_status_addr, true, PACKET_QUEUE_REMOTE_FINISHED_FLAG);
+        this->remote_reg_update(this->remote_ready_status_addr, PACKET_QUEUE_REMOTE_FINISHED_FLAG);
     }
 
     inline bool is_remote_ready() const { return *this->local_ready_status_ptr == PACKET_QUEUE_REMOTE_READY_FLAG; }
 
-    inline bool is_remote_finished() const {
-        return *this->local_ready_status_ptr == PACKET_QUEUE_REMOTE_FINISHED_FLAG;
+    inline bool is_remote_finished() const { return *this->local_ready_status_ptr == PACKET_QUEUE_REMOTE_FINISHED_FLAG; }
+
+#if defined(COMPILE_FOR_ERISC)
+    inline bool is_waiting_for_ack() const { return *this->tunneler_local_sent_ptr == 1; }
+
+    // Returns true if something was received
+    inline bool handle_recv() {
+        if (*this->tunneler_local_recv_ptr == 1) {
+            *this->tunneler_local_recv_ptr = 0;
+            this->remote_reg_update(this->remote_tunneler_sent_addr, 0);
+            return true;
+        }
+        return false;
     }
+#endif
 
     inline uint32_t cb_mode_get_local_sem_val() {
         if (!this->cb_mode) {
@@ -513,7 +531,6 @@ class packet_input_queue_state_t : public packet_queue_state_t {
         this->curr_packet_flags = 0;
         this->curr_packet_tag = 0xdeadbeef;
         this->curr_packet_valid = false;
-        *this->local_ready_status_ptr = 0;
     }
 
     inline uint16_t get_end_of_cmd() const { return this->end_of_cmd; }
@@ -746,7 +763,6 @@ class packet_output_queue_state_t : public packet_queue_state_t {
         this->unpacketizer_page_words_sent = 0;
         this->input_queue_status.init(input_queue_array, num_input_queues);
         this->max_send_words = remote_update_network_type == DispatchRemoteNetworkType::ETH ? DEFAULT_MAX_ETH_SEND_WORDS : DEFAULT_MAX_NOC_SEND_WORDS;
-        *this->local_ready_status_ptr = 0;
     }
 
     inline void send_data_to_remote(uint32_t src_addr, uint32_t dest_addr, uint32_t num_words) {
@@ -804,7 +820,6 @@ class packet_output_queue_state_t : public packet_queue_state_t {
                 }
             }
         }
-        this->input_queue_status.prev_words_in_flight_flush();
         this->input_queue_status.prev_words_in_flight_flush();
         return true;
     }

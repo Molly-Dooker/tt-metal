@@ -12,7 +12,7 @@ constexpr uint32_t PACKET_WORD_SIZE_BYTES = 16;
 
 constexpr uint32_t MAX_SWITCH_FAN_IN = 4;
 constexpr uint32_t MAX_SWITCH_FAN_OUT = 4;
-constexpr uint32_t MAX_TUNNEL_LANES = 10;
+constexpr uint32_t MAX_TUNNEL_LANES = 10; // This value is limited by the maximum number of stream regs (32)
 
 constexpr uint32_t MAX_SRC_ENDPOINTS = 32;
 constexpr uint32_t MAX_DEST_ENDPOINTS = 32;
@@ -21,8 +21,9 @@ constexpr uint32_t PACKET_QUEUE_MAX_ID = std::max(MAX_SRC_ENDPOINTS, MAX_DEST_EN
 constexpr uint32_t INPUT_QUEUE_START_ID = 0;
 constexpr uint32_t OUTPUT_QUEUE_START_ID = MAX_SWITCH_FAN_IN;
 
-constexpr uint32_t PACKET_QUEUE_REMOTE_READY_FLAG = 0xA;
-constexpr uint32_t PACKET_QUEUE_REMOTE_FINISHED_FLAG = 0xB;
+constexpr uint32_t PACKET_QUEUE_REMOTE_READY_FLAG = 0xA; // Ready to be used
+constexpr uint32_t PACKET_QUEUE_REMOTE_FINISHED_FLAG = 0xB; // Closed. Do not used.
+constexpr uint32_t PACKET_QUEUE_REMOTE_ACK_FLAG = 0xAC6; // Waiting for ack
 
 constexpr uint32_t PACKET_QUEUE_STAUS_MASK = 0xabc00000;
 constexpr uint32_t PACKET_QUEUE_TEST_STARTED = PACKET_QUEUE_STAUS_MASK | 0x0;
@@ -32,7 +33,6 @@ constexpr uint32_t PACKET_QUEUE_TEST_DATA_MISMATCH = PACKET_QUEUE_STAUS_MASK | 0
 
 // Scratch buffer. All addresses are made to be 16B aligned.
 // Extra space is provided in the slots for remote shadow values. The offsets are below.
-// TODO: make a struct/union for the buffer slots
 constexpr uint32_t PACKET_QUEUE_SCRATCH_BUFFER_SLOT_BYTES = 64;
 constexpr uint32_t PACKET_QUEUE_SCRATCH_BUFFER_SHADOW_WTPR_OFFSET = PACKET_WORD_SIZE_BYTES;
 constexpr uint32_t PACKET_QUEUE_SCRATCH_BUFFER_SHADOW_RTPR_SENT_OFFSET = PACKET_WORD_SIZE_BYTES * 2;
@@ -94,15 +94,9 @@ uint64_t packet_switch_dest_pack(uint32_t* dest_output_map_array, uint32_t num_d
     return result;
 }
 
-// Ethernet ack and staging addresses
+// Ethernet staging addresses
 #if defined(COMPILE_FOR_ERISC)
-constexpr uint32_t PACKET_QUEUE_ETH_STAGE_ADDR = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
-constexpr uint32_t PACKET_QUEUE_ACK_BASE_ADDR = PACKET_QUEUE_ETH_STAGE_ADDR + PACKET_WORD_SIZE_BYTES;
-
-constexpr uint32_t PACKET_QUEUE_ACK_LOW_DEVICE_ADDR = PACKET_QUEUE_ACK_BASE_ADDR;
-constexpr uint32_t PACKET_QUEUE_ACK_HIGH_DEVICE_ADDR = PACKET_QUEUE_ACK_LOW_DEVICE_ADDR + PACKET_WORD_SIZE_BYTES;
-
+constexpr uint32_t PACKET_QUEUE_ETH_STAGE_ADDR = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + PACKET_WORD_SIZE_BYTES * 10;
 // Checking last item - first item is within the l1 range
-static_assert(PACKET_QUEUE_ACK_HIGH_DEVICE_ADDR - PACKET_QUEUE_ETH_STAGE_ADDR <= eth_l1_mem::address_map::ERISC_L1_UNRESERVED_SIZE, "Packet queue ethernet buffer in ERISC_L1_UNRESERVED_BASE has overflowed");
-
+static_assert(PACKET_QUEUE_ETH_STAGE_ADDR - eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE <= eth_l1_mem::address_map::ERISC_L1_UNRESERVED_SIZE, "Packet queue ethernet buffer in ERISC_L1_UNRESERVED_BASE has overflowed");
 #endif
