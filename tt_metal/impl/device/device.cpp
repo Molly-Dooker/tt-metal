@@ -352,6 +352,7 @@ void Device::initialize_build() {
 
         build_states.resize(num_build_states);
         uint32_t programmable_core_type_count = hal.get_programmable_core_type_count();
+            log_info(tt::LogBuildKernels, "programmable_core_type_count = {}", programmable_core_type_count);
         if (is_fw) {
             this->build_state_indices_.resize(programmable_core_type_count);
         }
@@ -360,13 +361,16 @@ void Device::initialize_build() {
         for (uint32_t programmable_core = 0; programmable_core < programmable_core_type_count; programmable_core++) {
             HalProgrammableCoreType core_type = magic_enum::enum_value<HalProgrammableCoreType>(programmable_core);
             uint32_t processor_class_count = hal.get_processor_classes_count(programmable_core);
+            log_info(tt::LogBuildKernels, "For core {} ({}), processor_class_count = {}", programmable_core, core_type, processor_class_count);
             if (is_fw) {
                 this->build_state_indices_[programmable_core].resize(processor_class_count);
             }
             for (uint32_t processor_class = 0; processor_class < processor_class_count; processor_class++) {
                 auto compute_proc_class = magic_enum::enum_cast<HalProcessorClassType>(processor_class);
+                log_info(tt::LogBuildKernels, "processor_class {} is {}", processor_class, compute_proc_class);
                 bool is_compute_processor = compute_proc_class.has_value() and compute_proc_class.value() == HalProcessorClassType::COMPUTE;
                 uint32_t processor_types_count = hal.get_processor_types_count(programmable_core, processor_class);
+                log_info(tt::LogBuildKernels, "For processor_class {} processor_type_count is {}", processor_class, processor_types_count);
                 if (is_fw) {
                     this->build_state_indices_[programmable_core][processor_class] = {index, processor_types_count};
                 }

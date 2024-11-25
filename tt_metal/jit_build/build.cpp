@@ -559,6 +559,9 @@ void JitBuildState::compile_one(
     cmd += this->includes_;
     cmd += "-c -o " + obj + " " + src;
 
+    if (this->is_fw_) {
+    log_info(tt::LogBuildKernels, "    g++ compile cmd: {}", cmd);
+    }
     log_debug(tt::LogBuildKernels, "    g++ compile cmd: {}", cmd);
 
     if (tt::llrt::OptionsG.get_watcher_enabled() && settings) {
@@ -607,6 +610,12 @@ void JitBuildState::link(const string& log_file, const string& out_dir) const {
     }
 
     cmd += "-o " + out_dir + this->target_name_ + ".elf";
+    if (this->is_fw_) {
+        log_info(tt::LogBuildKernels, " FW  g++ link cmd: {}", cmd);
+    }
+    else {
+        log_info(tt::LogBuildKernels, "   kernel   g++ link cmd: {}", cmd);
+    }
     log_debug(tt::LogBuildKernels, "    g++ link cmd: {}", cmd);
     if (!tt::utils::run_command(cmd, log_file, false)) {
         build_failure(this->target_name_, "link", cmd, log_file);
