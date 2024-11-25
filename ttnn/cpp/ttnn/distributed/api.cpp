@@ -9,6 +9,7 @@
 #include "ttnn/tensor/tensor.hpp"
 #include "ttnn/tensor/tensor_utils.hpp"
 #include "tt_metal/distributed/mesh_device.hpp"
+#include "ttnn/distributed/distributed_tensor.hpp"
 
 using namespace tt::tt_metal;
 
@@ -123,7 +124,7 @@ std::vector<Device*> distribute_tensor_to_mesh(const Tensor& tensor, MeshDevice&
             using StrategyType = std::decay_t<decltype(strategy)>;
             if constexpr (std::is_same_v<StrategyType, ShardTensor2D>) {
                 auto mesh_view = mesh_device.get_view();
-                return mesh_view->get_devices(strategy.shard_mesh);
+                return mesh_view->get_devices(MeshShape{strategy.shard_mesh.y, strategy.shard_mesh.x});
             } else {
                 return get_multi_device_workers(mesh_device.get_devices());
             }

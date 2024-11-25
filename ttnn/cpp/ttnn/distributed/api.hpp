@@ -8,6 +8,7 @@
 
 #include "ttnn/tensor/tensor.hpp"
 #include "ttnn/distributed/types.hpp"
+#include "ttnn/distributed/distributed_tensor.hpp"
 
 namespace ttnn::distributed::api {
 
