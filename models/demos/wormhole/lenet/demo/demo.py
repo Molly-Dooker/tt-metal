@@ -24,6 +24,8 @@ from models.utility_functions import (
 def run_demo_dataset(mesh_device, batch_size, iterations, model_location_generator, reset_seeds):
     disable_persistent_kernel_cache()
     num_classes = 10
+    mesh_device_flag = is_wormhole_b0() and ttnn.GetNumAvailableDevices() == 2
+    batch_size = 2 * batch_size if mesh_device_flag else batch_size
     test_input, images, outputs = lenet_utils.get_test_data(batch_size)
 
     pt_model_path = model_location_generator("model.pt", model_subdir="LeNet")
@@ -36,8 +38,6 @@ def run_demo_dataset(mesh_device, batch_size, iterations, model_location_generat
     weights_mesh_mapper = None
     output_mesh_composer = None
 
-    mesh_device_flag = is_wormhole_b0() and ttnn.GetNumAvailableDevices() == 2
-    batch_size = batch_size if mesh_device_flag else batch_size / 2
     inputs_mesh_mapper = ttnn.ShardTensorToMesh(mesh_device, dim=0)
     weights_mesh_mapper = ttnn.ReplicateTensorToMesh(mesh_device)
     output_mesh_composer = ttnn.ConcatMeshToTensor(mesh_device, dim=0)
@@ -77,11 +77,12 @@ def run_demo_dataset(mesh_device, batch_size, iterations, model_location_generat
 
     accuracy = correct / (batch_size * iterations)
     logger.info(f"ImageNet Inference Accuracy for {batch_size}x{iterations} Samples : {accuracy}")
+    assert accuracy >= 1.0, f"Expected accuracy : {1.0} Actual accuracy: {accuracy}"
 
 
 @skip_for_grayskull()
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 32768}], indirect=True)
-@pytest.mark.parametrize("batch_size", [128])
+@pytest.mark.parametrize("batch_size", [64])
 @pytest.mark.parametrize("iterations", [1])
 def test_demo_dataset(
     mesh_device,
