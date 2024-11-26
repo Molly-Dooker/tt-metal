@@ -38,9 +38,9 @@ memory::memory(std::string const& path, Relocate relo_type) : memory() {
         data_.insert(data_.end(), segment.contents.begin(), segment.contents.end());
         total_size += segment.contents.size();
     };
-    auto* text = &elf.GetSegments()[0];
-    for (auto& segment : std::span(elf.GetSegments()).subspan(1)) {
-        if (text && segment.address > text->address) {
+    ElfFile::Segment* text = nullptr;//&elf.GetSegments()[0];
+    for (auto& segment : std::span(elf.GetSegments()).subspan(0)) {
+        if (false && text && segment.address > text->address) {
             emit_segment(*text);
             text = nullptr;
         }
@@ -108,19 +108,12 @@ void memory::pack_data_into_text(std::uint64_t text_start, std::uint64_t data_st
     bool first_text = true;
     size_t offset = 0;
     // Copy text spans.  May start after data span (ncrisc)
-    // TODO: Ideally would be just 1, sometimes init doesn't merge w/ text and we get 2
-    // TODO: (and init is just a jump to text and should be removed)
     for (const auto& span : this->link_spans_) {
         if (span.addr >= text_start && span.addr < text_end) {
+            if (!first_text) abort();
             if (first_text) {
                 new_span.addr = span.addr;
                 first_text = false;
-            } else if (span.addr > new_span.addr + new_len * sizeof(uint32_t)) {
-                uint64_t delta = span.addr - (new_span.addr + new_len * sizeof(uint32_t));
-                delta /= sizeof(uint32_t);
-                // Pad the prior span
-                new_data.resize(new_data.size() + delta);
-                new_len += delta;
             }
             memcpy(&new_data[new_len], &this->data_[offset], span.len * sizeof(uint32_t));
             new_len += span.len;
