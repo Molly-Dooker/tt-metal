@@ -65,6 +65,7 @@ SECTIONS
     *(.text .stub .text.* .gnu.linkonce.t.*)
     /* .gnu.warning sections are handled specially by elf32.em.  */
     *(.gnu.warning)
+    . = ALIGN(4);
   } > REGION_CODE :text
   .init.fini :
   {
@@ -72,18 +73,23 @@ SECTIONS
     KEEP (*(.init .fini))
     ASSERT(SIZEOF(.init.fini) == 0, ".init/.fini sections have contents");
   } > REGION_CODE :text
-
-  . = ALIGN(. + MEM_PAD, MEM_ALIGN);
+  .text.end :
+  {
+    . = ALIGN(ABSOLUTE(.) + MEM_PAD, MEM_ALIGN);
+#if defined(TYPE_KERNEL)
+    __kernel_data_lma = .;
+#endif
+  } > REGION_CODE :text
 
 #if defined(TYPE_FIRMWARE)
-  __fw_export_end_text = .;
+  __fw_export_end_text = ABSOLUTE(.);
 #if defined(TARGET_NCRISC)
-  PROVIDE (KERNEL_ENTRY_SYMBOL = __fw_export_end_text);
+  PROVIDE (KERNEL_ENTRY_SYMBOL = ABSOLUTE(__fw_export_end_text));
 #endif
 #endif
 
 #if defined(TYPE_KERNEL)
-  __kernel_init_local_l1_base = .;
+  __kernel_init_local_l1_base = ABSOLUTE(.);
 #endif
 
 #if defined(TYPE_FIRMWARE)

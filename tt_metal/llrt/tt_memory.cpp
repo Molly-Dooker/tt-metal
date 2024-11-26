@@ -26,6 +26,7 @@ memory::memory(std::string const& path, Relocate relo_type) : memory() {
     elf.ReadImage(path);
     if (relo_type == Relocate::XIP) {
         elf.MakeExecuteInPlace();
+        elf.WriteImage(path + ".xip");
     }
 
     // The ELF file puts the text segment first, but memory wants
