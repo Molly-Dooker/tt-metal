@@ -27,6 +27,7 @@
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 
 #include "tt_metal/graph/graph_tracking.hpp"
+#include "tt_metal/impl/lightmetal/host_api_capture_helpers.hpp"
 
 namespace tt {
 
@@ -1274,6 +1275,7 @@ uint32_t BeginTraceCapture(Device *device, const uint8_t cq_id) {
 void EndTraceCapture(Device *device, const uint8_t cq_id, const uint32_t tid) { device->end_trace(cq_id, tid); }
 
 void ReplayTrace(Device *device, const uint8_t cq_id, const uint32_t tid, const bool blocking) {
+    TRACE_FUNCTION_CALL(captureReplayTrace, device, cq_id, tid, blocking);
     device->replay_trace(cq_id, tid, blocking);
 }
 

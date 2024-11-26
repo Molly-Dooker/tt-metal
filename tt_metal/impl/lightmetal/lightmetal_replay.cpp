@@ -4,6 +4,7 @@
 
 #include "lightmetal_replay.hpp"
 #include "binary_generated.h"
+#include "command_generated.h"
 #include "tt_metal/impl/trace/trace_buffer.hpp"
 #include "tt_metal/common/logger.hpp"
 
@@ -148,46 +149,81 @@ void printLightMetalBinaryContents(const tt::target::lightmetal::LightMetalBinar
         return;
     }
 
-    log_info(tt::LogMetalTrace, "Before trace descriptors call");
     const auto* trace_descriptors = lm_binary->trace_descriptors();
-    log_info(tt::LogMetalTrace, "After trace descriptors call");
     if (!trace_descriptors) {
         std::cout << "No trace descriptors found in the binary." << std::endl;
-        return;
+    } else {
+        // Print all trace descriptors.
+        std::cout << "Number of trace descriptors: " << trace_descriptors->size() << std::endl;
+        for (const auto* descriptor_by_id : *trace_descriptors) {
+            if (!descriptor_by_id) continue;
+
+            uint32_t trace_id = descriptor_by_id->trace_id();
+            const auto* trace_desc = descriptor_by_id->desc();
+
+            if (!trace_desc) {
+                std::cerr << "Descriptor is null for trace_id: " << trace_id << std::endl;
+                continue;
+            }
+
+            // Print trace descriptor details.
+            std::cout << "Trace ID: " << trace_id << std::endl;
+            std::cout << "  Number of completion worker cores: "
+                      << trace_desc->num_completion_worker_cores() << std::endl;
+            std::cout << "  Number of programs needing multicast: "
+                      << trace_desc->num_traced_programs_needing_go_signal_multicast() << std::endl;
+            std::cout << "  Number of programs needing unicast: "
+                      << trace_desc->num_traced_programs_needing_go_signal_unicast() << std::endl;
+
+            // Print trace data.
+            const auto* trace_data = trace_desc->trace_data();
+            if (trace_data && trace_data->size() > 0) {
+                std::cout << "  Trace Data (size: " << trace_data->size() << "): ";
+                for (uint32_t value : *trace_data) {
+                    std::cout << value << " ";
+                }
+                std::cout << std::endl;
+            } else {
+                std::cout << "  Trace Data: None" << std::endl;
+            }
+        }
     }
 
-    // Print all trace descriptors.
-    std::cout << "Number of trace descriptors: " << trace_descriptors->size() << std::endl;
-    for (const auto* descriptor_by_id : *trace_descriptors) {
-        if (!descriptor_by_id) continue;
+    // Print all commands.
+    const auto* commands = lm_binary->commands();
+    if (!commands || commands->size() == 0) {
+        std::cout << "No commands found in the binary." << std::endl;
+    } else {
+        std::cout << "Number of commands: " << commands->size() << std::endl;
+        for (const auto* command : *commands) {
+            if (!command) continue;
 
-        uint32_t trace_id = descriptor_by_id->trace_id();
-        const auto* trace_desc = descriptor_by_id->desc();
-
-        if (!trace_desc) {
-            std::cerr << "Descriptor is null for trace_id: " << trace_id << std::endl;
-            continue;
-        }
-
-        // Print trace descriptor details.
-        std::cout << "Trace ID: " << trace_id << std::endl;
-        std::cout << "  Number of completion worker cores: "
-                  << trace_desc->num_completion_worker_cores() << std::endl;
-        std::cout << "  Number of programs needing multicast: "
-                  << trace_desc->num_traced_programs_needing_go_signal_multicast() << std::endl;
-        std::cout << "  Number of programs needing unicast: "
-                  << trace_desc->num_traced_programs_needing_go_signal_unicast() << std::endl;
-
-        // Print trace data.
-        const auto* trace_data = trace_desc->trace_data();
-        if (trace_data && trace_data->size() > 0) {
-            std::cout << "  Trace Data (size: " << trace_data->size() << "): ";
-            for (uint32_t value : *trace_data) {
-                std::cout << value << " ";
+            auto cmd_type = command->cmd_type();
+            switch (cmd_type) {
+                case tt::target::CommandUnion_ReplayTrace: {
+                    const auto* replay_trace = command->cmd_as_ReplayTrace();
+                    if (replay_trace) {
+                        std::cout << "ReplayTrace Command:" << std::endl;
+                        std::cout << "  cq_id: " << replay_trace->cq_id() << std::endl;
+                        std::cout << "  tid: " << replay_trace->tid() << std::endl;
+                        std::cout << "  blocking: " << (replay_trace->blocking() ? "true" : "false") << std::endl;
+                    }
+                    break;
+                }
+                case tt::target::CommandUnion_EnqueueTrace: {
+                    const auto* enqueue_trace = command->cmd_as_EnqueueTrace();
+                    if (enqueue_trace) {
+                        std::cout << "EnqueueTrace Command:" << std::endl;
+                        std::cout << "  cq_id: " << enqueue_trace->cq_id() << std::endl;
+                        std::cout << "  tid: " << enqueue_trace->tid() << std::endl;
+                        std::cout << "  blocking: " << (enqueue_trace->blocking() ? "true" : "false") << std::endl;
+                    }
+                    break;
+                }
+                default:
+                    std::cout << "Unknown Command type: " << cmd_type << std::endl;
+                    break;
             }
-            std::cout << std::endl;
-        } else {
-            std::cout << "  Trace Data: None" << std::endl;
         }
     }
 }

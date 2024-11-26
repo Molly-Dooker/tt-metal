@@ -156,30 +156,14 @@ TEST_F(SingleDeviceTraceFixture, EnqueueProgramTraceCapture) {
 
     EnqueueWriteBuffer(command_queue, *input, input_data.data(), true);
 
-    uint32_t tid;
-
-    if (deserialize_trace) {
-        tid = 0;
-        LightMetalLoadTraceId(this->device_, tid, command_queue.id());
-
-    } else {
-
+    if (serialize_trace) {
         LightMetalBeginCapture(this->device_);
-
-        tid = BeginTraceCapture(this->device_, command_queue.id());
-        EnqueueProgram(command_queue, simple_program, false);
-        EndTraceCapture(this->device_, command_queue.id(), tid);
-
-        log_info(tt::LogTest, "KCM Done capturing trace");
-
-        LightMetalEndCapture(this->device_);
-
-        // Early exit, don't run if serializing to disk. Eventually will remove this, and LightMetalCapture will capture everything.
-        if (serialize_trace) {
-            log_info(tt::LogTest, "Early exiting now since we are serializing to disk.");
-            return;
-        }
     }
+
+    uint32_t tid = BeginTraceCapture(this->device_, command_queue.id());
+    EnqueueProgram(command_queue, simple_program, false);
+    EndTraceCapture(this->device_, command_queue.id(), tid);
+    log_info(tt::LogTest, "KCM Done capturing metal trace");
 
     // Create and Enqueue a Program with a live trace to ensure that a warning is generated
     auto input_temp = Buffer::create(this->device_, 2048, 2048, BufferType::DRAM);
@@ -195,6 +179,10 @@ TEST_F(SingleDeviceTraceFixture, EnqueueProgramTraceCapture) {
     // Done
     Finish(command_queue);
     ReleaseTrace(this->device_, tid);
+
+    if (serialize_trace) {
+        LightMetalEndCapture(this->device_);
+    }
 }
 
 TEST_F(SingleDeviceTraceFixture, EnqueueProgramDeviceCapture) {
