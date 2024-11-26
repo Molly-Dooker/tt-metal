@@ -42,7 +42,7 @@ void kernel_launch(uint32_t kernel_base_addr) {
   do_crt1((uint32_t tt_l1_ptr*)x);
   extern uint32_t __kernel_data_lma[];
   if ((uint32_t)&__kernel_data_lma != x)
-      return;
+      ;//return;
 
   if constexpr (NOC_MODE == DM_DEDICATED_NOC) {
       noc_local_state_init(NOC_INDEX);
