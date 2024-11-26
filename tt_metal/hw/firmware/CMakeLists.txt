@@ -146,10 +146,81 @@ set(GPP_FLAGS_slave_idle_erisc
     -fno-delete-null-pointer-checks
 )
 
+#Linker flags
+set(GPP_LINK_FLAGS_common
+    -std=c++17
+    -flto
+    -ffast-math
+    -fno-exceptions
+    -Wl,-z,max-page-size=16
+    -Wl,-z,common-page-size=16
+    -nostartfiles
+)
+
+function(get_link_objects INPUT_ARCH INPUT_PROC INPUT_DIR OUTPUT_LIST)
+    unset(OBJ_LIST)
+    set(OBJ_LIST ${INPUT_DIR}substitutes.o)
+
+    if("${INPUT_PROC}" STREQUAL "brisc")
+        list(APPEND OBJ_LIST ${INPUT_DIR}tdma_xmov.o)
+    endif()
+    if(NOT "${INPUT_PROC}" STREQUAL "erisc")
+        list(APPEND OBJ_LIST ${INPUT_DIR}tmu-crt0.o)
+    endif()
+    if("${INPUT_PROC}" STREQUAL "ncrisc")
+        if("${INPUT_ARCH}" STREQUAL "grayskull" OR "${INPUT_ARCH}" STREQUAL "wormhole")
+            list(APPEND OBJ_LIST ${INPUT_DIR}ncrisc-halt.o)
+        endif()
+    endif()
+
+    if("${INPUT_PROC}" STREQUAL "brisc" OR "${INPUT_PROC}" STREQUAL "idle_erisc")
+        list(APPEND OBJ_LIST ${INPUT_DIR}noc.o)
+    endif()
+
+    set(${OUTPUT_LIST} ${OBJ_LIST} PARENT_SCOPE)
+endfunction()
+
 # Build object files all combination of ARCH and PROC
 foreach(ARCH IN LISTS ARCHS)
     get_alias(${ARCH} ARCH_B0)
     set(FW_OUTPUT_DIR "${PROJECT_SOURCE_DIR}/runtime/hw/firmware/${ARCH}")
+
+    set(GPP_LINK_FLAGS_${ARCH}_brisc
+        -Os
+        -T${PROJECT_SOURCE_DIR}/runtime/hw/toolchain/${ARCH}/firmware_brisc.ld
+    )
+    set(GPP_LINK_FLAGS_${ARCH}_ncrisc
+        -Os
+        -T${PROJECT_SOURCE_DIR}/runtime/hw/toolchain/${ARCH}/firmware_ncrisc.ld
+    )
+    set(GPP_LINK_FLAGS_${ARCH}_trisc0
+        -O3
+        -T${PROJECT_SOURCE_DIR}/runtime/hw/toolchain/${ARCH}/firmware_trisc0.ld
+    )
+    set(GPP_LINK_FLAGS_${ARCH}_trisc1
+        -O3
+        -T${PROJECT_SOURCE_DIR}/runtime/hw/toolchain/${ARCH}/firmware_trisc1.ld
+    )
+    set(GPP_LINK_FLAGS_${ARCH}_trisc2
+        -O3
+        -T${PROJECT_SOURCE_DIR}/runtime/hw/toolchain/${ARCH}/firmware_trisc2.ld
+    )
+
+    set(GPP_LINK_FLAGS_${ARCH}_erisc
+        -Os
+        -L${PROJECT_SOURCE_DIR}/tt_metal/hw/toolchain
+        -T${PROJECT_SOURCE_DIR}/tt_metal/hw/toolchain/erisc-b0-app.ld
+    )
+
+    set(GPP_LINK_FLAGS_${ARCH}_idle_erisc
+        -Os
+        -T${PROJECT_SOURCE_DIR}/runtime/hw/toolchain/${ARCH}/firmware_ierisc.ld
+    )
+    set(GPP_LINK_FLAGS_${ARCH}_slave_idle_erisc
+        -Os
+        -T${PROJECT_SOURCE_DIR}/runtime/hw/toolchain/${ARCH}/firmware_slave_ierisc.ld
+    )
+
     foreach(PROC IN LISTS PROCS)
         if("${ARCH}" STREQUAL "grayskull" AND "${PROC}" STREQUAL "erisc")
             continue() # Skip the iteration, grayskull doesn;t have idle_erisc or slave_idle_erisc
@@ -212,10 +283,33 @@ foreach(ARCH IN LISTS ARCHS)
                 ${${FWLIB}_SOURCE}
             DEPENDS
                 ${${FWLIB}_SOURCE}
-            COMMENT "Building hw lib ${FW_OUTPUT_FILE}"
+            COMMENT "Building fw lib ${FW_OUTPUT_FILE}"
             VERBATIM
         )
         list(APPEND PREPROCESSED_O_FILES ${FW_OUTPUT_FILE})
+
+        set(FW_BINARY_FILE "${FW_OUTPUT_DIR}/${FWLIB}.elf")
+        set(GPP_LINK_FLAGS
+            ${GPP_FLAGS_${ARCH}}
+            ${GPP_LINK_FLAGS_common}
+            ${GPP_LINK_FLAGS_${ARCH}_${PROC}}
+        )
+
+        get_link_objects(${ARCH} ${PROC} "${PROJECT_SOURCE_DIR}/runtime/hw/lib/${ARCH}/" LINK_OBJS)
+        add_custom_command(
+            OUTPUT
+                ${FW_BINARY_FILE}
+            #COMMAND
+            #${CMAKE_COMMAND} -E make_directory ${FW_OUTPUT_DIR}
+            COMMAND
+                ${GPP_CMD} ${GPP_LINK_FLAGS} -o ${FW_BINARY_FILE} ${FW_OUTPUT_FILE} ${LINK_OBJS}
+            DEPENDS
+                ${${LINK_OBJS}}
+                ${FW_OUTPUT_FILE}
+            COMMENT "Building fw binary ${FW_BINARY_FILE}"
+            VERBATIM
+        )
+        list(APPEND FIRMWARE_BINARY_FILES ${FW_BINARY_FILE})
     endforeach()
 endforeach()
 
@@ -225,8 +319,9 @@ add_custom_target(
     ALL
     DEPENDS
         ${PREPROCESSED_O_FILES}
-    #${FIRMWARE_BINARY_FILES}
+        ${FIRMWARE_BINARY_FILES}
 )
+add_dependencies(firmware_output hw_toolchain)
 
 add_library(firmware_binary INTERFACE)
 add_library(Metalium::Metal::Firmware ALIAS firmware_binary)
