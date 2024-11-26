@@ -86,7 +86,7 @@ class Conv:
             reallocate_halo_output=False,
             output_layout=self.output_layout,
         )
-        compute_config = ttnn.GetComputeKernelConfig(
+        compute_config = ttnn.CreateComputeKernelConfig(
             math_fidelity=ttnn.MathFidelity.LoFi, math_approx_mode=False, fp32_dest_acc_en=False, packer_l1_acc=False
         )
         if self.act_block_h is not None:

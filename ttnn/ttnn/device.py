@@ -151,7 +151,7 @@ format_output_tensor = ttnn._ttnn.device.format_output_tensor
 pad_to_tile_shape = ttnn._ttnn.device.pad_to_tile_shape
 
 
-def GetComputeKernelConfig(
+def CreateComputeKernelConfig(
     math_fidelity=ttnn.MathFidelity.HiFi4,
     math_approx_mode=True,
     fp32_dest_acc_en=False,
