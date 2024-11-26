@@ -9,6 +9,7 @@
 
 #include "buffers/circular_buffer_types.hpp"
 #include "common/executor.hpp"
+#include "common/logger.hpp"
 #include "tools/profiler/profiler.hpp"
 #include "tt_metal/detail/kernel_cache.hpp"
 #include "tt_metal/detail/persistent_kernel_cache.hpp"
@@ -1215,6 +1216,7 @@ uint32_t detail::Program_::finalize_cbs(uint32_t programmable_core_type_index, u
     uint32_t cb_size = count * UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t);
     this->program_configs_[programmable_core_type_index].cb_offset = base_offset;
     this->program_configs_[programmable_core_type_index].cb_size = cb_size;
+    log_info("Program {} CB size: {}", this->id, cb_size);
 
     return base_offset + cb_size;
 }
@@ -1341,6 +1343,19 @@ const std::vector<SubDeviceId> &detail::Program_::determine_sub_device_ids(const
     }
     return sub_device_ids->second;
 }
+
+void Program::set_pre_exec_callback(std::function<void(Program*)> callback){
+    this->pre_exec_callback_ = callback;
+}
+
+void Program::call_pre_exec_callback(){
+    if (this->pre_exec_callback_) {
+        this->pre_exec_callback_(this);
+    } else {
+        log_debug("No pre-exec callback set for program {}", this->get_id());
+    }
+}
+
 
 void detail::Program_::finalize(Device *device) {
     // Store the number of tensix "go signals" for use by CQ
