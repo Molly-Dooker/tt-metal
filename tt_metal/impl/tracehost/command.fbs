@@ -16,9 +16,15 @@ table EnqueueTrace {
     blocking: bool;
 }
 
+table LightMetalLoadTraceId {
+    tid: int;
+    cq_id: int;
+}
+
 union CommandUnion {
     ReplayTrace,
-    EnqueueTrace
+    EnqueueTrace,
+    LightMetalLoadTraceId
     // EnqueueWriteBuffer
 }
 

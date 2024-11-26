@@ -55,3 +55,19 @@ inline void captureEnqueueTrace(CommandQueue& cq, uint32_t trace_id, bool blocki
     );
     ctx.getCmdsVector().push_back(command);
 }
+
+inline void captureLightMetalLoadTraceId(Device *device, const uint32_t tid, const uint8_t cq_id) {
+    auto& ctx = LightMetalCaptureContext::getInstance();
+    // FIXME - Handle device_id.
+    log_info(tt::LogMetalTrace, "{}: cq_id: {}, tid: {}", __FUNCTION__, cq_id, tid);
+    if (!ctx.isTracing()) return;
+
+    auto& builder = ctx.getBuilder();
+    auto command_variant = tt::target::CreateLightMetalLoadTraceId(builder, tid, cq_id);
+    auto command = tt::target::CreateCommand(
+        builder,
+        tt::target::CommandUnion::CommandUnion_LightMetalLoadTraceId,
+        command_variant.Union()
+    );
+    ctx.getCmdsVector().push_back(command);
+}

@@ -220,6 +220,15 @@ void printLightMetalBinaryContents(const tt::target::lightmetal::LightMetalBinar
                     }
                     break;
                 }
+                case tt::target::CommandUnion_LightMetalLoadTraceId: {
+                    const auto* cmd_variant = command->cmd_as_LightMetalLoadTraceId();
+                    if (cmd_variant) {
+                        std::cout << "LightMetalLoadTraceId Command:" << std::endl;
+                        std::cout << "  tid: " << cmd_variant->tid() << std::endl;
+                        std::cout << "  cq_id: " << cmd_variant->cq_id() << std::endl;
+                    }
+                    break;
+                }
                 default:
                     std::cout << "Unknown Command type: " << cmd_type << std::endl;
                     break;
