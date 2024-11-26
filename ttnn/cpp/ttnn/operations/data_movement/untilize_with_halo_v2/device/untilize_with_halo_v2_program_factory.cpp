@@ -10,7 +10,6 @@
 #include "ttnn/operations/math.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
-#include "tt_metal/host_api.hpp"
 #include "ttnn/common/constants.hpp"
 #include "ttnn/operation.hpp"
 

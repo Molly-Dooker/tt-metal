@@ -7,7 +7,6 @@
 #include "ttnn/operations/math.hpp"
 #include "ttnn/cpp/ttnn/operations/data_movement/copy/device/copy_device_operation.hpp"
 
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include <algorithm>

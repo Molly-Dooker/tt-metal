@@ -10,7 +10,6 @@
 #include "ttnn/operations/eltwise/unary/unary.hpp"
 #include "tt_metal/common/constants.hpp"
 #include <ttnn/operations/numpy/functions.hpp>
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 
 namespace tt {

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "tt_metal/host_api.hpp"
+#include "tt_metal/metal.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/common/bfloat16.hpp"
@@ -48,18 +48,18 @@ void golden_matmul(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::vect
 
 
 void matmul_multi_core(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::vector<bfloat16>& output, bool bcast_batch,
-                        uint32_t M, uint32_t N, uint32_t K, uint32_t B, Device* device) {
+                        uint32_t M, uint32_t N, uint32_t K, uint32_t B, v1::DeviceHandle device) {
 
     /*
     * Setup program to execute along with its buffers and kernels to use
     */
-    CommandQueue& cq = device->command_queue();
-    Program program{};
+    auto cq = GetDefaultCommandQueue(device);
+    auto program = v1::CreateProgram();
 
     /*
     * Multi-Core prep
     */
-    auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
+    auto compute_with_storage_grid_size = GetComputeWithStorageGridSize(device);
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
 
@@ -116,9 +116,9 @@ void matmul_multi_core(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::
                     .buffer_type = tt_metal::BufferType::DRAM
         };
 
-    std::shared_ptr<tt::tt_metal::Buffer> src0_dram_buffer = CreateBuffer(dram_config_A);
-    std::shared_ptr<tt::tt_metal::Buffer> src1_dram_buffer = CreateBuffer(dram_config_B);
-    std::shared_ptr<tt::tt_metal::Buffer> dst_dram_buffer = CreateBuffer(dram_config_C);
+    auto src0_dram_buffer = v1::CreateBuffer(dram_config_A);
+    auto src1_dram_buffer = v1::CreateBuffer(dram_config_B);
+    auto dst_dram_buffer = v1::CreateBuffer(dram_config_C);
     uint32_t src0_addr = src0_dram_buffer->address();
     uint32_t src1_addr = src1_dram_buffer->address();
     uint32_t dst_addr = dst_dram_buffer->address();
@@ -131,18 +131,18 @@ void matmul_multi_core(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::
     uint32_t num_input_tiles = 2;
     CircularBufferConfig cb_src0_config = CircularBufferConfig(num_input_tiles * single_tile_size, {{src0_cb_index, cb_data_format}})
 		.set_page_size(src0_cb_index, single_tile_size);
-    auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src0_config);
+    auto cb_src0 = CreateCircularBuffer(program, all_cores, cb_src0_config);
 
     uint32_t src1_cb_index = CBIndex::c_1; // 1
     CircularBufferConfig cb_src1_config = CircularBufferConfig(num_input_tiles * single_tile_size, {{src1_cb_index, cb_data_format}})
 		.set_page_size(src1_cb_index, single_tile_size);
-    auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src1_config);
+    auto cb_src1 = CreateCircularBuffer(program, all_cores, cb_src1_config);
 
     uint32_t output_cb_index = tt::CBIndex::c_16;
     uint32_t num_output_tiles = 2;
     CircularBufferConfig cb_output_config = CircularBufferConfig(num_output_tiles * single_tile_size, {{output_cb_index, cb_data_format}})
 		.set_page_size(output_cb_index, single_tile_size);
-    auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_config);
+    auto cb_output = CreateCircularBuffer(program, all_cores, cb_output_config);
 
     /*
     * Compile time arguments
@@ -157,13 +157,13 @@ void matmul_multi_core(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::
     /*
     * Create Kernels (Reader, Writer, Compute)
     */
-    auto reader_id = tt_metal::CreateKernel(
+    auto reader_id = CreateKernel(
         program,
         "tt_metal/programming_examples/matmul_common/kernels/dataflow/reader_bmm_8bank_output_tiles_partitioned.cpp",
         all_cores,
         tt_metal::DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default, .compile_args = reader_compile_time_args});
 
-    auto writer_id = tt_metal::CreateKernel(
+    auto writer_id = CreateKernel(
         program,
         "tt_metal/programming_examples/matmul_common/kernels/dataflow/writer_unary_interleaved_start_id.cpp",
         all_cores,
@@ -176,7 +176,7 @@ void matmul_multi_core(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::
         num_output_tiles_per_core_group_1 // Nt
     }; // bmm compute kernel the B, Mt, Nt are just 3 for loops that technically act as 1 large loop, so only set Nt for simplicity
 
-    auto matmul_multi_core_kernel_group_1_id = tt_metal::CreateKernel(
+    auto matmul_multi_core_kernel_group_1_id = CreateKernel(
         program,
         "tt_metal/programming_examples/matmul_common/kernels/compute/bmm.cpp",
         core_group_1,
@@ -191,7 +191,7 @@ void matmul_multi_core(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::
             num_output_tiles_per_core_group_2 // Nt
         }; // bmm compute kernel the B, Mt, Nt are just 3 for loops that technically act as 1 large loop, so only set Nt for simplicity
 
-        auto matmul_multi_core_kernel_group_2_id = tt_metal::CreateKernel(
+        auto matmul_multi_core_kernel_group_2_id = CreateKernel(
             program,
             "tt_metal/programming_examples/matmul_common/kernels/compute/bmm.cpp",
             core_group_2,
@@ -204,7 +204,7 @@ void matmul_multi_core(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::
     */
     for (uint32_t i = 0, num_tiles_written = 0; i < num_cores; i++){
 
-        CoreCoord core = {i / num_cores_y, i % num_cores_y};
+        auto core = CoreRange({i / num_cores_y, i % num_cores_y});
 
         uint32_t num_output_tiles_per_core = 0;
         if (core_group_1.contains(core)) {
@@ -215,7 +215,7 @@ void matmul_multi_core(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::
             TT_ASSERT(false, "Core not in specified core ranges");
         }
 
-        tt_metal::SetRuntimeArgs(
+        SetRuntimeArgs(
             program, reader_id, core,
             {src0_addr,
             src1_addr,
@@ -230,7 +230,7 @@ void matmul_multi_core(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::
             num_output_tiles_per_core,
             MtNt }
         );
-        tt_metal::SetRuntimeArgs(
+        SetRuntimeArgs(
             program,
             writer_id,
             core,
@@ -242,10 +242,10 @@ void matmul_multi_core(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::
     }
 
     /* Launch program & read in output buffer result into the host vector */
-    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data(), false);
-    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data(), false);
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a, false);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b, false);
     EnqueueProgram(cq, program, false);
-    EnqueueReadBuffer(cq, dst_dram_buffer, output.data(), true);
+    EnqueueReadBuffer(cq, dst_dram_buffer, output, true);
 }
 
 

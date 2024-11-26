@@ -10,7 +10,6 @@
 #include "tt_metal/common/work_split.hpp"
 #include "ttnn/run_operation.hpp"
 
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/common/math.hpp"
 #include "tt_metal/detail/util.hpp"

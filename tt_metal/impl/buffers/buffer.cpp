@@ -520,7 +520,25 @@ DeviceAddr ShardSpecBuffer::size() const {
     return shape_in_pages_[0] * shape_in_pages_[1];
 }
 
-v1::BufferHandle v1::CreateBuffer(InterleavedBufferConfig config) { return v1::BufferHandle{v0::CreateBuffer(config)}; }
+v1::BufferHandle v1::CreateBuffer(InterleavedBufferConfig config) { return v1::BufferHandle{Buffer::create(
+        config.device,
+        config.size,
+        config.page_size,
+        config.buffer_type,
+        config.buffer_layout,
+        std::nullopt,
+        std::nullopt,
+        std::nullopt)}; }
+
+v1::BufferHandle v1::CreateBuffer(ShardedBufferConfig config) { return v1::BufferHandle{Buffer::create(
+        config.device,
+        config.size,
+        config.page_size,
+        config.buffer_type,
+        config.buffer_layout,
+        config.shard_parameters,
+        std::nullopt,
+        std::nullopt)}; }
 
 void v1::DeallocateBuffer(BufferHandle buffer) { v0::DeallocateBuffer(*buffer); }
 

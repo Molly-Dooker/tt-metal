@@ -7,7 +7,6 @@
 #include "tt_metal/common/work_split.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
-#include "tt_metal/host_api.hpp"
 #include "ttnn/operations/embedding/device/embedding_program_factory.hpp"
 
 using namespace tt::constants;

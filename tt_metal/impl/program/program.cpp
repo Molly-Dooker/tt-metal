@@ -16,7 +16,6 @@
 #include "tt_metal/detail/reports/memory_reporter.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/graph/graph_tracking.hpp"
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/impl/allocator/allocator.hpp"
 #include "tt_metal/impl/buffers/circular_buffer.hpp"
 #include "tt_metal/impl/buffers/semaphore.hpp"
@@ -296,6 +295,10 @@ class Internal_ {
 
     static const map_type &get_circular_buffers_by_id(const Program &program) noexcept {
         return program.pimpl_->circular_buffer_by_id_;
+    }
+
+    static const Program &get_program(const v1::ProgramHandle &handle) noexcept {
+        return handle.program;
     }
 };
 
@@ -1690,14 +1693,14 @@ std::unordered_map<uint64_t, ProgramCommandSequence> &Program::get_cached_progra
     return pimpl_->cached_program_command_sequences_;
 }
 
-v1::ProgramHandle v1::CreateProgram() { return {}; }
+v1::ProgramHandle v1::CreateProgram() { return ProgramHandle{}; }
 
 v1::KernelHandle v1::CreateKernel(
     v1::ProgramHandle &program,
     std::string_view file_name,
     const CoreRangeSet &core_spec,
     const DataMovementConfig &config) {
-    return v1::KernelHandle{v0::CreateKernel(program, std::string{file_name}, core_spec, config)};
+    return v1::KernelHandle{v0::CreateKernel(detail::Internal_::get_program(program), std::string{file_name}, core_spec, config)};
 }
 
 v1::KernelHandle v1::CreateKernel(
@@ -1705,7 +1708,7 @@ v1::KernelHandle v1::CreateKernel(
     std::string_view file_name,
     const CoreRangeSet &core_spec,
     const ComputeConfig &config) {
-    return v1::KernelHandle{v0::CreateKernel(program, std::string{file_name}, core_spec, config)};
+    return v1::KernelHandle{v0::CreateKernel(detail::Internal_::get_program(program), std::string{file_name}, core_spec, config)};
 }
 
 v1::KernelHandle v1::CreateKernel(
@@ -1713,22 +1716,22 @@ v1::KernelHandle v1::CreateKernel(
     std::string_view file_name,
     const CoreRangeSet &core_spec,
     const EthernetConfig &config) {
-    return v1::KernelHandle{v0::CreateKernel(program, std::string{file_name}, core_spec, config)};
+    return v1::KernelHandle{v0::CreateKernel(detail::Internal_::get_program(program), std::string{file_name}, core_spec, config)};
 }
 
 uint32_t v1::CreateSemaphore(
     v1::ProgramHandle &program, const CoreRangeSet &core_spec, uint32_t initial_value, CoreType core_type) {
-    return v0::CreateSemaphore(program, core_spec, initial_value, core_type);
+    return v0::CreateSemaphore(detail::Internal_::get_program(program), core_spec, initial_value, core_type);
 }
 
 v1::CircularBufferHandle v1::CreateCircularBuffer(
     v1::ProgramHandle &program, const CoreRangeSet &core_spec, const CircularBufferConfig &config) {
-    return v1::CircularBufferHandle{v0::CreateCircularBuffer(program, core_spec, config)};
+    return v1::CircularBufferHandle{v0::CreateCircularBuffer(detail::Internal_::get_program(program), core_spec, config)};
 }
 
 const CircularBufferConfig &v1::GetCircularBufferConfig(
     v1::ProgramHandle &program, v1::CircularBufferHandle cb_handle) {
-    return v0::GetCircularBufferConfig(program, static_cast<v0::CBHandle>(cb_handle));
+    return v0::GetCircularBufferConfig(detail::Internal_::get_program(program), static_cast<v0::CBHandle>(cb_handle));
 }
 
 constexpr auto to_handle() {
@@ -1738,7 +1741,7 @@ constexpr auto to_handle() {
 }
 
 v1::SizedCircularBufferRange v1::GetCircularBuffers(v1::ProgramHandle &program) {
-    return detail::Internal_::get_circular_buffers_by_id(program) |
+    return detail::Internal_::get_circular_buffers_by_id(detail::Internal_::get_program(program)) |
            ranges::views::transform(to_handle());
 }
 
@@ -1749,19 +1752,52 @@ inline auto is_on_logical_corerange(CoreRange cr) {
 }
 
 v1::CircularBufferRange v1::GetCircularBuffersOnCoreRange(v1::ProgramHandle &program, CoreRange cr) {
-    return detail::Internal_::get_circular_buffers_by_id(program) |
+    return detail::Internal_::get_circular_buffers_by_id(detail::Internal_::get_program(program)) |
            ranges::views::filter(is_on_logical_corerange(cr)) |
            ranges::views::transform(to_handle());
 }
 
 void v1::UpdateCircularBufferTotalSize(
     v1::ProgramHandle &program, v1::CircularBufferHandle cb_handle, std::uint32_t total_size) {
-    v0::UpdateCircularBufferTotalSize(program, static_cast<v0::CBHandle>(cb_handle), total_size);
+    v0::UpdateCircularBufferTotalSize(detail::Internal_::get_program(program), static_cast<v0::CBHandle>(cb_handle), total_size);
 }
 
 void v1::UpdateDynamicCircularBufferAddress(
     v1::ProgramHandle &program, v1::CircularBufferHandle cb_handle, v1::BufferHandle buffer) {
-    v0::UpdateDynamicCircularBufferAddress(program, static_cast<v0::CBHandle>(cb_handle), *buffer);
+    v0::UpdateDynamicCircularBufferAddress(detail::Internal_::get_program(program), static_cast<v0::CBHandle>(cb_handle), *buffer);
+}
+
+void v1::SetRuntimeArgs(
+    v1::ProgramHandle &program, v1::KernelHandle kernel, const CoreRangeSet &core_spec, v1::RuntimeArgs runtime_args) {
+    if (runtime_args.empty()) {
+        return;
+    }
+
+    const auto kernel_ptr = detail::GetKernel(detail::Internal_::get_program(program), static_cast<tt_metal::KernelHandle>(kernel));
+
+    for (const auto &core_range : core_spec.ranges()) {
+        for (auto x = core_range.start_coord.x; x <= core_range.end_coord.x; ++x) {
+            for (auto y = core_range.start_coord.y; y <= core_range.end_coord.y; ++y) {
+                kernel_ptr->set_runtime_args(CoreCoord(x, y), runtime_args);
+            }
+        }
+    }
+}
+
+void v1::SetCommonRuntimeArgs(ProgramHandle &program, KernelHandle kernel, RuntimeArgs runtime_args) {
+    if (runtime_args.empty()) {
+        return;
+    }
+
+    const auto kernel_ptr = detail::GetKernel(detail::Internal_::get_program(program), static_cast<tt_metal::KernelHandle>(kernel));
+
+    kernel_ptr->set_common_runtime_args(runtime_args);
+}
+
+v1::RuntimeArgs v1::GetRuntimeArgs(ProgramHandle &program, KernelHandle kernel, CoreCoord logical_core) {
+    const auto kernel_ptr = detail::GetKernel(detail::Internal_::get_program(program), static_cast<tt_metal::KernelHandle>(kernel));
+
+    return kernel_ptr->runtime_args(logical_core);
 }
 
 }  // namespace tt::tt_metal

@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/common/bfloat16.hpp"
@@ -47,7 +46,7 @@ void golden_matmul(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::vect
 }
 
 void matmul_multicore_reuse(std::vector<bfloat16>& a, std::vector<bfloat16>& b, std::vector<bfloat16>& output, bool bcast_batch,
-                        uint32_t M, uint32_t N, uint32_t K, uint32_t B, Device* device) {
+                        uint32_t M, uint32_t N, uint32_t K, uint32_t B, v1::DeviceHandle device) {
 
     /*
     * Setup program to execute along with its buffers and kernels to use
@@ -186,9 +185,9 @@ void matmul_multicore_reuse(std::vector<bfloat16>& a, std::vector<bfloat16>& b, 
 
 
 
-    auto src0_dram_buffer = CreateBuffer(dram_config_A);
-    auto src1_dram_buffer = CreateBuffer(dram_config_B);
-    auto dst_dram_buffer = CreateBuffer(dram_config_C);
+    auto src0_dram_buffer = v1::CreateBuffer(dram_config_A);
+    auto src1_dram_buffer = v1::CreateBuffer(dram_config_B);
+    auto dst_dram_buffer = v1::CreateBuffer(dram_config_C);
     uint32_t src0_addr = src0_dram_buffer->address();
     uint32_t src1_addr = src1_dram_buffer->address();
     uint32_t dst_addr = dst_dram_buffer->address();
@@ -200,12 +199,12 @@ void matmul_multicore_reuse(std::vector<bfloat16>& a, std::vector<bfloat16>& b, 
     uint32_t src0_cb_index = CBIndex::c_0; //0
     CircularBufferConfig cb_src0_config = CircularBufferConfig(in0_CB_size, {{src0_cb_index, cb_data_format}})
 		.set_page_size(src0_cb_index, single_tile_size);
-    auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src0_config);
+    auto cb_src0 = CreateCircularBuffer(program, all_cores, cb_src0_config);
 
     uint32_t src1_cb_index = CBIndex::c_1; // 1
     CircularBufferConfig cb_src1_config = CircularBufferConfig(in1_CB_size, {{src1_cb_index, cb_data_format}})
 		.set_page_size(src1_cb_index, single_tile_size);
-    auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src1_config);
+    auto cb_src1 = CreateCircularBuffer(program, all_cores, cb_src1_config);
 
     uint32_t output_cb_index = tt::CBIndex::c_16;
     uint32_t interm0_cb_index = 24;
@@ -216,7 +215,7 @@ void matmul_multicore_reuse(std::vector<bfloat16>& a, std::vector<bfloat16>& b, 
     CircularBufferConfig cb_output_config = CircularBufferConfig(out_CB_size, output_cb_data_format_spec)
 		.set_page_size(output_cb_index, single_tile_size)
         .set_page_size(interm0_cb_index, single_tile_size);
-    auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_config);
+    auto cb_output = CreateCircularBuffer(program, all_cores, cb_output_config);
 
     /*
     * Compile time arguments
@@ -233,20 +232,20 @@ void matmul_multicore_reuse(std::vector<bfloat16>& a, std::vector<bfloat16>& b, 
     * Create Kernels (Reader, Writer, Compute)
     */
     // Create reader and writer kernels per core
-    auto reader_id = tt_metal::CreateKernel(
+    auto reader_id = CreateKernel(
         program,
         "tt_metal/programming_examples/matmul_common/kernels/dataflow/reader_bmm_tile_layout.cpp",
         all_cores,
         tt_metal::DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default, .compile_args = reader_compile_time_args});
 
-    auto writer_id = tt_metal::CreateKernel(
+    auto writer_id = CreateKernel(
         program,
         "tt_metal/programming_examples/matmul_common/kernels/dataflow/writer_bmm_tile_layout.cpp",
         all_cores,
         tt_metal::DataMovementConfig{.processor = DataMovementProcessor::RISCV_0, .noc = NOC::RISCV_0_default, .compile_args = writer_compile_time_args});
 
     // Create compute kernel
-    auto mm_kernel_id = tt_metal::CreateKernel(
+    auto mm_kernel_id = CreateKernel(
         program,
         "tt_metal/programming_examples/matmul_common/kernels/compute/bmm_large_block_zm.cpp",
         all_cores,
@@ -311,8 +310,8 @@ void matmul_multicore_reuse(std::vector<bfloat16>& a, std::vector<bfloat16>& b, 
                 (std::uint32_t) B // batch
             };
 
-            tt_metal::SetRuntimeArgs(program, reader_id, core, mm_reader_args);
-            tt_metal::SetRuntimeArgs(program, writer_id, core, writer_args);
+            SetRuntimeArgs(program, reader_id, core, mm_reader_args);
+            SetRuntimeArgs(program, writer_id, core, writer_args);
 
             num_blocks_read++;
         }
@@ -323,10 +322,10 @@ void matmul_multicore_reuse(std::vector<bfloat16>& a, std::vector<bfloat16>& b, 
     //ReadFromBuffer(dst_dram_buffer, output);
     //ReadFromBuffer(src0_dram_buffer, output);
 
-    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data(), false);
-    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data(), false);
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a, false);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b, false);
     EnqueueProgram(cq, program, false);
-    EnqueueReadBuffer(cq, dst_dram_buffer, output.data(), true);
+    EnqueueReadBuffer(cq, dst_dram_buffer, output, true);
 }
 
 
@@ -344,7 +343,7 @@ int main(int argc, char **argv) {
     try {
         /* Silicon accelerator setup */
         constexpr int device_id = 0;
-        Device *device = CreateDevice(device_id);
+        auto device = v1::CreateDevice(device_id);
 
         ////////////////////////////////////////////////////////////////////////////
         //                      Matmul Parameters Setup

@@ -2,11 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "host_api.hpp"
 #include "impl/buffers/circular_buffer_types.hpp"
 #include "index_fill_device_operation.hpp"
 #include "tt_metal/common/work_split.hpp"
-#include "tt_metal/host_api.hpp"
 #include "ttnn/tensor/types.hpp"
 
 using namespace tt;

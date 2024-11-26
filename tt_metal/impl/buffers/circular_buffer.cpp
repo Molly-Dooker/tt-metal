@@ -4,7 +4,6 @@
 
 #include "tt_metal/impl/buffers/circular_buffer.hpp"
 
-#include "host_api.hpp"
 #include "llrt/llrt.hpp"
 #include "tt_metal/impl/buffers/buffer.hpp"
 #include "tt_metal/detail/tt_metal.hpp"

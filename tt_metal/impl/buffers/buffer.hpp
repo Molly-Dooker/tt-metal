@@ -20,6 +20,7 @@
 #include "common/bfloat16.hpp"
 #include "common/core_coord.hpp"
 #include "tt_metal/impl/buffers/buffer_constants.hpp"
+#include "tt_metal/impl/device/device_handle.hpp"
 #include "tt_metal/impl/sub_device/sub_device_types.hpp"
 #include "tt_metal/third_party/umd/device/tt_soc_descriptor.h"
 #include "third_party/umd/device/xy_pair.h"
@@ -123,7 +124,7 @@ struct ShardSpecBuffer {
 inline namespace v0 {
 
 struct BufferConfig {
-    Device *device;
+    v1::DeviceHandle device;
     DeviceAddr size;       // Size in bytes
     DeviceAddr page_size;  // Size of unit being interleaved. For non-interleaved buffers: size == page_size
     BufferType buffer_type;
@@ -135,7 +136,7 @@ typedef BufferConfig InterleavedBufferConfig;
 // copied from above instead of using inheritance such that we can use
 // designator constructor
 struct ShardedBufferConfig {
-    Device *device;
+    v1::DeviceHandle device;
     DeviceAddr size;       // Size in bytes
     DeviceAddr page_size;  // Size of unit being interleaved. For non-interleaved buffers: size == page_size
     BufferType buffer_type = BufferType::L1;

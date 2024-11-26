@@ -2,10 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
-#include "tt_metal/host_api.hpp"
 #include "tt_log.h"
 
 // FIXME: ARCH_NAME specific include

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <iostream>
 #include <filesystem>
-#include "tt_metal/host_api.hpp"
 #include "impl/debug/watcher_server.hpp"
 #include "impl/debug/noc_logging.hpp"
 #include "impl/dispatch/debug_tools.hpp"
@@ -16,6 +15,12 @@ using std::vector;
 
 string output_dir_name = "generated/watcher/";
 string logfile_name = "cq_dump.txt";
+
+namespace tt::tt_metal::inline v0 {
+
+Device *CreateDeviceMinimal(chip_id_t device_id, const uint8_t num_hw_cqs, DispatchCoreType dispatch_core_type);
+
+}
 
 void dump_data(
     vector<unsigned>& device_ids,
@@ -94,7 +99,7 @@ int main(int argc, char* argv[]) {
     cout << "Running watcher dump tool..." << endl;
     // Default devices is all of them.
     vector<unsigned> device_ids;
-    auto num_devices = tt::tt_metal::GetNumAvailableDevices();
+    auto num_devices = tt::tt_metal::v1::GetNumAvailableDevices();
     for (unsigned id = 0; id < num_devices; id++) {
         device_ids.push_back(id);
     }

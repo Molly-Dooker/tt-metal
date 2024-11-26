@@ -5,7 +5,6 @@
 #include "create_qkv_heads_from_separate_tensors_device_operation.hpp"
 #include "tt_metal/common/work_split.hpp"
 
-#include "tt_metal/host_api.hpp"
 
 // FIXME: ARCH_NAME specific include
 #include "tensix_types.h" // L1_SIZE

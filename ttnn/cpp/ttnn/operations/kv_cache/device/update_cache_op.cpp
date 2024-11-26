@@ -5,7 +5,6 @@
 #include "ttnn/cpp/ttnn/operations/kv_cache/device/update_cache_op.hpp"
 
 #include "tt_metal/common/constants.hpp"
-#include "tt_metal/host_api.hpp"
 
 
 namespace ttnn::operations::kv_cache {

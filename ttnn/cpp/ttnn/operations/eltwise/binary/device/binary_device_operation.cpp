@@ -6,7 +6,6 @@
 
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/common/work_split.hpp"
-#include "tt_metal/host_api.hpp"
 #include "ttnn/operations/data_movement/bcast/bcast.hpp"
 
 namespace ttnn::operations::binary {

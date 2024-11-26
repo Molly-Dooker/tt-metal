@@ -6,8 +6,9 @@
 #include <functional>
 #include <random>
 
-#include "tt_metal/host_api.hpp"
-#include "tt_metal/impl/device/device.hpp"
+#include "tt_metal/hostdevcommon/kernel_structs.h"
+#include "tt_metal/impl/dispatch/dispatch_core_manager.hpp"
+#include "tt_metal/metal.hpp"
 
 #include "common/bfloat16.hpp"
 
@@ -62,18 +63,18 @@ int main(int argc, char **argv) {
         * Silicon accelerator setup
         */
         constexpr int device_id = 0;
-        Device *device =
-            CreateDevice(device_id);
+        auto device =
+            v1::CreateDevice(device_id);
 
 
         /*
         * Setup program to execute along with its buffers and kernels to use
         */
-        CommandQueue& cq = device->command_queue();
+        auto cq = GetDefaultCommandQueue(device);
 
-        Program program = CreateProgram();
+        auto program = v1::CreateProgram();
 
-        constexpr CoreCoord core = {0, 0};
+        auto core = CoreRange({0, 0});
 
         constexpr uint32_t single_tile_size = 2 * 1024;
         constexpr uint32_t num_tiles = 64;
@@ -86,9 +87,9 @@ int main(int argc, char **argv) {
                     .buffer_type = tt_metal::BufferType::DRAM
         };
 
-        std::shared_ptr<tt::tt_metal::Buffer> src0_dram_buffer = CreateBuffer(dram_config);
-        std::shared_ptr<tt::tt_metal::Buffer> src1_dram_buffer = CreateBuffer(dram_config);
-        std::shared_ptr<tt::tt_metal::Buffer> dst_dram_buffer = CreateBuffer(dram_config);
+        auto src0_dram_buffer = v1::CreateBuffer(dram_config);
+        auto src1_dram_buffer = v1::CreateBuffer(dram_config);
+        auto dst_dram_buffer = v1::CreateBuffer(dram_config);
 
         /*
          * Use circular buffers to set input and output buffers that the
@@ -97,28 +98,28 @@ int main(int argc, char **argv) {
         constexpr uint32_t src0_cb_index = tt::CBIndex::c_0;
         constexpr uint32_t num_input_tiles = 2;
         CircularBufferConfig cb_src0_config = CircularBufferConfig(num_input_tiles * single_tile_size, {{src0_cb_index, tt::DataFormat::Float16_b}}).set_page_size(src0_cb_index, single_tile_size);
-        CBHandle cb_src0 = tt_metal::CreateCircularBuffer(program, core, cb_src0_config);
+        auto cb_src0 = CreateCircularBuffer(program, core, cb_src0_config);
 
         constexpr uint32_t src1_cb_index = tt::CBIndex::c_1;
         CircularBufferConfig cb_src1_config = CircularBufferConfig(num_input_tiles * single_tile_size, {{src1_cb_index, tt::DataFormat::Float16_b}}).set_page_size(src1_cb_index, single_tile_size);
-        CBHandle cb_src1 = tt_metal::CreateCircularBuffer(program, core, cb_src1_config);
+        auto cb_src1 = CreateCircularBuffer(program, core, cb_src1_config);
 
         constexpr uint32_t output_cb_index = tt::CBIndex::c_16;
         constexpr uint32_t num_output_tiles = 2;
         CircularBufferConfig cb_output_config = CircularBufferConfig(num_output_tiles * single_tile_size, {{output_cb_index, tt::DataFormat::Float16_b}}).set_page_size(output_cb_index, single_tile_size);
-        CBHandle cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
+        auto cb_output = CreateCircularBuffer(program, core, cb_output_config);
 
         /*
          * Specify data movement kernels for reading/writing data to/from
          * DRAM.
          */
-        KernelHandle binary_reader_kernel_id = CreateKernel(
+        auto binary_reader_kernel_id = CreateKernel(
             program,
             "tt_metal/kernels/dataflow/reader_binary_diff_lengths.cpp",
             core,
             DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default});
 
-        KernelHandle unary_writer_kernel_id = CreateKernel(
+        auto unary_writer_kernel_id = CreateKernel(
             program,
             "tt_metal/kernels/dataflow/writer_unary.cpp",
             core,
@@ -137,7 +138,7 @@ int main(int argc, char **argv) {
          * Use the add_tiles operation available in the eltwise_binary
          * compute kernel.
          */
-        KernelHandle eltwise_binary_kernel_id = CreateKernel(
+        auto eltwise_binary_kernel_id = CreateKernel(
             program,
             "tt_metal/kernels/compute/eltwise_binary.cpp",
             core,
@@ -220,15 +221,15 @@ int main(int argc, char **argv) {
         /*
          * Move src data back into DRAM src buffer 0 to do another eltwise calculation
          */
-        Program program_mul = CreateProgram();
+        auto program_mul = v1::CreateProgram();
 
         /*
          * Because we're using a new program, we must redeclare all the
          * circular buffers and kernels.
          */
-        cb_src0 = tt_metal::CreateCircularBuffer(program_mul, core, cb_src0_config);
-        cb_src1 = tt_metal::CreateCircularBuffer(program_mul, core, cb_src1_config);
-        cb_output = tt_metal::CreateCircularBuffer(program_mul, core, cb_output_config);
+        cb_src0 = v1::CreateCircularBuffer(program_mul, core, cb_src0_config);
+        cb_src1 = v1::CreateCircularBuffer(program_mul, core, cb_src1_config);
+        cb_output = v1::CreateCircularBuffer(program_mul, core, cb_output_config);
 
         binary_reader_kernel_id = CreateKernel(
             program_mul,

@@ -5,7 +5,6 @@
 #include "ttnn/operations/reduction/prod/device/prod_op_all.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
-#include "tt_metal/host_api.hpp"
 
 
 namespace tt {

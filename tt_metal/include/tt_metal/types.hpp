@@ -4,13 +4,29 @@
 
 #pragma once
 
-#include "tt_metal/host_api.hpp"
+#include "tt_metal/impl/buffers/circular_buffer_types.hpp"
 #include "tt_metal/impl/device/device_handle.hpp"
+#include "tt_metal/impl/event/event.hpp"
+#include "tt_metal/impl/kernels/kernel_types.hpp"
+#include "tt_metal/impl/program/program.hpp"
 
 namespace tt::tt_metal {
 namespace v1 {
 
-using ProgramHandle = v0::Program;
+class ProgramHandle {
+   public:
+    ProgramHandle(ProgramHandle &&) noexcept = default;
+    ProgramHandle &operator=(ProgramHandle &&) noexcept = default;
+
+   private:
+    explicit ProgramHandle() = default;
+
+    v0::Program program;
+
+    friend ProgramHandle CreateProgram();
+    friend detail::Internal_;
+};
+
 class DeviceHandle;
 
 class CommandQueueHandle {

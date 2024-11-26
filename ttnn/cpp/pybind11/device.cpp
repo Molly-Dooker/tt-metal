@@ -11,7 +11,6 @@
 #include "tt_metal/detail/reports/compilation_reporter.hpp"
 #include "tt_metal/detail/reports/memory_reporter.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/impl/trace/trace.hpp"
 #include "ttnn/operations/experimental/auto_format/auto_format.hpp"
 

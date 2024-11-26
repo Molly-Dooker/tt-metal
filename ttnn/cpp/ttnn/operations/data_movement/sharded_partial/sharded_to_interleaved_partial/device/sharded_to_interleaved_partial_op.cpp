@@ -4,7 +4,6 @@
 
 #include "sharded_to_interleaved_partial_op.hpp"
 
-#include "tt_metal/host_api.hpp"
 
 #include "ttnn/cpp/ttnn/operations/data_movement/sharded/sharded_to_interleaved/device/sharded_to_interleaved_program_factory.hpp"
 

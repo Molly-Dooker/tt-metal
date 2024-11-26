@@ -2,8 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "tt_metal/host_api.hpp"
-#include "tt_metal/impl/device/device.hpp"
+#include "tt_metal/metal.hpp"
 
 using namespace tt;
 using namespace tt::tt_metal;
@@ -12,16 +11,16 @@ int main(int argc, char **argv) {
 
     // Initialize Program and Device
 
-    constexpr CoreCoord core = {0, 0};
+    auto core = CoreRange({0, 0});
     int device_id = 0;
-    Device *device = CreateDevice(device_id);
-    CommandQueue& cq = device->command_queue();
-    Program program = CreateProgram();
+    auto device = v1::CreateDevice(device_id);
+    auto cq = GetDefaultCommandQueue(device);
+    auto program = v1::CreateProgram();
 
     // Configure and Create Void Kernel
 
     std::vector<uint32_t> compute_kernel_args = {};
-    KernelHandle void_compute_kernel_id = CreateKernel(
+    auto void_compute_kernel_id = CreateKernel(
         program,
         "tt_metal/programming_examples/hello_world_compute_kernel/kernels/compute/void_compute_kernel.cpp",
         core,

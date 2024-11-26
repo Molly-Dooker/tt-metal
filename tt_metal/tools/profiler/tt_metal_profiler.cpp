@@ -6,7 +6,7 @@
 #include <cmath>
 
 #include "llrt/hal.hpp"
-#include "tt_metal/host_api.hpp"
+#include "tt_metal/metal.hpp"
 #include "impl/debug/dprint_server.hpp"
 
 #include "tools/profiler/profiler.hpp"
@@ -92,7 +92,7 @@ void setControlBuffer(uint32_t device_id, std::vector<uint32_t>& control_buffer)
 #endif
 }
 
-void syncDeviceHost(Device *device, CoreCoord logical_core, std::shared_ptr<tt_metal::Program> &sync_program, bool doHeader)
+void syncDeviceHost(v1::DeviceHandle device, CoreCoord logical_core, std::optional<v1::ProgramHandle> &sync_program, bool doHeader)
 {
     if (!tt::llrt::OptionsG.get_profiler_sync_enabled()) return;
     ZoneScopedC(tracy::Color::Tomato3);
@@ -103,16 +103,16 @@ void syncDeviceHost(Device *device, CoreCoord logical_core, std::shared_ptr<tt_m
     smallestHostime.emplace(device_id, 0);
 
     constexpr uint16_t sampleCount = 249;
-    if (sync_program == nullptr) {
-        sync_program = std::make_shared<tt_metal::Program>();
+    if (sync_program == std::nullopt) {
+        sync_program = v1::CreateProgram();
 
         std::map<string, string> kernel_defines = {
             {"SAMPLE_COUNT", std::to_string(sampleCount)},
         };
 
-        tt_metal::KernelHandle brisc_kernel = tt_metal::CreateKernel(
+        auto brisc_kernel = tt_metal::v1::CreateKernel(
             *sync_program, "tt_metal/tools/profiler/sync/sync_kernel.cpp",
-            logical_core,
+            CoreRange(logical_core),
             tt_metal::DataMovementConfig{
                 .processor = tt_metal::DataMovementProcessor::RISCV_0,
                 .noc = tt_metal::NOC::RISCV_0_default,
@@ -120,7 +120,7 @@ void syncDeviceHost(Device *device, CoreCoord logical_core, std::shared_ptr<tt_m
             );
     }
 
-    EnqueueProgram(device->command_queue(), *sync_program, false);
+    v1::EnqueueProgram(GetDefaultCommandQueue(device), *sync_program, false);
 
     std::filesystem::path output_dir = std::filesystem::path(get_profiler_logs_dir());
     std::filesystem::path log_path = output_dir / "sync_device_info.csv";
@@ -148,7 +148,7 @@ void syncDeviceHost(Device *device, CoreCoord logical_core, std::shared_ptr<tt_m
         writeTimes[i] = (TracyGetCpuTime() - writeStart);
     }
 
-    Finish(device->command_queue());
+    Finish(GetDefaultCommandQueue(device));
 
     log_info ("SYNC PROGRAM FINISH IS DONE ON {}",device_id);
     if ((smallestHostime[device_id] == 0) || (smallestHostime[device_id] > hostStartTime))

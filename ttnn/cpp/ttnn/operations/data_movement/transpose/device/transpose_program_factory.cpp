@@ -4,7 +4,6 @@
 
 #include "tt_metal/common/work_split.hpp"
 #include "ttnn/tensor/host_buffer/functions.hpp"
-#include "tt_metal/host_api.hpp"
 #include "ttnn/operations/math.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"

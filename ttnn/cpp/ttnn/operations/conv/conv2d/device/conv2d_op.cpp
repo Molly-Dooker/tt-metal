@@ -6,7 +6,6 @@
 #include <cstdint>
 #include "conv2d_op.hpp"
 
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/common/constants.hpp"

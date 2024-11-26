@@ -12,7 +12,6 @@
 #include "ttnn/operations/data_movement/untilize/untilize.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
-#include "tt_metal/host_api.hpp"
 
 using namespace tt::constants;
 using namespace tt::tt_metal;

@@ -11,7 +11,6 @@
 #include "ttnn/operations/core/work_split/work_split_tilize.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
-#include "tt_metal/host_api.hpp"
 
 using namespace tt::constants;
 using namespace tt::tt_metal;

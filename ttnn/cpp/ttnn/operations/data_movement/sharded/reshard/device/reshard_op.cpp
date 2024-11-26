@@ -6,7 +6,6 @@
 
 #include <magic_enum.hpp>
 #include "tt_metal/common/constants.hpp"
-#include "tt_metal/host_api.hpp"
 #include "reshard_program_factory.hpp"
 #include "tt_metal/common/work_split.hpp"
 

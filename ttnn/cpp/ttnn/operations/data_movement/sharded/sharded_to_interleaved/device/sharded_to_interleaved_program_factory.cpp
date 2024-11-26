@@ -4,7 +4,6 @@
 
 #include "ttnn/operations/math.hpp"
 #include "tt_metal/common/work_split.hpp"
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "ttnn/cpp/ttnn/operations/data_movement/sharded/sharded_common.hpp"
 #include "ttnn/cpp/ttnn/operations/data_movement/sharded_partial/sharded_to_interleaved_partial/device/sharded_to_interleaved_partial_op.hpp"

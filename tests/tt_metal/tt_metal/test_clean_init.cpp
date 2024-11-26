@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_metal/host_api.hpp"
+#include "tt_metal/device.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/impl/device/device_pool.hpp"
 #include "tt_metal/llrt/rtoptions.hpp"
@@ -31,7 +32,7 @@ int main(int argc, char **argv) {
         tt::log_info("Running loopback test with proper teardown");
 
     bool pass = true;
-    auto num_devices = tt::tt_metal::GetNumAvailableDevices();
+    auto num_devices = tt::tt_metal::v1::GetNumAvailableDevices();
     vector<chip_id_t> ids;
     for (unsigned int id = 0; id < num_devices; id++) {
         ids.push_back(id);

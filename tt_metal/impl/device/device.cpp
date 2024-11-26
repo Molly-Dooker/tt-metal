@@ -6,7 +6,6 @@
 #include <thread>
 #include "tt_metal/device.hpp"
 #include "common/core_coord.hpp"
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/jit_build/genfiles.hpp"
 #include "tt_metal/impl/device/device.hpp"
 #include "tt_metal/impl/trace/trace.hpp"

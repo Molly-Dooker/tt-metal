@@ -11,7 +11,6 @@
 #include "tt_metal/common/math.hpp"
 #include "tt_metal/common/core_coord.hpp"
 
-#include "tt_metal/host_api.hpp"
 
 
 namespace tt::tt_metal {

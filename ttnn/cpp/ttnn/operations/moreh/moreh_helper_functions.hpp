@@ -9,7 +9,6 @@
 #include <optional>
 #include <variant>
 
-#include "tt_metal/host_api.hpp"
 #include "ttnn/tensor/tensor.hpp"
 
 namespace ttnn {

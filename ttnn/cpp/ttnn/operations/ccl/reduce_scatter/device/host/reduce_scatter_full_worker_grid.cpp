@@ -11,7 +11,6 @@
 #include "ttnn/operations/ccl/ccl_host_datastructures.hpp"
 #include "ttnn/operations/ccl/ccl_common.hpp"
 #include "tt_metal/common/constants.hpp"
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/impl/buffers/circular_buffer_types.hpp"
 
 #include "ttnn/operations/eltwise/binary/common/binary_op_types.hpp"

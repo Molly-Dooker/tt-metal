@@ -6,7 +6,6 @@
 #include "rotary_embedding_llama_program_factory.hpp"
 
 #include "tt_metal/common/constants.hpp"
-#include "tt_metal/host_api.hpp"
 
 namespace tt {
 

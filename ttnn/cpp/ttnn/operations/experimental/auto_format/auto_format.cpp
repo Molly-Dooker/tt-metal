@@ -5,7 +5,6 @@
 #include "ttnn/operations/experimental/auto_format/auto_format.hpp"
 
 #include "tt_metal/common/constants.hpp"
-#include "tt_metal/host_api.hpp"
 #include "ttnn/operations/data_movement/clone/clone.hpp"
 #include "ttnn/operations/data_movement/data_transfer/data_transfer.hpp"
 #include "ttnn/operations/data_movement/pad/pad.hpp"

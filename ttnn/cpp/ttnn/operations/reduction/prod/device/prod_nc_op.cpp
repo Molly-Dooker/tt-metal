@@ -6,7 +6,6 @@
 #include "prod_nc_op.hpp"
 
 #include "tt_metal/common/constants.hpp"
-#include "tt_metal/host_api.hpp"
 
 namespace tt {
 

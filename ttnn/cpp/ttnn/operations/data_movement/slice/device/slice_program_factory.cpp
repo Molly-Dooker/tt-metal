@@ -7,7 +7,6 @@
 #include "tt_metal/common/work_split.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
-#include "tt_metal/host_api.hpp"
 
 #include "slice_op.hpp"
 using namespace tt::constants;

@@ -11,7 +11,6 @@
 
 #include "tensor.hpp"
 #include "tt_metal/graph/graph_tracking.hpp"
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 #include "ttnn/core.hpp"
 #include "ttnn/run_operation.hpp"

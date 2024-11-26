@@ -2,8 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "tt_metal/host_api.hpp"
-#include "tt_metal/impl/device/device.hpp"
+#include "tt_metal/metal.hpp"
 #include "common/bfloat16.hpp"
 
 /*
@@ -28,18 +27,17 @@ int main(int argc, char **argv) {
         * Silicon accelerator setup
         */
         constexpr int device_id = 0;
-        Device *device =
-            CreateDevice(device_id);
+        auto device = v1::CreateDevice(device_id);
 
         /*
         * Setup program and command queue to execute along with its buffers and kernels to use
         */
-        CommandQueue& cq = device->command_queue();
-        Program program = CreateProgram();
+        auto cq = GetDefaultCommandQueue(device);
+        auto program = v1::CreateProgram();
 
-        constexpr CoreCoord core = {0, 0};
+        auto core = CoreRange({0, 0});
 
-        KernelHandle dram_copy_kernel_id = CreateKernel(
+        auto dram_copy_kernel_id = CreateKernel(
             program,
             "tt_metal/programming_examples/loopback/kernels/loopback_dram_copy.cpp",
             core,
@@ -63,12 +61,12 @@ int main(int argc, char **argv) {
                     .buffer_type = tt::tt_metal::BufferType::L1
         };
 
-        auto l1_buffer = CreateBuffer(l1_config);
+        auto l1_buffer = v1::CreateBuffer(l1_config);
 
-        auto input_dram_buffer = CreateBuffer(dram_config);
+        auto input_dram_buffer = v1::CreateBuffer(dram_config);
         const uint32_t input_dram_buffer_addr = input_dram_buffer->address();
 
-        auto output_dram_buffer = CreateBuffer(dram_config);
+        auto output_dram_buffer = v1::CreateBuffer(dram_config);
         const uint32_t output_dram_buffer_addr = output_dram_buffer->address();
 
         /*

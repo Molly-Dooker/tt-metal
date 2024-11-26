@@ -7,7 +7,6 @@
 #include "tt_metal/impl/sub_device/sub_device_manager.hpp"
 
 #include "tt_metal/common/assert.hpp"
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/impl/allocator/allocator.hpp"
 #include "tt_metal/impl/device/device.hpp"
 #include "tt_metal/impl/dispatch/command_queue_interface.hpp"
@@ -19,6 +18,11 @@
 #include "tt_metal/tt_stl/span.hpp"
 
 namespace tt::tt_metal {
+inline namespace v0 {
+
+void DeallocateBuffer(Buffer &buffer);
+
+}  // namespace v0
 
 namespace detail {
 

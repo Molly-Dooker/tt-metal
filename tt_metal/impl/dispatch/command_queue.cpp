@@ -23,7 +23,7 @@
 #include "tt_metal/common/assert.hpp"
 #include "tt_metal/common/logger.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
-#include "tt_metal/host_api.hpp"
+#include "tt_metal/event.hpp"
 #include "tt_metal/hw/inc/circular_buffer_constants.h"
 #include "tt_metal/impl/buffers/circular_buffer.hpp"
 #include "tt_metal/impl/buffers/semaphore.hpp"
@@ -3117,6 +3117,17 @@ inline namespace v0 {
 void EnqueueWriteBuffer(
     CommandQueue& cq,
     std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer,
+    HostDataType src,
+    bool blocking,
+    tt::stl::Span<const SubDeviceId> sub_device_ids) {
+    detail::DispatchStateCheck(true);
+    cq.run_command(CommandInterface{
+        .type = EnqueueCommandType::ENQUEUE_WRITE_BUFFER, .blocking = blocking, .buffer = buffer, .src = std::move(src), .sub_device_ids = sub_device_ids});
+}
+
+void EnqueueWriteBuffer(
+    CommandQueue& cq,
+    std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer,
     std::vector<uint32_t>& src,
     bool blocking,
     tt::stl::Span<const SubDeviceId> sub_device_ids) {
@@ -3133,17 +3144,6 @@ void EnqueueReadBuffer(
     detail::DispatchStateCheck(true);
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::ENQUEUE_READ_BUFFER, .blocking = blocking, .buffer = buffer, .dst = dst, .sub_device_ids = sub_device_ids});
-}
-
-void EnqueueWriteBuffer(
-    CommandQueue& cq,
-    std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer,
-    HostDataType src,
-    bool blocking,
-    tt::stl::Span<const SubDeviceId> sub_device_ids) {
-    detail::DispatchStateCheck(true);
-    cq.run_command(CommandInterface{
-        .type = EnqueueCommandType::ENQUEUE_WRITE_BUFFER, .blocking = blocking, .buffer = buffer, .src = std::move(src), .sub_device_ids = sub_device_ids});
 }
 
 void EnqueueProgram(
@@ -3504,12 +3504,12 @@ v1::CommandQueueHandle v1::GetCommandQueue(DeviceHandle device, std::uint8_t cq_
 
 v1::CommandQueueHandle v1::GetDefaultCommandQueue(DeviceHandle device) { return GetCommandQueue(device, 0); }
 
-void v1::EnqueueReadBuffer(CommandQueueHandle cq, BufferHandle buffer, std::byte *dst, bool blocking) {
-    v0::EnqueueReadBuffer(GetDevice(cq)->command_queue(GetId(cq)), *buffer, dst, blocking);
+void v1::EnqueueReadBuffer(CommandQueueHandle cq, BufferHandle buffer, stl::Span<std::byte> dst, bool blocking) {
+    v0::EnqueueReadBuffer(GetDevice(cq)->command_queue(GetId(cq)), *buffer, dst.data(), blocking, {});
 }
 
-void v1::EnqueueWriteBuffer(CommandQueueHandle cq, BufferHandle buffer, const std::byte *src, bool blocking) {
-    v0::EnqueueWriteBuffer(GetDevice(cq)->command_queue(GetId(cq)), *buffer, src, blocking);
+void v1::EnqueueWriteBuffer(CommandQueueHandle cq, BufferHandle buffer, stl::Span<const std::byte> src, bool blocking) {
+    v0::EnqueueWriteBuffer(GetDevice(cq)->command_queue(GetId(cq)), *buffer, src.data(), blocking, {});
 }
 
 void v1::EnqueueProgram(CommandQueueHandle cq, ProgramHandle &program, bool blocking) {
@@ -3531,6 +3531,32 @@ v1::DeviceHandle v1::GetDevice(CommandQueueHandle cq) {
 std::uint8_t v1::GetId(CommandQueueHandle cq) {
     return cq.id;
 }
+
+v1::EventHandle::EventHandle() : EventHandle(std::make_shared<Event>()) {}
+
+v1::EventHandle v1::EnqueueRecordEvent(CommandQueueHandle cq) {
+    EventHandle event{};
+    v0::EnqueueRecordEvent(
+        GetDevice(cq)->command_queue(GetId(cq)), static_cast<const std::shared_ptr<v0::Event> &>(event));
+    return event;
+}
+
+void v1::EnqueueWaitForEvent(CommandQueueHandle cq, EventHandle event) {
+    v0::EnqueueWaitForEvent(
+        GetDevice(cq)->command_queue(GetId(cq)), static_cast<const std::shared_ptr<v0::Event> &>(event));
+}
+
+void v1::EventSynchronize(EventHandle event) {
+    v0::EventSynchronize(static_cast<const std::shared_ptr<v0::Event> &>(event));
+}
+
+bool v1::EventQuery(EventHandle event) {
+    return v0::EventQuery(static_cast<const std::shared_ptr<v0::Event> &>(event));
+}
+
+void v1::DeviceSynchronize(DeviceHandle device) { v0::Synchronize(device); }
+
+void v1::CommandQueueSynchronize(CommandQueueHandle cq) { v0::Synchronize(GetDevice(cq), GetId(cq)); }
 
 }  // namespace tt::tt_metal
 

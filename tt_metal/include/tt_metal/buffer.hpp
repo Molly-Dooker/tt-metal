@@ -21,6 +21,16 @@ namespace v1 {
  */
 BufferHandle CreateBuffer(InterleavedBufferConfig config);
 
+
+/**
+ * @brief Allocates a sharded DRAM or L1 buffer on the device.
+ *
+ * @param config Configuration for the buffer.
+ * @return Buffer handle to the allocated buffer.
+ */
+BufferHandle CreateBuffer(ShardedBufferConfig config);
+
+
 /**
  * @brief Deallocates a buffer from the device.
  *

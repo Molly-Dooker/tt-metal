@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "tt_metal/host_api.hpp"
-#include "tt_metal/impl/device/device.hpp"
+#include "tt_metal/hostdevcommon/kernel_structs.h"
+#include "tt_metal/metal.hpp"
 
 using namespace tt;
 using namespace tt::tt_metal;
@@ -12,11 +12,11 @@ int main(int argc, char **argv) {
 
     // Initialize Program and Device
 
-    constexpr CoreCoord core = {0, 0};
+    auto core = CoreRange({0, 0});
     int device_id = 0;
-    Device *device = CreateDevice(device_id);
-    CommandQueue& cq = device->command_queue();
-    Program program = CreateProgram();
+    auto device = v1::CreateDevice(device_id);
+    auto cq = GetDefaultCommandQueue(device);
+    auto program = v1::CreateProgram();
 
     // Define and Create Buffer with Float Data Type
 
@@ -27,17 +27,17 @@ int main(int argc, char **argv) {
         .page_size = buffer_size,
         .buffer_type = tt_metal::BufferType::DRAM
     };
-    std::shared_ptr<tt::tt_metal::Buffer> dram_buffer = CreateBuffer(buffer_config);
+    auto dram_buffer = v1::CreateBuffer(buffer_config);
 
     // Configure and Create Circular Buffer (to move data from DRAM to L1)
 
     constexpr uint32_t src0_cb_index = CBIndex::c_0;
     CircularBufferConfig cb_src0_config = CircularBufferConfig(buffer_size, {{src0_cb_index, tt::DataFormat::Float16_b}}).set_page_size(src0_cb_index, buffer_size);
-    CBHandle cb_src0 = tt_metal::CreateCircularBuffer(program, core, cb_src0_config);
+    auto cb_src0 = CreateCircularBuffer(program, core, cb_src0_config);
 
     // Configure and Create Data Movement Kernels
 
-    KernelHandle data_reader_kernel_id = CreateKernel(
+    auto data_reader_kernel_id = CreateKernel(
         program,
         "tt_metal/programming_examples/hello_world_datatypes_kernel/kernels/dataflow/float_dataflow_kernel.cpp",
         core,
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     // Initialize Float Data for the DRAM Buffer
 
     float init_data = 1.23;
-    EnqueueWriteBuffer(cq, dram_buffer, &init_data, false);
+    EnqueueWriteBuffer(cq, dram_buffer, stl::Span<const float>{init_data}, false);
 
     // Configure Program and Start Program Execution on Device
 

@@ -9,7 +9,6 @@
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/common/work_split.hpp"
 #include "tt_metal/detail/util.hpp"
-#include "tt_metal/host_api.hpp"
 #include "ttnn/device_operation.hpp"
 #include "ttnn/operations/cb_utils.hpp"
 #include "ttnn/operations/data_movement/bcast/bcast.hpp"

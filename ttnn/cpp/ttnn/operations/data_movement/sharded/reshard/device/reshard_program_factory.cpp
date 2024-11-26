@@ -9,7 +9,6 @@
 #include "ttnn/cpp/ttnn/operations/data_movement/sharded_partial/sharded_to_interleaved_partial/device/sharded_to_interleaved_partial_op.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
-#include "tt_metal/host_api.hpp"
 #include "reshard_program_factory.hpp"
 using namespace tt::constants;
 using namespace tt::tt_metal;

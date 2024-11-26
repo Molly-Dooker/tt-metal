@@ -9,7 +9,6 @@
 #include "common/tt_backend_api_types.hpp"
 #include "common/work_split.hpp"
 #include "expand_device_operation.hpp"
-#include "host_api.hpp"
 #include "hostdevcommon/kernel_structs.h"
 #include "impl/buffers/buffer.hpp"
 #include "impl/buffers/circular_buffer_types.hpp"

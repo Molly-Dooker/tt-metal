@@ -4,15 +4,12 @@
 
 #include "tt_metal/common/work_split.hpp"
 #include "tt_metal/detail/util.hpp"
-#include "tt_metal/host_api.hpp"
 #include "copy_device_operation.hpp"
 #include "ttnn/operations/math.hpp"
 
-#include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include <algorithm>
-#include "tt_metal/host_api.hpp"
 
 using namespace tt::constants;
 using namespace tt::tt_metal;

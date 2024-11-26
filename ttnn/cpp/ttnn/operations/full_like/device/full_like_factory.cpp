@@ -6,7 +6,6 @@
 
 #include "common/constants.hpp"
 #include "full_like_device_operation.hpp"
-#include "host_api.hpp"
 #include "impl/buffers/circular_buffer_types.hpp"
 #include "tt_metal/common/work_split.hpp"
 #include "ttnn/tensor/types.hpp"

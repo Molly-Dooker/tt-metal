@@ -5,7 +5,6 @@
 #include "nlp_create_qkv_heads_decode_device_operation.hpp"
 #include "tt_metal/common/work_split.hpp"
 
-#include "tt_metal/host_api.hpp"
 
 namespace ttnn::operations::experimental::transformer {
 

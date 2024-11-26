@@ -14,6 +14,13 @@
 using namespace tt::tt_metal;
 
 namespace tt {
+namespace tt_metal {
+inline namespace v0 {
+
+void Synchronize(Device *device, const std::optional<uint8_t> cq_id = std::nullopt, tt::stl::Span<const SubDeviceId> sub_device_ids = {});
+
+}
+}
 
 namespace device_cpu_allocator {
 std::unordered_map<int, std::vector<uint32_t>> get_cpu_cores_per_numa_node(std::unordered_set<uint32_t>& free_cores) {

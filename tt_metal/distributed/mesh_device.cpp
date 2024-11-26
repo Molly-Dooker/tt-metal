@@ -11,7 +11,7 @@
 #include "device/tt_cluster_descriptor_types.h"
 #include "tt_metal/common/logger.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
-#include "tt_metal/host_api.hpp"
+#include "tt_metal/device.hpp"
 #include "tt_metal/distributed/mesh_device_view.hpp"
 #include "tt_metal/distributed/mesh_device.hpp"
 
@@ -287,7 +287,7 @@ void MeshDevice::initialize(
 {
     auto [num_rows, num_cols] = this->shape();
     auto num_requested_devices = num_rows * num_cols;
-    auto num_available_devices = tt::tt_metal::GetNumAvailableDevices();
+    auto num_available_devices = tt::tt_metal::v1::GetNumAvailableDevices();
     TT_FATAL(
         num_requested_devices <= num_available_devices,
         "User has requested more devices than available: {} requested, {} available",
