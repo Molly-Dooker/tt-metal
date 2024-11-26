@@ -516,28 +516,32 @@ void ElfFile::Impl::XIPify() {
 
             unsigned kind = PCREL;
             switch (type) {
-                // Abs relocs to text will need fixing up
-                case R_RISCV_LO12_I:
-                case R_RISCV_LO12_S:
-                    if (!is_to_text)
-                        break;
+            case R_RISCV_LO12_I:
+            case R_RISCV_LO12_S:
                     kind = ABS;
                     [[fallthrough]];
 
-                // PCrel relocs not to text will need fixing up. At
-                // this point we don't know the symbol from the LO12
-                // relocs, as that points at the hi20 reloc.
                 case R_RISCV_PCREL_LO12_I:
-                case R_RISCV_PCREL_LO12_S: lo[kind].push_back(&reloc); break;
+                case R_RISCV_PCREL_LO12_S:
+                    if (kind == ABS && !is_to_text)
+                        // Abs relocs not to text do not need to be translated.
+                        break;
+
+                    // PCrel relocs to text will not need translation,
+                    // but at this point we don't know the symbol as
+                    // these relocs point to the hi20 reloc.  Record
+                    // them all and filter later.
+
+                    lo[kind].push_back(&reloc); break;
 
                 case R_RISCV_HI20: kind = ABS; [[fallthrough]];
-
                 case R_RISCV_PCREL_HI20:
                     if (is_to_text && !is_from_text)
                         TT_THROW(
                             "{}: segment-crossing {} relocation found at {}", path_, r_names[kind][0], reloc.r_offset);
 
-                    if (!is_to_text && kind == ABS)
+                    if (kind == ABS && !is_to_text)
+                        // Abs relocs not to text do not need to be translated.
                         break;
                     composed[kind].emplace(reloc.r_offset, ComposedReloc(&reloc));
                     break;
@@ -627,7 +631,8 @@ void ElfFile::Impl::XIPify() {
                 unsigned sym_ix = ELF32_R_SYM(hi_reloc->r_info);
                 auto const &symbol = symbols[sym_ix];
                 bool is_to_text = IsTextSymbol(symbol);
-                if (is_to_text == is_from_text)
+                if (kind == PCREL && is_to_text == is_from_text)
+                    // intra-text PCREL is ok.
                     continue;
 
                 address_t value = symbol.st_value + hi_reloc->r_addend;
