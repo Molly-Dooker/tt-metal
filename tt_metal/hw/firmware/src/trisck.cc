@@ -49,7 +49,7 @@ void kernel_launch(uint32_t kernel_base_addr)
   do_crt1((uint32_t tt_l1_ptr*)x);
   extern uint32_t __kernel_data_lma[];
   if ((uint32_t)&__kernel_data_lma != x)
-      ;//return;
+      return;
 
 #if defined(UCK_CHLKC_UNPACK)
     // Make sure DBG_FEATURE_DISABLE register is cleared before every kernel is executed
