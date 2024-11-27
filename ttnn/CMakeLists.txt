@@ -623,8 +623,8 @@ set(TTNN_PRECOMPILED_HEADERS
     ${PROJECT_SOURCE_DIR}/ttnn/cpp/ttnn/operation.hpp
     ${PROJECT_SOURCE_DIR}/ttnn/cpp/ttnn/any_device.hpp
     ${PROJECT_SOURCE_DIR}/tt_metal/third_party/tracy/public/tracy/Tracy.hpp
-    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/device_api_metal.h
-    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/cluster.h
+    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/api/umd/device/device_api_metal.h
+    ${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/api/umd/device/cluster.h
     <functional>
     <map>
     <memory>

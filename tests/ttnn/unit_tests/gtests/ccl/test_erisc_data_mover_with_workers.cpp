@@ -444,11 +444,11 @@ bool RunWriteBWTest(
     std::vector<ttnn::ccl::EriscDatamoverBuilder::ChannelBufferInterface> remote_edm_channels;
     for (uint32_t i = 0; i < num_local_sender_channels; i++) {
         auto const& worker_core_local_chip = ttnn::ccl::WorkerXY(
-                            sender_device->worker_core_from_logical_core(worker_cores.at(i)).x,
-                            sender_device->worker_core_from_logical_core(worker_cores.at(i)).y);
+                            sender_device->translated_worker_core_from_logical_core(worker_cores.at(i)).x,
+                            sender_device->translated_worker_core_from_logical_core(worker_cores.at(i)).y);
         auto const& worker_core_remote_chip = ttnn::ccl::WorkerXY(
-                            receiver_device->worker_core_from_logical_core(worker_cores.at(i)).x,
-                            receiver_device->worker_core_from_logical_core(worker_cores.at(i)).y);
+                            receiver_device->translated_worker_core_from_logical_core(worker_cores.at(i)).x,
+                            receiver_device->translated_worker_core_from_logical_core(worker_cores.at(i)).y);
         ttnn::ccl::EriscDatamoverBuilder::ChannelBufferInterface const& local_sender_channel_buffer = local_chip_edm_builder.add_sender_channel(
             local_worker_semaphore_addresses.at(i),
             num_messages_to_send_over_channel.at(i),
@@ -462,11 +462,11 @@ bool RunWriteBWTest(
     }
     for (uint32_t i = num_local_sender_channels; i < num_local_sender_channels + num_remote_sender_channels; i++) {
         auto const& worker_core_remote_chip = ttnn::ccl::WorkerXY(
-                            receiver_device->worker_core_from_logical_core(worker_cores.at(i)).x,
-                            receiver_device->worker_core_from_logical_core(worker_cores.at(i)).y);
+                            receiver_device->translated_worker_core_from_logical_core(worker_cores.at(i)).x,
+                            receiver_device->translated_worker_core_from_logical_core(worker_cores.at(i)).y);
         auto const& worker_core_local_chip = ttnn::ccl::WorkerXY(
-                            sender_device->worker_core_from_logical_core(worker_cores.at(i)).x,
-                            sender_device->worker_core_from_logical_core(worker_cores.at(i)).y);
+                            sender_device->translated_worker_core_from_logical_core(worker_cores.at(i)).x,
+                            sender_device->translated_worker_core_from_logical_core(worker_cores.at(i)).y);
         ttnn::ccl::EriscDatamoverBuilder::ChannelBufferInterface const& local_receiver_channel_buffer = local_chip_edm_builder.add_receiver_channel(
             local_worker_semaphore_addresses.at(i),
             num_messages_to_send_over_channel.at(i),
