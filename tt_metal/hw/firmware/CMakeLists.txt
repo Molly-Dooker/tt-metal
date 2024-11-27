@@ -48,10 +48,10 @@ set(GPP_CMD ${PROJECT_SOURCE_DIR}/runtime/sfpi/compiler/bin/riscv32-unknown-elf-
 
 set(GPP_DEFINES_common
     -DTENSIX_FIRMWARE
-    -DPCIE_NOC1_X=9
-    -DPCIE_NOC1_Y=6
+    -DPCIE_NOC1_X=12
+    -DPCIE_NOC1_Y=8
     -DPCIE_NOC_X=0
-    -DPCIE_NOC_Y=3
+    -DPCIE_NOC_Y=4
     -DLOCAL_MEM_EN=0
     -DFW_BUILD
     -DDISPATCH_MESSAGE_ADDR=99152
@@ -79,9 +79,21 @@ set(GPP_DEFINES_blackhole
 )
 set(GPP_DEFINES_brisc -DCOMPILE_FOR_BRISC)
 set(GPP_DEFINES_ncrisc -DCOMPILE_FOR_BRISC)
-set(GPP_DEFINES_trisc0 -DCOMPILE_FOR_TRISC=0)
-set(GPP_DEFINES_trisc1 -DCOMPILE_FOR_TRISC=1)
-set(GPP_DEFINES_trisc2 -DCOMPILE_FOR_TRISC=2)
+set(GPP_DEFINES_trisc0
+    -DUCK_CHLKC_UNPACK
+    -DNAMESPACE=chlkc_unpack
+    -DCOMPILE_FOR_TRISC=0
+)
+set(GPP_DEFINES_trisc1
+    -DUCK_CHLKC_MATH
+    -DNAMESPACE=chlkc_math
+    -DCOMPILE_FOR_TRISC=1
+)
+set(GPP_DEFINES_trisc2
+    -DUCK_CHLKC_PACK
+    -DNAMESPACE=chlkc_pack
+    -DCOMPILE_FOR_TRISC=2
+)
 set(GPP_DEFINES_erisc
     -DCOMPILE_FOR_ERISC
     -DERISC
@@ -113,12 +125,12 @@ set(GPP_FLAGS_common
     -Wall
     -Werror
     -Wno-unknown-pragmas
+    -Wno-deprecated-declarations
     -Wno-error=multistatement-macros
     -Wno-error=parentheses
     -Wno-error=unused-but-set-variable
     -Wno-unused-variable
     -Wno-unused-function
-    -O3
 )
 set(GPP_FLAGS_brisc
     -Os
@@ -146,6 +158,16 @@ set(GPP_FLAGS_slave_idle_erisc
     -fno-delete-null-pointer-checks
 )
 
+# Includes independent from ARCH
+set(GPP_INCLUDES_common
+    -I.
+    -I..
+    -I${PROJECT_SOURCE_DIR}
+    -I${PROJECT_SOURCE_DIR}/tt_metal
+    -I${PROJECT_SOURCE_DIR}/tt_metal/include
+    -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc
+    -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/debug
+)
 #Linker flags
 set(GPP_LINK_FLAGS_common
     -std=c++17
@@ -158,7 +180,6 @@ set(GPP_LINK_FLAGS_common
 )
 
 function(get_link_objects INPUT_ARCH INPUT_PROC INPUT_DIR OUTPUT_LIST)
-    unset(OBJ_LIST)
     set(OBJ_LIST ${INPUT_DIR}substitutes.o)
 
     if("${INPUT_PROC}" STREQUAL "brisc")
@@ -221,6 +242,18 @@ foreach(ARCH IN LISTS ARCHS)
         -T${PROJECT_SOURCE_DIR}/runtime/hw/toolchain/${ARCH}/firmware_slave_ierisc.ld
     )
 
+    # Architecture specific include paths
+    set(GPP_INCLUDES_${ARCH}
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/${ARCH_B0}_defines
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/noc
+        -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/${ARCH}
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/common
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/llk_io
+        -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk_${ARCH_B0}/common/inc
+        -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk_${ARCH_B0}/llk_lib
+    )
+
     foreach(PROC IN LISTS PROCS)
         if("${ARCH}" STREQUAL "grayskull" AND "${PROC}" STREQUAL "erisc")
             continue() # Skip the iteration, grayskull doesn;t have idle_erisc or slave_idle_erisc
@@ -233,8 +266,8 @@ foreach(ARCH IN LISTS ARCHS)
         # Set GPP_FLAGS based on ARCH
         set(GPP_FLAGS
             ${GPP_FLAGS_${ARCH}}
-            ${GPP_FLAGS_${PROC}}
             ${GPP_FLAGS_common}
+            ${GPP_FLAGS_${PROC}}
         )
 
         set(GPP_DEFINES
@@ -243,27 +276,23 @@ foreach(ARCH IN LISTS ARCHS)
             ${GPP_DEFINES_common}
         )
 
-        # Includes independent from ARCH
         set(GPP_INCLUDES
-            -I.
-            -I..
-            -I${PROJECT_SOURCE_DIR}
-            -I${PROJECT_SOURCE_DIR}/tt_metal
-            -I${PROJECT_SOURCE_DIR}/tt_metal/include
-            -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc
-            -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/debug
-            -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/ethernet
-            -I${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src
+            ${GPP_INCLUDES_common}
+            ${GPP_INCLUDES_${ARCH}}
         )
-        # Architecture specific include paths
-        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH})
-        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/${ARCH_B0}_defines)
-        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/noc)
-        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/${ARCH})
-        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/common)
-        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/llk_io)
-        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk_${ARCH_B0}/common/inc)
-        list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk_${ARCH_B0}/llk_lib)
+
+        if("${PROC}" STREQUAL "erisc")
+            list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/ethernet)
+        elseif("${PROC}" STREQUAL "idle_erisc" OR "${PROC}" STREQUAL "slave_idle_erisc")
+            list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src)
+        elseif("${PROC}" STREQUAL "trisc0" OR "${PROC}" STREQUAL "trisc1" OR "${PROC}" STREQUAL "trisc2")
+            list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/llk_api)
+            list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/llk_api/llk_sfpu)
+            list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/runtime/sfpi/include)
+            list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src)
+        else()
+            list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src)
+        endif()
 
         # These are the set of object files we are to build foreach ARCH and each PROC
         set(FWLIB "${PROC}")
@@ -272,10 +301,10 @@ foreach(ARCH IN LISTS ARCHS)
         get_source(${PROC} PROC_SOURCE)
         set(${FWLIB}_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src/${PROC_SOURCE}.cc")
 
-        set(FW_OUTPUT_FILE "${FW_OUTPUT_DIR}/${FWLIB}.o")
+        set(FW_OBJECT_FILE "${FW_OUTPUT_DIR}/${FWLIB}.o")
         add_custom_command(
             OUTPUT
-                ${FW_OUTPUT_FILE}
+                ${FW_OBJECT_FILE}
             COMMAND
                 ${CMAKE_COMMAND} -E make_directory ${FW_OUTPUT_DIR}
             COMMAND
@@ -283,10 +312,10 @@ foreach(ARCH IN LISTS ARCHS)
                 ${${FWLIB}_SOURCE}
             DEPENDS
                 ${${FWLIB}_SOURCE}
-            COMMENT "Building fw lib ${FW_OUTPUT_FILE}"
+            COMMENT "Building fw lib ${FW_OBJECT_FILE}"
             VERBATIM
         )
-        list(APPEND PREPROCESSED_O_FILES ${FW_OUTPUT_FILE})
+        list(APPEND FIRMWARE_OBJECT_FILES ${FW_OBJECT_FILE})
 
         set(FW_BINARY_FILE "${FW_OUTPUT_DIR}/${FWLIB}.elf")
         set(GPP_LINK_FLAGS
@@ -302,10 +331,10 @@ foreach(ARCH IN LISTS ARCHS)
             #COMMAND
             #${CMAKE_COMMAND} -E make_directory ${FW_OUTPUT_DIR}
             COMMAND
-                ${GPP_CMD} ${GPP_LINK_FLAGS} -o ${FW_BINARY_FILE} ${FW_OUTPUT_FILE} ${LINK_OBJS}
+                ${GPP_CMD} ${GPP_LINK_FLAGS} -o ${FW_BINARY_FILE} ${FW_OBJECT_FILE} ${LINK_OBJS}
             DEPENDS
                 ${${LINK_OBJS}}
-                ${FW_OUTPUT_FILE}
+                ${FW_OBJECT_FILE}
             COMMENT "Building fw binary ${FW_BINARY_FILE}"
             VERBATIM
         )
@@ -318,7 +347,7 @@ add_custom_target(
     firmware_output
     ALL
     DEPENDS
-        ${PREPROCESSED_O_FILES}
+        ${FIRMWARE_OBJECT_FILES}
         ${FIRMWARE_BINARY_FILES}
 )
 add_dependencies(firmware_output hw_toolchain)
