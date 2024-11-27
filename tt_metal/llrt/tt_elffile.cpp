@@ -577,7 +577,7 @@ void ElfFile::Impl::XIPify() {
                     if (kind == ABS && !is_to_text)
                         // Abs relocs not to text do not need to be translated.
                         break;
-                    }
+
                     composed[kind].emplace(reloc.r_offset, ComposedReloc(&reloc));
                     break;
 
@@ -673,7 +673,6 @@ void ElfFile::Impl::XIPify() {
                 if (kind == PCREL && is_to_text == is_from_text)
                     // intra-text PCREL is ok.
                     continue;
-                }
 
                 address_t value = symbol.st_value + hi_reloc->r_addend;
                 if (kind == ABS) {
