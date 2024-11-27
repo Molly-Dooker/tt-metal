@@ -218,6 +218,7 @@ def create_sharded_memory_config_(
     use_height_and_width_as_shard_shape: bool = False,
     tile_layout: bool = False,
 ) -> MemoryConfig:
+    print("********")
     """
     create_sharded_memory_config(shape: Union[ttnn.Shape, Tuple[int, ...], List[int]], core_grid: Union[ttnn.CoreGrid, ttnn.CoreRange], strategy: ShardStrategy, orientation: Optional[ShardOrientation] = None, halo: bool = False, use_height_and_width_as_shard_shape: bool = False) -> MemoryConfig
 
