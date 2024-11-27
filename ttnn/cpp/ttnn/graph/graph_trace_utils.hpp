@@ -34,4 +34,7 @@ struct TensorInfo {
 
 std::vector<TensorInfo> extract_output_info(const nlohmann::json& trace);
 
+// Returns the graphviz representation of the trace to be used for debug from c++ code
+std::string to_graphviz(const nlohmann::json& trace);
+
 } // namespace ttnn::graph
