@@ -99,7 +99,7 @@ void SystemMesh::initialize() {
         TT_FATAL(arch == ARCH::GRAYSKULL or arch == ARCH::BLACKHOLE, "Expected Wormhole chips to have ethernet coordinates assigned by cluster descriptor");
         const int num_detected_devices = tt::Cluster::instance().number_of_devices();
         for (auto chip_id = 0; chip_id < num_detected_devices; chip_id++) {
-            PhysicalCoordinate coord{0, chip_id, 0, 0, 0};
+            PhysicalCoordinate coord{chip_id, 0, 0, 0};
             this->physical_device_id_to_coordinate.emplace(chip_id, coord);
             this->physical_coordinate_to_device_id.emplace(coord, chip_id);
         }
