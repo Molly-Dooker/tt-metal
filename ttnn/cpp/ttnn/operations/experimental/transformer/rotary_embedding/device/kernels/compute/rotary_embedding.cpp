@@ -57,24 +57,17 @@ void MAIN {
     constexpr uint32_t onetile = 1;
 
     constexpr uint32_t in_cb = get_compile_time_arg_val(0);
-    constexpr uint32_t rotated_in_cb = get_compile_time_arg_val(1);
     constexpr uint32_t sin_cb = get_compile_time_arg_val(3);
-    constexpr uint32_t scalar_cb = get_compile_time_arg_val(4);
-    constexpr uint32_t rotated_in_interm_cb = get_compile_time_arg_val(5);
     constexpr uint32_t sin_interm_cb = get_compile_time_arg_val(7);
     constexpr uint32_t out_cb = get_compile_time_arg_val(8);
     constexpr uint32_t num_rows = get_compile_time_arg_val(9);
     constexpr uint32_t Wt = get_compile_time_arg_val(10);
-    constexpr uint32_t half_Wt = get_compile_time_arg_val(11);
-
-    cb_wait_front(scalar_cb, onetile);
-
     uint32_t updated_sin_cb = sin_cb;
 
     constexpr uint32_t untilized_sin_cb = get_compile_time_arg_val(14);
     constexpr uint32_t untilized_sin_sync_cb = get_compile_time_arg_val(15);
     constexpr uint32_t retilized_sin_cb = get_compile_time_arg_val(17);
-    binary_op_init_common(sin_cb, scalar_cb, untilized_sin_cb);
+    binary_op_init_common(sin_cb, untilized_sin_sync_cb, untilized_sin_cb);
     UNTILIZE_TILES(sin_cb, untilized_sin_cb, Wt);
     reconfig_data_format_srca(sin_cb, untilized_sin_cb);
     pack_reconfig_data_format(untilized_sin_cb, retilized_sin_cb);
@@ -84,29 +77,9 @@ void MAIN {
     for (uint32_t i = 0; i < num_rows; ++i) {
         for (uint32_t j = 0; j < Wt; ++j) {
             in1_idx = j;
-            if (j < half_Wt) {
-                // Multiply half of the rotated input by scalar (-1)
-                reconfig_data_format(rotated_in_cb, scalar_cb);
-                pack_reconfig_data_format(rotated_in_interm_cb);
-                cb_wait_front(rotated_in_cb, onetile);
-                cb_reserve_back(rotated_in_interm_cb, onetile);
-                ACQ();
-                mul_tiles_bcast_scalar_init_short();
-                mul_tiles_bcast_scalar(rotated_in_cb, scalar_cb, 0, 0, 0);
-                pack_tile(0, rotated_in_interm_cb);
-                REL();
-                cb_push_back(rotated_in_interm_cb, onetile);
-                cb_pop_front(rotated_in_cb, onetile);
-                reconfig_data_format_srcb(scalar_cb, updated_sin_cb);
-                pack_reconfig_data_format(rotated_in_interm_cb, out_cb);
-                // Multiply rotated input by sin
-                MUL_TILES(rotated_in_interm_cb, updated_sin_cb, out_cb, onetile, in1_idx);
-            } else {
-                reconfig_data_format(rotated_in_cb, updated_sin_cb);
-                pack_reconfig_data_format(out_cb, out_cb);
-                // Multiply rotated input by sin
-                MUL_TILES(rotated_in_cb, updated_sin_cb, out_cb, onetile, in1_idx);
-            }
+            reconfig_data_format(in_cb, updated_sin_cb);
+            pack_reconfig_data_format(retilized_sin_cb, out_cb);
+            MUL_TILES(in_cb, updated_sin_cb, out_cb, onetile, in1_idx);
         }
     }
 }

@@ -10,26 +10,20 @@ import ttnn
 from models.utility_functions import comp_pcc, divup, is_grayskull, skip_for_blackhole
 
 
-def rotate_half(x):
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(x, cos_cached, sin_cached, token_idx=None):
+def apply_rotary_pos_emb(x, cos_cached, sin_cached, token_idx):
     seq_len = x.shape[-2]
-    if token_idx is None:
-        sin = sin_cached[:, :, :seq_len, ...]
-    else:
-        sin = sin_cached[:, :, token_idx : token_idx + 1, ...]
+    sin = sin_cached[:, :, token_idx : token_idx + 1, ...]
 
-    x_embed = rotate_half(x) * sin
+    print("Sine")
+    print(sin)
+
+    x_embed = x * sin
     return x_embed
 
 
 @pytest.mark.parametrize("W, Z, Y, X", [(1, 1, 32, 64)])
 @pytest.mark.parametrize("cache_size", [2048])
-@pytest.mark.parametrize("token_idx", [1025])
+@pytest.mark.parametrize("token_idx", [0])
 @pytest.mark.parametrize("in_sharded", [False])
 @pytest.mark.parametrize("out_sharded", [False])
 @pytest.mark.parametrize("input_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
@@ -39,10 +33,16 @@ def test_rotary_embedding_decode(
 ):
     input_shape = [W, Z, Y, X]
     sin_cos_shape = [1, 1, cache_size, X]
-    x = torch.randn(input_shape).bfloat16().float()
-    cos_cached = torch.randn(sin_cos_shape).bfloat16().float()
-    sin_cached = torch.randn(sin_cos_shape).bfloat16().float()
 
+    # Given the token of 0, x as 1s and sin_cache controlled
+    # We expect the result to have rows which consist of
+    # sequence of 0-1 in increments of 1/64. The cos values
+    # are not used. If indexing is wrong, we will get 8.
+    x = torch.ones(input_shape).bfloat16().float()
+    sin_cached = torch.ones(sin_cos_shape).bfloat16().float() * 8
+    sin_cached[0, 0, 0, 0:64] = torch.arange(0, 64) / 64
+
+    cos_cached = torch.randn(sin_cos_shape).bfloat16().float()
     out_mem_config = ttnn.MemoryConfig()
 
     xt = ttnn.Tensor(x, input_dtype)
@@ -50,6 +50,7 @@ def test_rotary_embedding_decode(
         xt = xt.to(ttnn.TILE_LAYOUT)
     elif input_dtype == ttnn.bfloat8_b:
         pytest.skip()
+        print("Should have skipped")
 
     xt = xt.to(device)
 
@@ -61,6 +62,11 @@ def test_rotary_embedding_decode(
 
     pt_out = apply_rotary_pos_emb(x, cos_cached, sin_cached, token_idx)
 
+    torch.set_printoptions(profile="full")
+    print("\nGolden tensor\n")
+    print(pt_out)
+    print("\nDevice tensor\n")
+    print(tt_got_back)
     p, o = comp_pcc(pt_out, tt_got_back)
     logger.info(o)
     assert p

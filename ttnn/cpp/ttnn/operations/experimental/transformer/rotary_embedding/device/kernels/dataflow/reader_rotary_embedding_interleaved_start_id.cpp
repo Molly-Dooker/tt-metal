@@ -14,7 +14,6 @@ void kernel_main() {
     uint32_t cos_sin_start_id = get_arg_val<uint32_t>(6);
 
     constexpr uint32_t input_cb_id = get_compile_time_arg_val(0);
-    constexpr uint32_t rotated_input_cb_id = get_compile_time_arg_val(1);
     constexpr uint32_t sin_cb_id = get_compile_time_arg_val(3);
     constexpr uint32_t scalar_cb_id = get_compile_time_arg_val(4);
     constexpr bool input_is_dram = get_compile_time_arg_val(5) == 1;
@@ -48,7 +47,6 @@ void kernel_main() {
     cb_push_back(scalar_cb_id, onetile);
 
     uint32_t input_curr_id = start_id;
-    uint32_t rotated_input_curr_id = start_id + half_Wt;
     uint32_t cos_sin_curr_id = cos_sin_start_id;
     uint32_t ht = start_row_id;
 
@@ -65,13 +63,6 @@ void kernel_main() {
     // read a ublock of tiles from src to CB, and then push the ublock to unpacker
     for (uint32_t i = 0; i < num_rows; ++i) {
         for (uint32_t j = 0; j < Wt; ++j) {
-            cb_reserve_back(rotated_input_cb_id, onetile);
-            uint32_t rotated_input_l1_write_addr = get_write_ptr(rotated_input_cb_id);
-            noc_async_read_tile(rotated_input_curr_id, s0, rotated_input_l1_write_addr);
-            noc_async_read_barrier();
-            cb_push_back(rotated_input_cb_id, onetile);
-            rotated_input_curr_id++;
-
             cb_reserve_back(sin_cb_id, onetile);
             uint32_t sin_l1_write_addr = get_write_ptr(sin_cb_id);
             noc_async_read_tile(cos_sin_curr_id, s2, sin_l1_write_addr);
@@ -84,12 +75,7 @@ void kernel_main() {
             noc_async_read_barrier();
             cb_push_back(input_cb_id, onetile);
             input_curr_id++;
-
-            if (j == half_Wt - 1) {
-                rotated_input_curr_id -= Wt;
-            }
         }
-        rotated_input_curr_id += Wt;
         ht++;
         if (ht == Ht) {
             ht = 0;
