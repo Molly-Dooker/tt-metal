@@ -132,13 +132,13 @@ def test_linear_with_core_grid(
         bias,
         core_grid=ttnn.CoreGrid(y=batch_size, x=6),
     )
-
-    # output_tensor = ttnn.linear(
-    #     input_tensor_a,
-    #     input_tensor_b,
-    #     bias = bias,
-    #     core_grid=ttnn.CoreGrid(y=batch_size, x=6),
-    # )
+    print("###############################################################")
+    output_tensor = ttnn.linear(
+        input_tensor_a,
+        input_tensor_b,
+        bias=bias,
+        core_grid=ttnn.CoreGrid(y=batch_size, x=6),
+    )
 
     if bias2:
         output_tensor = ttnn.add(output_tensor, bias)

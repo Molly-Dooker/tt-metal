@@ -68,6 +68,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized(
     const Tensor &input_tensor_a,
     const Tensor &input_tensor_b,
     const std::optional<const Tensor> bias,
+    const std::optional<const Tensor> input_tensor_c,
     Tensor &output_tensor,
     bool bcast_batch,
     CoreCoord compute_with_storage_grid_size,

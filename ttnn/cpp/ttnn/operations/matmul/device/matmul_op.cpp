@@ -961,8 +961,6 @@ Tensor matmul2(
     //     optional_input_tensors.push_back(std::nullopt);
     //     output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
     // }
-
-    std::cout << "matmul2.. do job with bias and input_c" << std::endl;
     optional_input_tensors.push_back(bias.value());
     optional_input_tensors.push_back(input_tensor_c.value());
     output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}, {bias.value(), input_tensor_c.value()}))};
@@ -1034,7 +1032,7 @@ void Matmul::validate(
     MatmulProgramConfig chosen_program_config = get_program_config(input_tensor_a, input_tensor_b, this);
 
     // TT_FATAL(optional_input_tensors.size() == 1, "Error");
-    std::cout << "====== optional_input_tensors.size: " << optional_input_tensors.size() << std::endl;
+    log_info(LogCustomtag, "optional_input_tensors.size: {}", optional_input_tensors.size());
 
     const auto& optional_bias = optional_input_tensors.at(0);
     if (optional_bias.has_value()) {
@@ -1467,6 +1465,7 @@ operation::ProgramWithCallbacks Matmul::create_program(
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(1);
     const auto& bias = optional_input_tensors.at(0);
+
     auto& output_tensor = output_tensors.at(0);
 
     TT_FATAL(this->output_dtype.has_value(), "Error");
@@ -1503,25 +1502,53 @@ operation::ProgramWithCallbacks Matmul::create_program(
                     program_config.per_core_N,
                     /*fuse_batch=*/false,
                     this->untilize_out);
-            } else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCastProgramConfig>) {
-                return matmul_multi_core_reuse_mcast_2d_optimized(
-                    input_tensor_a,
-                    input_tensor_b,
-                    bias,
-                    output_tensor,
-                    broadcast_batch,
-                    program_config.compute_with_storage_grid_size,
-                    this->compute_kernel_config.value(),
-                    program_config.in0_block_w,
-                    program_config.out_subblock_h,
-                    program_config.out_subblock_w,
-                    program_config.per_core_M,
-                    program_config.per_core_N,
-                    program_config.fuse_batch,
-                    program_config.transpose_mcast,
-                    program_config.fused_activation,
-                    this->untilize_out);
-            } else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCast1DProgramConfig>) {
+            }
+            else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCastProgramConfig>) {
+                if (optional_input_tensors.size() == 1)
+                {
+                    return matmul_multi_core_reuse_mcast_2d_optimized(
+                        input_tensor_a,
+                        input_tensor_b,
+                        bias,
+                        /*input_tensor_c*/std::nullopt,
+                        output_tensor,
+                        broadcast_batch,
+                        program_config.compute_with_storage_grid_size,
+                        this->compute_kernel_config.value(),
+                        program_config.in0_block_w,
+                        program_config.out_subblock_h,
+                        program_config.out_subblock_w,
+                        program_config.per_core_M,
+                        program_config.per_core_N,
+                        program_config.fuse_batch,
+                        program_config.transpose_mcast,
+                        program_config.fused_activation,
+                        this->untilize_out);
+                }
+                else
+                {
+                    return matmul_multi_core_reuse_mcast_2d_optimized(
+                        input_tensor_a,
+                        input_tensor_b,
+                        bias,
+                        optional_input_tensors.at(1),
+                        output_tensor,
+                        broadcast_batch,
+                        program_config.compute_with_storage_grid_size,
+                        this->compute_kernel_config.value(),
+                        program_config.in0_block_w,
+                        program_config.out_subblock_h,
+                        program_config.out_subblock_w,
+                        program_config.per_core_M,
+                        program_config.per_core_N,
+                        program_config.fuse_batch,
+                        program_config.transpose_mcast,
+                        program_config.fused_activation,
+                        this->untilize_out);
+                }
+
+            }
+            else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCast1DProgramConfig>) {
                 return matmul_multi_core_reuse_mcast_1d_optimized(
                     input_tensor_a,
                     input_tensor_b,
@@ -1539,9 +1566,8 @@ operation::ProgramWithCallbacks Matmul::create_program(
                     program_config.fused_activation,
                     program_config.mcast_in0,
                     this->untilize_out);
-            } else if constexpr (std::is_same_v<
-                                     ProgramConfigType,
-                                     MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig>) {
+            }
+            else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig>) {
                 return matmul_multi_core_reuse_dram_sharded_optimized(
                     input_tensor_a,
                     input_tensor_b,
@@ -1556,15 +1582,15 @@ operation::ProgramWithCallbacks Matmul::create_program(
                     false,
                     false,
                     false);
-            } else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreNonOptimizedReuseProgramConfig>) {
+            }
+            else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreNonOptimizedReuseProgramConfig>) {
                 TT_FATAL(!bias.has_value(), "Bias is not supported for matmul multi core non-optimized reuse");
                 return matmul_multi_core_reuse(input_tensor_a, input_tensor_b, output_tensor, broadcast_batch);
-            } else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreProgramConfig>) {
-                TT_FATAL(!bias.has_value(), "Bias is not supported for matmul multi core");
-                return matmul_multi_core(input_tensor_a, input_tensor_b, output_tensor, broadcast_batch);
-            } else {
-                TT_THROW("Unrecognized Config");
             }
+            else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreProgramConfig>) {
+                TT_FATAL(!bias.has_value(), "Bias is not supported for matmul multi core");
+                return matmul_multi_core(input_tensor_a, input_tensor_b, output_tensor, broadcast_batch);         }
+            else {TT_THROW("Unrecognized Config");}
         },
         chosen_program_config);
 }

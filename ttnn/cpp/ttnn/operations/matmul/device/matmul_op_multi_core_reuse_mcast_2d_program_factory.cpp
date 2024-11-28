@@ -45,6 +45,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     tt_metal::Buffer* in0_buffer,
     tt_metal::Buffer* in1_buffer,
     tt_metal::Buffer* bias_buffer,
+    tt_metal::Buffer* c_buffer,
     tt_metal::Buffer* out_buffer,
     tt::DataFormat in0_data_format,
     tt::DataFormat in1_data_format,
@@ -1223,6 +1224,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
     const Tensor& a,
     const Tensor& b,
     const std::optional<const Tensor> bias,
+    const std::optional<const Tensor> input_c,
     Tensor& output,
     bool bcast_batch,
     CoreCoord compute_with_storage_grid_size,
@@ -1257,6 +1259,21 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
         bias_data_format = tt_metal::datatype_to_dataformat_converter(c.get_dtype());
     }
 
+    tt_metal::Buffer* input_c_buffer = nullptr;
+    // tt::DataFormat bias_data_format = tt::DataFormat::Bfp8_b;  // bias; doesn't matter if bias=nullptr
+    if (input_c.has_value()) {
+        log_info(LogCustomtag, "matmul_multi_core_reuse_mcast_2d_optimized_ has c value");
+        auto& c = input_c.value();
+        TT_FATAL(c.storage_type() == StorageType::DEVICE, "Error");
+        TT_FATAL(a.device() == c.device(), "Operands to matmul need to be on the same device!");
+        TT_FATAL(c.buffer() != nullptr, "Operands to matmul need to be allocated in buffers on device!");
+        input_c_buffer = c.buffer();
+        // bias_data_format = tt_metal::datatype_to_dataformat_converter(c.get_dtype());
+    }
+    else
+    {
+        log_info(LogCustomtag, "matmul_multi_core_reuse_mcast_2d_optimized_ does not have  c value");
+    }
     tt_metal::Device* device = a.device();
 
     uint32_t in0_single_tile_size = tt_metal::detail::TileSize(in0_data_format);
@@ -1377,6 +1394,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
         in0_buffer,
         in1_buffer,
         bias_buffer,
+        input_c_buffer,
         out_buffer,
         in0_data_format,
         in1_data_format,
@@ -1390,6 +1408,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized(
     const Tensor& a,
     const Tensor& b,
     const std::optional<const Tensor> bias,
+    const std::optional<const Tensor> c,
     Tensor& output_tensor,
     bool broadcast_batch,
     CoreCoord compute_with_storage_grid_size,
@@ -1403,7 +1422,6 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized(
     bool transpose_mcast,
     std::optional<UnaryWithParam> fused_activation,
     bool untilize_out) {
-
     tt_metal::Program program{}; /* Create a program */
     std::optional<ttnn::experimental::ccl::MatmulFusedOpSignaler> empty_fused_op_signaler;
 
@@ -1412,6 +1430,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized(
         a,
         b,
         bias,
+        c,
         output_tensor,
         broadcast_batch,
         compute_with_storage_grid_size,
@@ -1447,6 +1466,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_helpe
         a,
         b,
         bias,
+        /*input_tensor_c*/std::nullopt,
         output_tensor,
         broadcast_batch,
         config.compute_with_storage_grid_size,
