@@ -4,6 +4,16 @@
 
 #include <stdint.h>
 #include "dataflow_api.h"
+#include "debug/dprint.h"
+
+inline void print_full_tile(uint32_t cb_id, uint32_t tile_id = 0, bool untilize) {
+    DPRINT << "======" << ENDL();
+    for (uint8_t r = 0; r < 32; ++ r) {
+        SliceRange sr = SliceRange{.h0 = r, .h1 = (uint8_t)(r+1), .hs = 1, .w0 = 0, .w1 = 64, .ws = 2};
+        DPRINT << (uint) r << TileSlice(cb_id, tile_id, sr, true, untilize) << ENDL();
+    }
+    DPRINT << "++++++" << ENDL();
+}
 
 void kernel_main() {
     uint32_t src_addr = get_arg_val<uint32_t>(0);
@@ -82,4 +92,7 @@ void kernel_main() {
             cos_sin_curr_id -= HtWt;
         }
     }
+
+
+
 }

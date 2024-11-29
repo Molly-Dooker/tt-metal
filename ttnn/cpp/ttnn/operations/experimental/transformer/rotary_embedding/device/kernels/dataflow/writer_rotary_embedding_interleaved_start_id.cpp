@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
+#include "debug/dprint.h"
 
 void kernel_main() {
     uint32_t dst_addr = get_arg_val<uint32_t>(0);
@@ -24,6 +25,8 @@ void kernel_main() {
     uint32_t cos_sin_offset = get_arg_val<uint32_t>(3);
     uint32_t Wt = get_arg_val<uint32_t>(4);
     uint32_t Wbytes = get_arg_val<uint32_t>(5);
+
+    DPRINT << "cs " << cos_sin_offset << " Wt " << Wt << " Wbytes " << Wbytes;
 
     constexpr uint32_t untilized_sin_cb_id = get_compile_time_arg_val(4);
     constexpr uint32_t untilized_sin_sync_cb_id = get_compile_time_arg_val(5);
