@@ -26,36 +26,6 @@ inline namespace v0 {
 // Helper Functions                 //
 //////////////////////////////////////
 
-// Alternative to this is a switch statement that calls handlers for each command type (like tt-mlir)
-// Keep registry of function replay handlers to seperate from execution loop.
-using CommandReplayHandler = std::function<void(const tt::target::Command*)>;
-std::map<::tt::target::CommandType, CommandReplayHandler> init_function_replay_registry() {
-
-    std::map<::tt::target::CommandType, CommandReplayHandler> registry;
-
-    registry[tt::target::CommandType::ReplayTraceCommand] = [](const ::tt::target::Command* cmd_union) {
-        auto cmd = cmd_union->cmd_as_ReplayTraceCommand();
-        log_info(tt::LogMetalTrace, "Calling ReplayTrace(). cq_id: {} tid: {} blocking: {}", cmd->cq_id(), cmd->tid(), cmd->blocking());
-        // ReplayTrace(this->device_, cmd->cq_id(), cmd->tid(), cmd->blocking());
-    };
-
-    registry[tt::target::CommandType::EnqueueTraceCommand] = [](const ::tt::target::Command* cmd_union) {
-        auto cmd = cmd_union->cmd_as_EnqueueTraceCommand();
-        log_info(tt::LogMetalTrace, "Calling EnqueueTrace(). cq_id: {} tid: {} blocking: {}", cmd->cq_id(), cmd->tid(), cmd->blocking());
-        // CommandQueue& command_queue = this->device_->command_queue();
-        // EnqueueTrace(command_queue, cmd->tid(), cmd->blocking());
-    };
-
-    // LoadTraceId API will be called, but it doesn't have acess to flatbuffer binary. Need to have it take blob I think.
-    registry[tt::target::CommandType::LightMetalLoadTraceIdCommand] = [](const ::tt::target::Command* cmd_union) {
-        auto cmd = cmd_union->cmd_as_LightMetalLoadTraceIdCommand();
-        log_info(tt::LogMetalTrace, "Calling LightMetalLoadTraceId(). cq_id: {} tid: {}", cmd->cq_id(), cmd->tid());
-        // Idea: Replay handler can fetch data based on identifier and pass to function being called.
-    };
-
-    return registry;
-}
-
 // A convenience function - Read arbitrary binary blob from file.
 void readBinaryBlobFromFile(const std::string& filename, std::vector<uint8_t>& blob) {
     std::ifstream file(filename, std::ios::binary | std::ios::ate);
@@ -125,43 +95,20 @@ const target::lightmetal::LightMetalBinary* LightMetalReplay::parseFlatBufferBin
     }
 }
 
-// FIXME - Could probably simplify this further.
+// Return a TraceDescriptor for a given trace_id from the FlatBuffer binary.
 std::optional<detail::TraceDescriptor> LightMetalReplay::getTraceByTraceId(uint32_t target_trace_id) {
-
-    try {
-
-        if (!lm_binary_) {
-            std::cerr << "FlatBuffer binary not initialized." << std::endl;
-            return std::nullopt;
+    if (const auto* trace_descriptors = lm_binary_ ? lm_binary_->trace_descriptors() : nullptr) {
+        if (const auto* fb_trace_desc_by_id = trace_descriptors->LookupByKey(target_trace_id)) {
+            if (const auto* fb_desc = fb_trace_desc_by_id->desc()) {
+                return fromFlatBuffer(fb_desc);
+            }
         }
-
-        // Ensure the trace_descriptors field exists.
-        if (!lm_binary_->trace_descriptors()) {
-            std::cerr << "No trace_descriptors found in the FlatBuffer file." << std::endl;
-            return std::nullopt;
-        }
-
-        // Lookup the trace descriptor by key.
-        const auto* fb_trace_desc_by_id = lm_binary_->trace_descriptors()->LookupByKey(target_trace_id);
-        if (!fb_trace_desc_by_id) {
-            std::cout << "Trace ID " << target_trace_id << " not found." << std::endl;
-            return std::nullopt;
-        }
-
-        // Retrieve and validate the descriptor.
-        const auto* fb_desc = fb_trace_desc_by_id->desc();
-        if (!fb_desc) {
-            std::cerr << "Descriptor is null for trace_id: " << target_trace_id << std::endl;
-            return std::nullopt;
-        }
-
-        // Convert and return the descriptor as a detail::TraceDescriptor.
-        return fromFlatBuffer(fb_desc);
-    } catch (const std::exception& e) {
-        std::cerr << "Exception in getTraceByTraceId: " << e.what() << std::endl;
-        return std::nullopt;
     }
+
+    std::cerr << "Failed to find trace_id: " << target_trace_id << " in binary." << std::endl;
+    return std::nullopt;
 }
+
 
 
 //////////////////////////////////////
@@ -297,10 +244,48 @@ void LightMetalReplay::setupDevices() {
 // 3. Can we fully encapsulate each host API command here.
 
 
-// Get blob fropm filename
-// Create Replay(blob)
-// Replay.executeLightMetalBinary()
-// Main entry point to execute a light metal binary blob and return success (0) /failure (1)
+// Execute a command by dispatching to appropriate handler based on type.
+void LightMetalReplay::execute(tt::target::Command const *command) {
+  switch (command->cmd_type()) {
+  case ::tt::target::CommandType::EnqueueTraceCommand: {
+    execute(command->cmd_as_EnqueueTraceCommand());
+    break;
+  }
+  case ::tt::target::CommandType::ReplayTraceCommand: {
+    execute(command->cmd_as_ReplayTraceCommand());
+    break;
+  }
+  case ::tt::target::CommandType::LightMetalLoadTraceIdCommand: {
+    execute(command->cmd_as_LightMetalLoadTraceIdCommand());
+    break;
+  }
+  default:
+    throw std::runtime_error("Unsupported command type");
+    break;
+  }
+}
+
+// Per API command handlers.
+void LightMetalReplay::execute(tt::target::EnqueueTraceCommand const *cmd) {
+    log_info(tt::LogMetalTrace, "KCM NEW Execute EnqueueTrace(). cq_id: {} tid: {} blocking: {}", cmd->cq_id(), cmd->tid(), cmd->blocking());
+    // FIXME - Needs some tweaking, since API takes CQ should binarize cq_id and device_id.
+    CommandQueue &cq = this->device_->command_queue(cmd->cq_id());
+    EnqueueTrace(cq, cmd->tid(), cmd->blocking());
+}
+
+void LightMetalReplay::execute(tt::target::ReplayTraceCommand const *cmd) {
+    log_info(tt::LogMetalTrace, "KCM NEW Execute ReplayTrace(). cq_id: {} tid: {} blocking: {}", cmd->cq_id(), cmd->tid(), cmd->blocking());
+    ReplayTrace(this->device_, cmd->cq_id(), cmd->tid(), cmd->blocking());
+}
+
+void LightMetalReplay::execute(tt::target::LightMetalLoadTraceIdCommand const *cmd) {
+    log_info(tt::LogMetalTrace, "KCM NEW Execute LightMetalLoadTraceId(). cq_id: {} tid: {}", cmd->cq_id(), cmd->tid());
+    auto trace_desc = getTraceByTraceId(cmd->tid());
+    // FIXME - Modify to take a TraceDescriptor instead of tid.
+    LightMetalLoadTraceId(this->device_, cmd->tid(), cmd->cq_id());
+}
+
+// Main entry point to execute a light metal binary blob, return true if pass.
 bool LightMetalReplay::executeLightMetalBinary() {
 
     if (!lm_binary_) {
@@ -309,30 +294,22 @@ bool LightMetalReplay::executeLightMetalBinary() {
     }
 
     try {
-        example_code();
+        // example_code(); // Debug
 
         const auto* trace_descriptors = lm_binary_->trace_descriptors();
         const auto* commands = lm_binary_->commands();
         if (!commands) {
-            std::cerr << "No commands in binary." << std::endl;
+            std::cerr << "Nothing to run, no commands in binary." << std::endl;
             return false;
         }
 
-        auto replay_registry = init_function_replay_registry();
         setupDevices();
-        log_info(tt::LogMetalTrace, "{} - cmds: {} funcs: {} traces: {}", __FUNCTION__, commands->size(), replay_registry.size(), trace_descriptors->size());
+        log_info(tt::LogMetalTrace, "{} - cmds: {} traces: {}", __FUNCTION__, commands->size(), trace_descriptors->size());
 
         // Just loop over all commands, and execute. This is purposely kept simple for prototyping v0,
         // should expand to cover multiple program, devices, cqs, etc. FIXME
         for (const auto* cmd : *commands) {
-            if (!cmd) continue;
-            auto handlerIt = replay_registry.find(cmd->cmd_type());
-            log_info(tt::LogMetalTrace, "Found command type: {}", cmd->cmd_type());
-            if (handlerIt != replay_registry.end()) {
-                handlerIt->second(cmd);
-            } else {
-                std::cerr << "Unknown Host API cmd, add to registry." << std::endl;
-            }
+            execute(cmd);
         }
 
         return true;

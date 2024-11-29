@@ -11,16 +11,24 @@
 
 #include "impl/device/device.hpp"
 
-// Forward decl for binary_generated.h
-namespace tt::target::lightmetal {
-    struct TraceDescriptor;
-    struct TraceDescriptorByTraceId;
-    struct LightMetalBinary;
-}
-
 // Forward Declaration to avoid trace_buffer.hpp
 namespace tt::tt_metal::detail {
     class TraceDescriptor;
+}
+
+// Forward decl for command_generated.h
+namespace tt::target {
+    struct Command;
+    struct ReplayTraceCommand;
+    struct EnqueueTraceCommand;
+    struct LightMetalLoadTraceIdCommand;
+
+    // Forward decl for binary_generated.h
+    namespace lightmetal {
+        struct TraceDescriptor;
+        struct TraceDescriptorByTraceId;
+        struct LightMetalBinary;
+    }
 }
 
 namespace tt::tt_metal {
@@ -42,6 +50,12 @@ public:
 
     // Execute the stored LightMetal binary
     bool executeLightMetalBinary();
+
+    // Executor functions for all traced host API calls
+    void execute(tt::target::Command const *command);
+    void execute(tt::target::EnqueueTraceCommand const *command);
+    void execute(tt::target::ReplayTraceCommand const *command);
+    void execute(tt::target::LightMetalLoadTraceIdCommand const *command);
 
     // Temporary debug
     void printLightMetalBinaryContents();
