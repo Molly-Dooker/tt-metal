@@ -27,10 +27,10 @@ inline void captureReplayTrace(Device *device, uint8_t cq_id, uint32_t tid, bool
 
     auto& builder = ctx.getBuilder();
     // If complex types, convert to flatbuffer format here.
-    auto command_variant = tt::target::CreateReplayTrace(builder, cq_id, tid, blocking);
+    auto command_variant = tt::target::CreateReplayTraceCommand(builder, cq_id, tid, blocking);
     auto command = tt::target::CreateCommand(
         builder,
-        tt::target::CommandUnion::CommandUnion_ReplayTrace,
+        tt::target::CommandType::CommandType_ReplayTraceCommand,
         command_variant.Union()
     );
     ctx.getCmdsVector().push_back(command);
@@ -47,10 +47,10 @@ inline void captureEnqueueTrace(CommandQueue& cq, uint32_t trace_id, bool blocki
 
     auto& builder = ctx.getBuilder();
     // If complex types, convert to flatbuffer format here.
-    auto command_variant = tt::target::CreateEnqueueTrace(builder, cq_id, trace_id, blocking);
+    auto command_variant = tt::target::CreateEnqueueTraceCommand(builder, cq_id, trace_id, blocking);
     auto command = tt::target::CreateCommand(
         builder,
-        tt::target::CommandUnion::CommandUnion_EnqueueTrace,
+        tt::target::CommandType::CommandType_EnqueueTraceCommand,
         command_variant.Union()
     );
     ctx.getCmdsVector().push_back(command);
@@ -63,10 +63,10 @@ inline void captureLightMetalLoadTraceId(Device *device, const uint32_t tid, con
     if (!ctx.isTracing()) return;
 
     auto& builder = ctx.getBuilder();
-    auto command_variant = tt::target::CreateLightMetalLoadTraceId(builder, tid, cq_id);
+    auto command_variant = tt::target::CreateLightMetalLoadTraceIdCommand(builder, tid, cq_id);
     auto command = tt::target::CreateCommand(
         builder,
-        tt::target::CommandUnion::CommandUnion_LightMetalLoadTraceId,
+        tt::target::CommandType::CommandType_LightMetalLoadTraceIdCommand,
         command_variant.Union()
     );
     ctx.getCmdsVector().push_back(command);

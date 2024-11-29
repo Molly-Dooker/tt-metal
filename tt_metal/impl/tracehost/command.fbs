@@ -2,32 +2,32 @@
 
 namespace tt.target;
 
-table ReplayTrace {
+table ReplayTraceCommand {
     // FIXME Device.
     cq_id: int;
     tid: int;
     blocking: bool;
 }
 
-table EnqueueTrace {
+table EnqueueTraceCommand {
     // FIXME Device.
     cq_id: int;
     tid: int;
     blocking: bool;
 }
 
-table LightMetalLoadTraceId {
+table LightMetalLoadTraceIdCommand {
     tid: int;
     cq_id: int;
 }
 
-union CommandUnion {
-    ReplayTrace,
-    EnqueueTrace,
-    LightMetalLoadTraceId
+union CommandType {
+    ReplayTraceCommand,
+    EnqueueTraceCommand,
+    LightMetalLoadTraceIdCommand
     // EnqueueWriteBuffer
 }
 
 table Command {
-    cmd: CommandUnion;
+    cmd: CommandType;
 }

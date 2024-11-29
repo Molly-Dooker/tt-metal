@@ -29,26 +29,26 @@ inline namespace v0 {
 // Alternative to this is a switch statement that calls handlers for each command type (like tt-mlir)
 // Keep registry of function replay handlers to seperate from execution loop.
 using CommandReplayHandler = std::function<void(const tt::target::Command*)>;
-std::map<::tt::target::CommandUnion, CommandReplayHandler> init_function_replay_registry() {
+std::map<::tt::target::CommandType, CommandReplayHandler> init_function_replay_registry() {
 
-    std::map<::tt::target::CommandUnion, CommandReplayHandler> registry;
+    std::map<::tt::target::CommandType, CommandReplayHandler> registry;
 
-    registry[tt::target::CommandUnion_ReplayTrace] = [](const ::tt::target::Command* cmd_union) {
-        auto cmd = cmd_union->cmd_as_ReplayTrace();
+    registry[tt::target::CommandType_ReplayTraceCommand] = [](const ::tt::target::Command* cmd_union) {
+        auto cmd = cmd_union->cmd_as_ReplayTraceCommand();
         log_info(tt::LogMetalTrace, "Calling ReplayTrace(). cq_id: {} tid: {} blocking: {}", cmd->cq_id(), cmd->tid(), cmd->blocking());
         // ReplayTrace(this->device_, cmd->cq_id(), cmd->tid(), cmd->blocking());
     };
 
-    registry[tt::target::CommandUnion_EnqueueTrace] = [](const ::tt::target::Command* cmd_union) {
-        auto cmd = cmd_union->cmd_as_EnqueueTrace();
+    registry[tt::target::CommandType_EnqueueTraceCommand] = [](const ::tt::target::Command* cmd_union) {
+        auto cmd = cmd_union->cmd_as_EnqueueTraceCommand();
         log_info(tt::LogMetalTrace, "Calling EnqueueTrace(). cq_id: {} tid: {} blocking: {}", cmd->cq_id(), cmd->tid(), cmd->blocking());
         // CommandQueue& command_queue = this->device_->command_queue();
         // EnqueueTrace(command_queue, cmd->tid(), cmd->blocking());
     };
 
     // LoadTraceId API will be called, but it doesn't have acess to flatbuffer binary. Need to have it take blob I think.
-    registry[tt::target::CommandUnion_LightMetalLoadTraceId] = [](const ::tt::target::Command* cmd_union) {
-        auto cmd = cmd_union->cmd_as_LightMetalLoadTraceId();
+    registry[tt::target::CommandType_LightMetalLoadTraceIdCommand] = [](const ::tt::target::Command* cmd_union) {
+        auto cmd = cmd_union->cmd_as_LightMetalLoadTraceIdCommand();
         log_info(tt::LogMetalTrace, "Calling LightMetalLoadTraceId(). cq_id: {} tid: {}", cmd->cq_id(), cmd->tid());
         // Idea: Replay handler can fetch data based on identifier and pass to function being called.
     };
@@ -236,28 +236,28 @@ void LightMetalReplay::printLightMetalBinaryContents() {
 
             auto cmd_type = command->cmd_type();
             switch (cmd_type) {
-                case tt::target::CommandUnion_ReplayTrace: {
-                    const auto* replay_trace = command->cmd_as_ReplayTrace();
-                    if (replay_trace) {
+                case tt::target::CommandType_ReplayTraceCommand: {
+                    const auto* cmd_variant = command->cmd_as_ReplayTraceCommand();
+                    if (cmd_variant) {
                         std::cout << "ReplayTrace Command:" << std::endl;
-                        std::cout << "  cq_id: " << replay_trace->cq_id() << std::endl;
-                        std::cout << "  tid: " << replay_trace->tid() << std::endl;
-                        std::cout << "  blocking: " << (replay_trace->blocking() ? "true" : "false") << std::endl;
+                        std::cout << "  cq_id: " << cmd_variant->cq_id() << std::endl;
+                        std::cout << "  tid: " << cmd_variant->tid() << std::endl;
+                        std::cout << "  blocking: " << (cmd_variant->blocking() ? "true" : "false") << std::endl;
                     }
                     break;
                 }
-                case tt::target::CommandUnion_EnqueueTrace: {
-                    const auto* enqueue_trace = command->cmd_as_EnqueueTrace();
-                    if (enqueue_trace) {
+                case tt::target::CommandType_EnqueueTraceCommand: {
+                    const auto* cmd_variant = command->cmd_as_EnqueueTraceCommand();
+                    if (cmd_variant) {
                         std::cout << "EnqueueTrace Command:" << std::endl;
-                        std::cout << "  cq_id: " << enqueue_trace->cq_id() << std::endl;
-                        std::cout << "  tid: " << enqueue_trace->tid() << std::endl;
-                        std::cout << "  blocking: " << (enqueue_trace->blocking() ? "true" : "false") << std::endl;
+                        std::cout << "  cq_id: " << cmd_variant->cq_id() << std::endl;
+                        std::cout << "  tid: " << cmd_variant->tid() << std::endl;
+                        std::cout << "  blocking: " << (cmd_variant->blocking() ? "true" : "false") << std::endl;
                     }
                     break;
                 }
-                case tt::target::CommandUnion_LightMetalLoadTraceId: {
-                    const auto* cmd_variant = command->cmd_as_LightMetalLoadTraceId();
+                case tt::target::CommandType_LightMetalLoadTraceIdCommand: {
+                    const auto* cmd_variant = command->cmd_as_LightMetalLoadTraceIdCommand();
                     if (cmd_variant) {
                         std::cout << "LightMetalLoadTraceId Command:" << std::endl;
                         std::cout << "  tid: " << cmd_variant->tid() << std::endl;
