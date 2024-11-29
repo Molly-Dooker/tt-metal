@@ -102,7 +102,8 @@ def ttnn_vgg16(
                 reshard_if_not_optimal=True,
                 enable_weights_double_buffer=True,
             )
-            compute_config = ttnn.CreateComputeKernelConfig(
+            compute_config = ttnn.init_device_compute_kernel_config(
+                device.arch(),
                 math_fidelity=model_config["MATH_FIDELITY"],
                 math_approx_mode=True,
                 fp32_dest_acc_en=False,
@@ -227,7 +228,8 @@ def ttnn_vgg11(
                 ),
                 enable_weights_double_buffer=True,
             )
-            compute_config = ttnn.CreateComputeKernelConfig(
+            compute_config = ttnn.init_device_compute_kernel_config(
+                device.arch(),
                 math_fidelity=model_config["MATH_FIDELITY"],
                 math_approx_mode=True,
                 fp32_dest_acc_en=True,
