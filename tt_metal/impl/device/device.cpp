@@ -3413,9 +3413,12 @@ void Device::light_metal_load_trace_id(const uint32_t tid, const uint8_t cq_id) 
 
     log_info(tt::LogMetal, "KCM Inside {} for cq: {} file: {} got tid: {}", __FUNCTION__, (uint32_t)cq_id, this->light_metal_trace_.config.filename, tid);
 
+    // FIXME - This function should take TraceDescriptor directly.
+
     // FIXME - This is bringup hack to parse flatbuffer binary and extract TraceDescriptor by trace_id.
     // would be replaced by updating this API to take TraceDescriptor directly.
-    auto traceDescOpt = getTraceByTraceId(this->light_metal_trace_.config.filename, tid);
+    // auto traceDescOpt = getTraceByTraceId(this->light_metal_trace_.config.filename, tid);
+    std::optional<detail::TraceDescriptor> traceDescOpt;
 
     if (traceDescOpt.has_value()) {
         const auto& trace_desc = traceDescOpt.value();

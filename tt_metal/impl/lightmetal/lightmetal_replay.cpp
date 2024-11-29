@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "lightmetal_replay.hpp"
+#include <iostream>
 #include "binary_generated.h"
 #include "command_generated.h"
 #include "tt_metal/impl/trace/trace_buffer.hpp"
@@ -22,8 +23,38 @@ inline namespace v0 {
 // 3. And have handlers to call Host API functions.
 
 //////////////////////////////////////
-// File/Blob IO                     //
+// Helper Functions                 //
 //////////////////////////////////////
+
+// Alternative to this is a switch statement that calls handlers for each command type (like tt-mlir)
+// Keep registry of function replay handlers to seperate from execution loop.
+using CommandReplayHandler = std::function<void(const tt::target::Command*)>;
+std::map<::tt::target::CommandUnion, CommandReplayHandler> init_function_replay_registry() {
+
+    std::map<::tt::target::CommandUnion, CommandReplayHandler> registry;
+
+    registry[tt::target::CommandUnion_ReplayTrace] = [](const ::tt::target::Command* cmd_union) {
+        auto cmd = cmd_union->cmd_as_ReplayTrace();
+        log_info(tt::LogMetalTrace, "Calling ReplayTrace(). cq_id: {} tid: {} blocking: {}", cmd->cq_id(), cmd->tid(), cmd->blocking());
+        // ReplayTrace(this->device_, cmd->cq_id(), cmd->tid(), cmd->blocking());
+    };
+
+    registry[tt::target::CommandUnion_EnqueueTrace] = [](const ::tt::target::Command* cmd_union) {
+        auto cmd = cmd_union->cmd_as_EnqueueTrace();
+        log_info(tt::LogMetalTrace, "Calling EnqueueTrace(). cq_id: {} tid: {} blocking: {}", cmd->cq_id(), cmd->tid(), cmd->blocking());
+        // CommandQueue& command_queue = this->device_->command_queue();
+        // EnqueueTrace(command_queue, cmd->tid(), cmd->blocking());
+    };
+
+    // LoadTraceId API will be called, but it doesn't have acess to flatbuffer binary. Need to have it take blob I think.
+    registry[tt::target::CommandUnion_LightMetalLoadTraceId] = [](const ::tt::target::Command* cmd_union) {
+        auto cmd = cmd_union->cmd_as_LightMetalLoadTraceId();
+        log_info(tt::LogMetalTrace, "Calling LightMetalLoadTraceId(). cq_id: {} tid: {}", cmd->cq_id(), cmd->tid());
+        // Idea: Replay handler can fetch data based on identifier and pass to function being called.
+    };
+
+    return registry;
+}
 
 // A convenience function - Read arbitrary binary blob from file.
 void readBinaryBlobFromFile(const std::string& filename, std::vector<uint8_t>& blob) {
@@ -45,40 +76,6 @@ void readBinaryBlobFromFile(const std::string& filename, std::vector<uint8_t>& b
     }
 }
 
-
-// Verify and return LightMetalBinary flatbuffers object given a matching binary blob
-const target::lightmetal::LightMetalBinary* getLightMetalBinary(const std::vector<uint8_t>& blob) {
-    try {
-        // Read the binary blob from the file.
-        const uint8_t* data = blob.data();
-        size_t size = blob.size();
-
-        // Verify the FlatBuffer data.
-        flatbuffers::Verifier verifier(data, size);
-        if (!target::lightmetal::VerifyLightMetalBinaryBuffer(verifier)) {
-            std::cerr << "Failed to verify Flatbuffer data." << std::endl;
-            return nullptr;
-        }
-        log_info(tt::LogMetalTrace, "Finished VerifyLightMetalBinaryBuffer");
-
-        // Parse and return the FlatBuffer object.
-        const auto* lm_binary = target::lightmetal::GetLightMetalBinary(data);
-        if (!lm_binary) {
-            std::cerr << "Failed to get LightMetalBinary object from Flatbuffer data." << std::endl;
-            return nullptr;
-        }
-
-        return lm_binary;
-    } catch (const std::exception& e) {
-        std::cerr << "Exception while opening FlatBuffer binary: " << e.what() << std::endl;
-        return nullptr;
-    }
-}
-
-//////////////////////////////////////
-// Deserialization Functions        //
-//////////////////////////////////////
-
 detail::TraceDescriptor fromFlatBuffer(const tt::target::lightmetal::TraceDescriptor* fb_desc) {
     if (!fb_desc) {
         std::cerr << "TraceDescriptor is null." << std::endl;
@@ -96,27 +93,56 @@ detail::TraceDescriptor fromFlatBuffer(const tt::target::lightmetal::TraceDescri
     return traceDesc;
 }
 
-// FIXME - Could simplify this, don't open from file again, instead store flatbuffer binary in state.
-std::optional<detail::TraceDescriptor> getTraceByTraceId(const std::string& filename, uint32_t target_trace_id) {
+//////////////////////////////////////
+// LightMetalReplay Class           //
+//////////////////////////////////////
+
+LightMetalReplay::LightMetalReplay(std::vector<uint8_t> blob)
+    : blob_(std::move(blob)), lm_binary_(nullptr) {
+    lm_binary_ = parseFlatBufferBinary();  // Parse and store the FlatBuffer binary
+    if (!lm_binary_) {
+        throw std::runtime_error("Failed to parse FlatBuffer binary during initialization.");
+    }
+}
+
+const target::lightmetal::LightMetalBinary* LightMetalReplay::parseFlatBufferBinary() {
+    try {
+        const uint8_t* data = blob_.data();
+        size_t size = blob_.size();
+
+        // Verify the FlatBuffer data.
+        flatbuffers::Verifier verifier(data, size);
+        if (!target::lightmetal::VerifyLightMetalBinaryBuffer(verifier)) {
+            std::cerr << "Failed to verify FlatBuffer data." << std::endl;
+            return nullptr;
+        }
+
+        // Parse and return the FlatBuffer object.
+        return target::lightmetal::GetLightMetalBinary(data);
+    } catch (const std::exception& e) {
+        std::cerr << "Exception while parsing FlatBuffer binary: " << e.what() << std::endl;
+        return nullptr;
+    }
+}
+
+// FIXME - Could probably simplify this further.
+std::optional<detail::TraceDescriptor> LightMetalReplay::getTraceByTraceId(uint32_t target_trace_id) {
+
     try {
 
-        std::vector<uint8_t> binary_blob;
-        readBinaryBlobFromFile(filename, binary_blob);
-        const auto* lm_binary = getLightMetalBinary(binary_blob);
-
-        if (!lm_binary) {
-            std::cerr << "Failed to open FlatBuffer binary." << std::endl;
+        if (!lm_binary_) {
+            std::cerr << "FlatBuffer binary not initialized." << std::endl;
             return std::nullopt;
         }
 
         // Ensure the trace_descriptors field exists.
-        if (!lm_binary->trace_descriptors()) {
+        if (!lm_binary_->trace_descriptors()) {
             std::cerr << "No trace_descriptors found in the FlatBuffer file." << std::endl;
             return std::nullopt;
         }
 
         // Lookup the trace descriptor by key.
-        const auto* fb_trace_desc_by_id = lm_binary->trace_descriptors()->LookupByKey(target_trace_id);
+        const auto* fb_trace_desc_by_id = lm_binary_->trace_descriptors()->LookupByKey(target_trace_id);
         if (!fb_trace_desc_by_id) {
             std::cout << "Trace ID " << target_trace_id << " not found." << std::endl;
             return std::nullopt;
@@ -142,14 +168,24 @@ std::optional<detail::TraceDescriptor> getTraceByTraceId(const std::string& file
 // Debug Code                       //
 //////////////////////////////////////
 
+bool example_code() {
+    int device_id = 0;
+    tt_metal::Device* device = tt_metal::CreateDevice(device_id, 1, DEFAULT_L1_SMALL_SIZE, 900000000);
+    tt_metal::CommandQueue& cq = device->command_queue();
+    tt_metal::Program program = tt_metal::CreateProgram();
+    bool pass = tt_metal::CloseDevice(device);
+    return pass;
+}
 
-void printLightMetalBinaryContents(const tt::target::lightmetal::LightMetalBinary* lm_binary) {
-    if (!lm_binary) {
-        std::cerr << "Invalid LightMetalBinary object." << std::endl;
+// Temporary debug function to print the contents of the FlatBuffer binary.
+void LightMetalReplay::printLightMetalBinaryContents() {
+
+    if (!lm_binary_) {
+        std::cerr << "FlatBuffer binary not initialized." << std::endl;
         return;
     }
 
-    const auto* trace_descriptors = lm_binary->trace_descriptors();
+    const auto* trace_descriptors = lm_binary_->trace_descriptors();
     if (!trace_descriptors) {
         std::cout << "No trace descriptors found in the binary." << std::endl;
     } else {
@@ -190,7 +226,7 @@ void printLightMetalBinaryContents(const tt::target::lightmetal::LightMetalBinar
     }
 
     // Print all commands.
-    const auto* commands = lm_binary->commands();
+    const auto* commands = lm_binary_->commands();
     if (!commands || commands->size() == 0) {
         std::cout << "No commands found in the binary." << std::endl;
     } else {
@@ -238,44 +274,74 @@ void printLightMetalBinaryContents(const tt::target::lightmetal::LightMetalBinar
 }
 
 
+void LightMetalReplay::setupDevices() {
+    log_info(tt::LogMetalTrace, "Setting up system now...");
+
+    // FIXME - Get these from lm_binary_ systemdesc once available. For now hardcode.
+    const size_t buffer_size = 2048;
+    this->arch_ = tt::ARCH::WORMHOLE_B0;
+    const int device_id = 0;
+    const auto dispatch_core_type = tt_metal::DispatchCoreType::WORKER;
+    const chip_id_t mmio_device_id = 0;
+    auto devices_map = tt::tt_metal::detail::CreateDevices({mmio_device_id}, 1, DEFAULT_L1_SMALL_SIZE, buffer_size, dispatch_core_type);
+    this->device_ = devices_map.at(mmio_device_id);
+}
+
 //////////////////////////////////////
 // Executor                         //
 //////////////////////////////////////
 
+// Some open questions...
+// 1. How to pass Device* to replay functions? Can use a global variable for now.
+// 2. How to pass other things like input tensors?
+// 3. Can we fully encapsulate each host API command here.
 
-bool example_code() {
-    int device_id = 0;
-    tt_metal::Device* device = tt_metal::CreateDevice(device_id, 1, DEFAULT_L1_SMALL_SIZE, 900000000);
-    tt_metal::CommandQueue& cq = device->command_queue();
-    tt_metal::Program program = tt_metal::CreateProgram();
-    bool pass = tt_metal::CloseDevice(device);
-    return pass;
-}
 
+// Get blob fropm filename
+// Create Replay(blob)
+// Replay.executeLightMetalBinary()
 // Main entry point to execute a light metal binary blob and return success (0) /failure (1)
-bool executeLightMetalBinary(const std::vector<uint8_t>& blob) {
+bool LightMetalReplay::executeLightMetalBinary() {
 
-    log_info(tt::LogMetalTrace, "Starting {}", __FUNCTION__);
-    bool pass = true;
-
-    try {
-        pass = example_code();
-        const auto* lm_binary = getLightMetalBinary(blob);
-
-        if (lm_binary) {
-            printLightMetalBinaryContents(lm_binary);
-            // FIXME - Replace with executor handler here.
-        } else {
-            std::cerr << "Failed to load FlatBuffer binary." << std::endl;
-        }
-
-    } catch (const std::exception& e) {
-        pass = false;
-        log_fatal(e.what());
+    if (!lm_binary_) {
+        std::cerr << "FlatBuffer binary not initialized." << std::endl;
+        return false;
     }
 
-    return !pass;
+    try {
+        example_code();
+
+        const auto* trace_descriptors = lm_binary_->trace_descriptors();
+        const auto* commands = lm_binary_->commands();
+        if (!commands) {
+            std::cerr << "No commands in binary." << std::endl;
+            return false;
+        }
+
+        auto replay_registry = init_function_replay_registry();
+        setupDevices();
+        log_info(tt::LogMetalTrace, "{} - cmds: {} funcs: {} traces: {}", __FUNCTION__, commands->size(), replay_registry.size(), trace_descriptors->size());
+
+        // Just loop over all commands, and execute. This is purposely kept simple for prototyping v0,
+        // should expand to cover multiple program, devices, cqs, etc. FIXME
+        for (const auto* cmd : *commands) {
+            if (!cmd) continue;
+            auto handlerIt = replay_registry.find(cmd->cmd_type());
+            log_info(tt::LogMetalTrace, "Found command type: {}", cmd->cmd_type());
+            if (handlerIt != replay_registry.end()) {
+                handlerIt->second(cmd);
+            } else {
+                std::cerr << "Unknown Host API cmd, add to registry." << std::endl;
+            }
+        }
+
+        return true;
+    } catch (const std::exception& e) {
+        log_fatal(e.what());
+        return false;
+    }
 }
+
 
 }  // namespace v0
 }  // namespace tt::tt_metal

@@ -7,6 +7,9 @@
 #include <flatbuffers/flatbuffers.h>
 #include <string>
 #include <vector>
+#include <optional>
+
+#include "impl/device/device.hpp"
 
 // Forward decl for binary_generated.h
 namespace tt::target::lightmetal {
@@ -23,18 +26,41 @@ namespace tt::tt_metal::detail {
 namespace tt::tt_metal {
 inline namespace v0 {
 
-// Convert from Flatbuffer TraceDescriptor to C++ struct
-detail::TraceDescriptor fromFlatBuffer(const tt::target::lightmetal::TraceDescriptor* fb_desc);
-
-// Open a binary file and return contents as a binary blob via vector.
+// General utility function to open a binary file and return contents as a binary blob
 void readBinaryBlobFromFile(const std::string& filename, std::vector<uint8_t>& blob);
 
-const target::lightmetal::LightMetalBinary* openFlatBufferBinary(std::vector<uint8_t>& buffer);
+class LightMetalReplay {
+public:
+    // Constructor that initializes the class with a binary blob
+    explicit LightMetalReplay(std::vector<uint8_t> blob);
 
-// Deserialize a specific trace by trace_id.
-std::optional<detail::TraceDescriptor> getTraceByTraceId(const std::string& filename, uint32_t target_trace_id);
+    // Open a FlatBuffer binary from the stored blob
+    const target::lightmetal::LightMetalBinary* openFlatBufferBinary();
 
-bool executeLightMetalBinary(const std::vector<uint8_t>& blob);
+    // Return the TraceDescriptor for a given trace_id from flatbuffer.
+    std::optional<detail::TraceDescriptor> getTraceByTraceId(uint32_t target_trace_id);
+
+    // Execute the stored LightMetal binary
+    bool executeLightMetalBinary();
+
+    // Temporary debug
+    void printLightMetalBinaryContents();
+
+private:
+
+    // Workload related members --------------------
+    const target::lightmetal::LightMetalBinary* parseFlatBufferBinary();
+
+    std::vector<uint8_t> blob_;  // Stored binary blob
+    const target::lightmetal::LightMetalBinary* lm_binary_;  // Parsed FlatBuffer binary
+
+    // System related members ----------------------
+    void setupDevices();
+
+    tt::tt_metal::Device* device_;
+    tt::ARCH arch_;
+
+};
 
 }  // namespace v0
 }  // namespace tt::tt_metal

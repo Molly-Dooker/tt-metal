@@ -16,13 +16,14 @@ int main(int argc, char* argv[]) {
     // Read the binary file into blob, and execute the Light Metal binary blob.
     std::vector<uint8_t> binary_blob;
     tt::tt_metal::readBinaryBlobFromFile(filename, binary_blob);
-    bool failed = tt::tt_metal::executeLightMetalBinary(binary_blob);
+    tt::tt_metal::LightMetalReplay lm_replay(binary_blob); // FIXME Take reference.
+    lm_replay.printLightMetalBinaryContents(); // Debug
 
-    if (failed) {
+    if (!lm_replay.executeLightMetalBinary()) {
         log_fatal("Binary {} failed to execute or encountered errors.", filename);
+        return 1;
     } else {
         log_info(tt::LogMetalTrace, "Binary {} executed successfully", filename);
+        return 0;
     }
-
-    return failed;
 }
