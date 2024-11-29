@@ -6,7 +6,8 @@ function(GENERATE_FBS_HEADER FBS_FILE)
         OUTPUT
             ${FBS_GENERATED_HEADER}
         COMMAND
-            flatc --cpp -I ${CMAKE_CURRENT_SOURCE_DIR} -o "${CMAKE_CURRENT_BINARY_DIR}" ${FBS_FILE}
+            flatc --cpp --scoped-enums -I ${CMAKE_CURRENT_SOURCE_DIR} -o "${CMAKE_CURRENT_BINARY_DIR}"
+            ${FBS_FILE}
         DEPENDS
             flatc
             ${FBS_FILE}

@@ -33,13 +33,13 @@ std::map<::tt::target::CommandType, CommandReplayHandler> init_function_replay_r
 
     std::map<::tt::target::CommandType, CommandReplayHandler> registry;
 
-    registry[tt::target::CommandType_ReplayTraceCommand] = [](const ::tt::target::Command* cmd_union) {
+    registry[tt::target::CommandType::ReplayTraceCommand] = [](const ::tt::target::Command* cmd_union) {
         auto cmd = cmd_union->cmd_as_ReplayTraceCommand();
         log_info(tt::LogMetalTrace, "Calling ReplayTrace(). cq_id: {} tid: {} blocking: {}", cmd->cq_id(), cmd->tid(), cmd->blocking());
         // ReplayTrace(this->device_, cmd->cq_id(), cmd->tid(), cmd->blocking());
     };
 
-    registry[tt::target::CommandType_EnqueueTraceCommand] = [](const ::tt::target::Command* cmd_union) {
+    registry[tt::target::CommandType::EnqueueTraceCommand] = [](const ::tt::target::Command* cmd_union) {
         auto cmd = cmd_union->cmd_as_EnqueueTraceCommand();
         log_info(tt::LogMetalTrace, "Calling EnqueueTrace(). cq_id: {} tid: {} blocking: {}", cmd->cq_id(), cmd->tid(), cmd->blocking());
         // CommandQueue& command_queue = this->device_->command_queue();
@@ -47,7 +47,7 @@ std::map<::tt::target::CommandType, CommandReplayHandler> init_function_replay_r
     };
 
     // LoadTraceId API will be called, but it doesn't have acess to flatbuffer binary. Need to have it take blob I think.
-    registry[tt::target::CommandType_LightMetalLoadTraceIdCommand] = [](const ::tt::target::Command* cmd_union) {
+    registry[tt::target::CommandType::LightMetalLoadTraceIdCommand] = [](const ::tt::target::Command* cmd_union) {
         auto cmd = cmd_union->cmd_as_LightMetalLoadTraceIdCommand();
         log_info(tt::LogMetalTrace, "Calling LightMetalLoadTraceId(). cq_id: {} tid: {}", cmd->cq_id(), cmd->tid());
         // Idea: Replay handler can fetch data based on identifier and pass to function being called.
@@ -236,7 +236,7 @@ void LightMetalReplay::printLightMetalBinaryContents() {
 
             auto cmd_type = command->cmd_type();
             switch (cmd_type) {
-                case tt::target::CommandType_ReplayTraceCommand: {
+                case tt::target::CommandType::ReplayTraceCommand: {
                     const auto* cmd_variant = command->cmd_as_ReplayTraceCommand();
                     if (cmd_variant) {
                         std::cout << "ReplayTrace Command:" << std::endl;
@@ -246,7 +246,7 @@ void LightMetalReplay::printLightMetalBinaryContents() {
                     }
                     break;
                 }
-                case tt::target::CommandType_EnqueueTraceCommand: {
+                case tt::target::CommandType::EnqueueTraceCommand: {
                     const auto* cmd_variant = command->cmd_as_EnqueueTraceCommand();
                     if (cmd_variant) {
                         std::cout << "EnqueueTrace Command:" << std::endl;
@@ -256,7 +256,7 @@ void LightMetalReplay::printLightMetalBinaryContents() {
                     }
                     break;
                 }
-                case tt::target::CommandType_LightMetalLoadTraceIdCommand: {
+                case tt::target::CommandType::LightMetalLoadTraceIdCommand: {
                     const auto* cmd_variant = command->cmd_as_LightMetalLoadTraceIdCommand();
                     if (cmd_variant) {
                         std::cout << "LightMetalLoadTraceId Command:" << std::endl;
@@ -266,7 +266,7 @@ void LightMetalReplay::printLightMetalBinaryContents() {
                     break;
                 }
                 default:
-                    std::cout << "Unknown Command type: " << cmd_type << std::endl;
+                    std::cout << "Unsupported Command type: " << EnumNameCommandType(cmd_type) << std::endl;
                     break;
             }
         }

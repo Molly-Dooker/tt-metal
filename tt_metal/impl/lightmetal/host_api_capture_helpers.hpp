@@ -30,7 +30,7 @@ inline void captureReplayTrace(Device *device, uint8_t cq_id, uint32_t tid, bool
     auto command_variant = tt::target::CreateReplayTraceCommand(builder, cq_id, tid, blocking);
     auto command = tt::target::CreateCommand(
         builder,
-        tt::target::CommandType::CommandType_ReplayTraceCommand,
+        tt::target::CommandType::ReplayTraceCommand,
         command_variant.Union()
     );
     ctx.getCmdsVector().push_back(command);
@@ -50,7 +50,7 @@ inline void captureEnqueueTrace(CommandQueue& cq, uint32_t trace_id, bool blocki
     auto command_variant = tt::target::CreateEnqueueTraceCommand(builder, cq_id, trace_id, blocking);
     auto command = tt::target::CreateCommand(
         builder,
-        tt::target::CommandType::CommandType_EnqueueTraceCommand,
+        tt::target::CommandType::EnqueueTraceCommand,
         command_variant.Union()
     );
     ctx.getCmdsVector().push_back(command);
@@ -66,7 +66,7 @@ inline void captureLightMetalLoadTraceId(Device *device, const uint32_t tid, con
     auto command_variant = tt::target::CreateLightMetalLoadTraceIdCommand(builder, tid, cq_id);
     auto command = tt::target::CreateCommand(
         builder,
-        tt::target::CommandType::CommandType_LightMetalLoadTraceIdCommand,
+        tt::target::CommandType::LightMetalLoadTraceIdCommand,
         command_variant.Union()
     );
     ctx.getCmdsVector().push_back(command);
