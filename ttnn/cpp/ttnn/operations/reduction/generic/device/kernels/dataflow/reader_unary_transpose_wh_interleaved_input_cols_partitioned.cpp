@@ -17,6 +17,7 @@ void kernel_main() {
     constexpr uint32_t Ht = get_compile_time_arg_val(1);
     constexpr uint32_t Wt = get_compile_time_arg_val(2);
     constexpr uint32_t HtWt = get_compile_time_arg_val(3);
+    constexpr uint32_t row_chunk = get_compile_time_arg_val(4);
 
     constexpr uint32_t cb_id_in0 = 0;
 
@@ -27,7 +28,7 @@ void kernel_main() {
 
 #ifdef REDUCE_SCALER
     constexpr uint32_t cb_id_in2 = 2;
-    constexpr uint32_t scalar = get_compile_time_arg_val(4);
+    constexpr uint32_t scalar = get_compile_time_arg_val(5);
     generate_reduce_scaler(cb_id_in2, scalar);
 #endif
 
@@ -36,7 +37,6 @@ void kernel_main() {
 
     uint32_t w = curr_col_in_batch;
 
-    uint32_t row_chunk = 8;
     for (uint32_t i = 0; i < num_cols; i += row_chunk) {
         uint32_t chunk_end = std::min(i + row_chunk, num_cols);
         uint32_t curr_id = col_start_tile_id;
@@ -44,7 +44,7 @@ void kernel_main() {
         uint32_t reset_w = w;
         uint32_t reset_col_start = col_start_tile_id;
 
-        // row wise read for a chunk of columns(max 8)
+        // row wise read for a chunk of columns
         for (uint32_t j = 0; j < Ht; ++j) {
             w = reset_w;
             col_start_tile_id = reset_col_start;
@@ -60,16 +60,15 @@ void kernel_main() {
                 ++w;
 
                 if (w == Wt) {
-                    col_start_tile_id = curr_id + (Ht - j - 1) * Wt  + 1;
-                    curr_id = col_start_tile_id + j*Wt;
+                    col_start_tile_id = curr_id + (Ht - j - 1) * Wt + 1;
+                    curr_id = col_start_tile_id + j * Wt;
                     w = 0;
-                }
-                else {
+                } else {
                     ++curr_id;
                     ++col_start_tile_id;
                 }
             }
-            curr_id = reset_curr_id + (j+1) * Wt; // stride in H
+            curr_id = reset_curr_id + (j + 1) * Wt;  // stride in H
         }
     }
 }

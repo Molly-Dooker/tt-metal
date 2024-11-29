@@ -119,6 +119,10 @@ operation::ProgramWithCallbacks reduce_multi_core_h(
     tt_metal::KernelHandle reader_kernel_id;
     bfloat16 bfloat_scaler_value = bfloat16(scaler);
     uint32_t packed_scaler_value = pack_two_bfloat16_into_uint32({bfloat_scaler_value, bfloat_scaler_value});
+
+    uint32_t chunk_size =
+        ttnn::get_dest_reg_count(compute_kernel_config);  // column chunk size used for interleaved input only
+
     if (in_sharded) {
         std::vector<uint32_t> reader_compile_time_args = {src0_cb_index, src1_cb_index, scaler_cb_index};
         std::map<string, string> reader_defines;
@@ -132,7 +136,7 @@ operation::ProgramWithCallbacks reduce_multi_core_h(
     } else {
         bool src0_is_dram = src0_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
         std::vector<uint32_t> reader_compile_time_args = {
-            (std::uint32_t)src0_is_dram, Ht, Wt, HtWt, packed_scaler_value};
+            (std::uint32_t)src0_is_dram, Ht, Wt, HtWt, chunk_size, packed_scaler_value};
 
         std::map<string, string> reader_defines;
         reader_defines["REDUCE_SCALER"] = "1";
@@ -168,15 +172,26 @@ operation::ProgramWithCallbacks reduce_multi_core_h(
             tt_metal::WriterDataMovementConfig(writer_compile_time_args));
     }
     std::map<string, string> reduce_defines = reduce_op_utils::get_defines(reduce_op, ReduceOpDim::H);
-    std::vector<uint32_t> compute_kernel_args_group_1 = {
-        Ht,                         // Ht
-        num_cols_per_core_group_1,  // Wt
-        1,                          // NC
-    };
+    std::vector<uint32_t> compute_kernel_args_group_1;
 
     std::string compute_kernel_path;
-    if(out_sharded) compute_kernel_path = "ttnn/cpp/ttnn/operations/reduction/generic/device/kernels/compute/reduce_h.cpp";
-    else compute_kernel_path = "ttnn/cpp/ttnn/operations/reduction/generic/device/kernels/compute/reduce_h_interleaved.cpp";
+    if (out_sharded) {
+        compute_kernel_path = "ttnn/cpp/ttnn/operations/reduction/generic/device/kernels/compute/reduce_h.cpp";
+        compute_kernel_args_group_1 = {
+            Ht,                         // Ht
+            num_cols_per_core_group_1,  // Wt
+            1,                          // NC
+        };
+    } else {
+        compute_kernel_path =
+            "ttnn/cpp/ttnn/operations/reduction/generic/device/kernels/compute/reduce_h_interleaved.cpp";
+        compute_kernel_args_group_1 = {
+            Ht,                         // Ht
+            num_cols_per_core_group_1,  // Wt
+            1,                          // NC
+            chunk_size,                 // Column Chunk Size
+        };
+    }
 
     auto reduce_compute_kernel_group_1_id = tt_metal::CreateKernel(
         program,
@@ -189,11 +204,21 @@ operation::ProgramWithCallbacks reduce_multi_core_h(
             .defines = reduce_defines});
 
     if (!core_group_2.ranges().empty()) {
-        std::vector<uint32_t> compute_kernel_args_group_2 = {
-            Ht,                         // Ht
-            num_cols_per_core_group_2,  // Wt
-            1,                          // NC
-        };
+        std::vector<uint32_t> compute_kernel_args_group_2;
+        if (out_sharded) {
+            compute_kernel_args_group_2 = {
+                Ht,                         // Ht
+                num_cols_per_core_group_2,  // Wt
+                1,                          // NC
+            };
+        } else {
+            compute_kernel_args_group_2 = {
+                Ht,                         // Ht
+                num_cols_per_core_group_2,  // Wt
+                1,                          // NC
+                chunk_size,                 // Column Chunk Size
+            };
+        }
 
         auto reduce_compute_kernel_group_2_id = tt_metal::CreateKernel(
             program,
