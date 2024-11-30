@@ -146,5 +146,11 @@ format_input_tensor = ttnn._ttnn.device.format_input_tensor
 format_output_tensor = ttnn._ttnn.device.format_output_tensor
 pad_to_tile_shape = ttnn._ttnn.device.pad_to_tile_shape
 
+SubDevice = ttnn._ttnn.device.SubDevice
+SubDeviceManagerId = ttnn._ttnn.device.SubDeviceManagerId
+CreateSubDeviceManager = ttnn._ttnn.device.create_sub_device_manager
+LoadSubDeviceManager = ttnn._ttnn.device.load_sub_device_manager
+ClearLoadedSubDeviceManager = ttnn._ttnn.device.clear_loaded_sub_device_manager
+RemoveSubDeviceManager = ttnn._ttnn.device.remove_sub_device_manager
 
 __all__ = []

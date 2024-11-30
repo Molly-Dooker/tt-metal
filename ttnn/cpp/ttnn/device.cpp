@@ -32,6 +32,29 @@ void deallocate_buffers(Device* device) {
     device->push_work([device]() mutable { device->deallocate_buffers(); });
 }
 
+SubDeviceManagerId create_sub_device_manager(
+    Device* device, tt::stl::Span<const SubDevice> sub_devices, DeviceAddr local_l1_size) {
+    SubDeviceManagerId sub_device_manager_id;
+    device->push_work(
+        [device, sub_devices, local_l1_size, &sub_device_manager_id] {
+            sub_device_manager_id = device->create_sub_device_manager(sub_devices, local_l1_size);
+        },
+        true);
+    return sub_device_manager_id;
+}
+
+void load_sub_device_manager(Device* device, SubDeviceManagerId sub_device_manager_id) {
+    device->push_work([device, sub_device_manager_id] { device->load_sub_device_manager(sub_device_manager_id); });
+}
+
+void clear_loaded_sub_device_manager(Device* device) {
+    device->push_work([device] { device->clear_loaded_sub_device_manager(); });
+}
+
+void remove_sub_device_manager(Device* device, SubDeviceManagerId sub_device_manager_id) {
+    device->push_work([device, sub_device_manager_id] { device->remove_sub_device_manager(sub_device_manager_id); });
+}
+
 }  // namespace device
 
 using namespace device;

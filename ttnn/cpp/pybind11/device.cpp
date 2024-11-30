@@ -67,6 +67,59 @@ void ttnn_device(py::module& module) {
     module.def("deallocate_buffers", &ttnn::deallocate_buffers, py::arg("device"), R"doc(
         Deallocate all buffers associated with Device handle
     )doc");
+
+    module.def(
+        "create_sub_device_manager",
+        [](Device* device, const std::vector<SubDevice>& sub_devices, DeviceAddr local_l1_size) -> SubDeviceManagerId {
+            return ttnn::create_sub_device_manager(device, sub_devices, local_l1_size);
+        },
+        py::arg("device"),
+        py::arg("sub_devices"),
+        py::arg("local_l1_size"),
+        R"doc(
+        Create a sub-device manager for the given device.
+
+        Args:
+            device (ttnn.Device): The device for which to create the sub-device manager.
+            sub_devices (List[ttnn.SubDevice]): The sub-devices to include in the sub-device manager.
+            local_l1_size (int): The size of the local allocators of each sub-device. The global allocator will be shrunk by this amount.
+
+        Returns:
+            SubDeviceManagerId: The ID of the created sub-device manager.
+    )doc");
+
+    module.def(
+        "load_sub_device_manager",
+        &ttnn::load_sub_device_manager,
+        py::arg("device"),
+        py::arg("sub_device_manager_id"),
+        R"doc(
+        Load the sub-device manager with the given ID.
+
+        Args:
+            device (ttnn.Device): The device for which to load the sub-device manager.
+            sub_device_manager_id (SubDeviceManagerId): The ID of the sub-device manager to load.
+    )doc");
+
+    module.def("clear_loaded_sub_device_manager", &ttnn::clear_loaded_sub_device_manager, py::arg("device"), R"doc(
+        Clear the loaded sub-device manager for the given device.
+
+        Args:
+            device (ttnn.Device): The device for which to clear the loaded sub-device manager.
+    )doc");
+
+    module.def(
+        "remove_sub_device_manager",
+        &ttnn::remove_sub_device_manager,
+        py::arg("device"),
+        py::arg("sub_device_manager_id"),
+        R"doc(
+        Remove the sub-device manager with the given ID.
+
+        Args:
+            device (ttnn.Device): The device for which to remove the sub-device manager.
+            sub_device_manager_id (SubDeviceManagerId): The ID of the sub-device manager to remove.
+    )doc");
 }
 
 }  // namespace detail
@@ -97,9 +150,23 @@ void py_device_module_types(py::module& m_device) {
 
     py::class_<Device, std::unique_ptr<Device, py::nodelete>>(
         m_device, "Device", "Class describing a Tenstorrent accelerator device.");
+
+    py::class_<SubDevice>(m_device, "SubDevice", "Class describing a sub-device of a Tenstorrent accelerator device.");
+
+    py::class_<SubDeviceManagerId>(m_device, "SubDeviceManagerId", "ID of a sub-device manager.");
 }
 
 void device_module(py::module& m_device) {
+    auto pySubDevice = static_cast<py::class_<SubDevice>>(m_device.attr("SubDevice"));
+    pySubDevice.def(
+        py::init<>([](std::vector<CoreRangeSet> cores) { return SubDevice(cores); }),
+        py::arg("cores"),
+        R"doc(
+                Creates a SubDevice object from a list of CoreRangeSet objects, where each CoreRangeSet object
+                represents the cores from a specific CoreType.
+                The order of cores is Tensix, then Ethernet.
+            )doc");
+
     auto pyDevice = static_cast<py::class_<Device, std::unique_ptr<Device, py::nodelete>>>(m_device.attr("Device"));
     pyDevice
         .def(
