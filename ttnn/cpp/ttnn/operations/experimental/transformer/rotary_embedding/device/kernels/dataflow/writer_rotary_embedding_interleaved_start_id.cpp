@@ -26,7 +26,9 @@ void kernel_main() {
     uint32_t Wt = get_arg_val<uint32_t>(4);
     uint32_t Wbytes = get_arg_val<uint32_t>(5);
 
-    DPRINT << "cs " << cos_sin_offset << " Wt " << Wt << " Wbytes " << Wbytes;
+
+    DPRINT << "Out DF " << data_format << " Out Tsz " << tile_bytes << ENDL();
+    DPRINT << "cos_sin_offset " << cos_sin_offset << " Wt " << Wt << " Wbytes " << Wbytes;
 
     constexpr uint32_t untilized_sin_cb_id = get_compile_time_arg_val(4);
     constexpr uint32_t untilized_sin_sync_cb_id = get_compile_time_arg_val(5);
@@ -37,6 +39,9 @@ void kernel_main() {
     noc_async_read(sin_l1_read_addr, sin_l1_write_addr, Wbytes);
     noc_async_read_barrier();
     cb_push_back(untilized_sin_sync_cb_id, Wt);
+
+    DPRINT << "UnSin Id " << untilized_sin_cb_id << " UnSin DF " << get_dataformat(untilized_sin_cb_id) << " UnSin Tsz " << get_tile_size(untilized_sin_cb_id) << ENDL();
+    DPRINT << "UnSinSync Id " << untilized_sin_sync_cb_id << " UnSinSync Tsz " << get_dataformat(untilized_sin_sync_cb_id) << " UnSinSync Tsz " << get_tile_size(untilized_sin_sync_cb_id) << ENDL();
 
     uint32_t end_id = start_id + num_tiles;
     for (uint32_t i = start_id; i < end_id; ++i) {

@@ -6,7 +6,7 @@
 #include "dataflow_api.h"
 #include "debug/dprint.h"
 
-inline void print_full_tile(uint32_t cb_id, uint32_t tile_id = 0, bool untilize) {
+inline void print_full_tile(uint32_t cb_id, uint32_t tile_id = 0, bool untilize = false) {
     DPRINT << "======" << ENDL();
     for (uint8_t r = 0; r < 32; ++ r) {
         SliceRange sr = SliceRange{.h0 = r, .h1 = (uint8_t)(r+1), .hs = 1, .w0 = 0, .w1 = 64, .ws = 2};
@@ -47,6 +47,12 @@ void kernel_main() {
     const InterleavedAddrGenFast<sin_is_dram> s2 = {
         .bank_base_address = sin_addr, .page_size = sin_tile_bytes, .data_format = sin_data_format};
 
+
+    DPRINT << "In DF " << input_data_format << " Sine DF " << sin_data_format << ENDL();
+    DPRINT << "input Tsz " << input_tile_bytes << " sine Tsz " << sin_tile_bytes << ENDL();
+    DPRINT << "num_rows " << num_rows << " Wt " << Wt <<  " start_id " << start_id << ENDL();
+    DPRINT << "start_row_id " << start_row_id << " cos_sin_start_id " << ENDL();
+
     // Fill tile with zeros
     const uint32_t scalar_tile_bytes = get_tile_size(scalar_cb_id);
     cb_reserve_back(scalar_cb_id, onetile);
@@ -73,12 +79,6 @@ void kernel_main() {
     // read a ublock of tiles from src to CB, and then push the ublock to unpacker
     for (uint32_t i = 0; i < num_rows; ++i) {
         for (uint32_t j = 0; j < Wt; ++j) {
-            cb_reserve_back(sin_cb_id, onetile);
-            uint32_t sin_l1_write_addr = get_write_ptr(sin_cb_id);
-            noc_async_read_tile(cos_sin_curr_id, s2, sin_l1_write_addr);
-            noc_async_read_barrier();
-            cb_push_back(sin_cb_id, onetile);
-
             cb_reserve_back(input_cb_id, onetile);
             uint32_t input_l1_write_addr = get_write_ptr(input_cb_id);
             noc_async_read_tile(input_curr_id, s0, input_l1_write_addr);
@@ -86,13 +86,5 @@ void kernel_main() {
             cb_push_back(input_cb_id, onetile);
             input_curr_id++;
         }
-        ht++;
-        if (ht == Ht) {
-            ht = 0;
-            cos_sin_curr_id -= HtWt;
-        }
     }
-
-
-
 }

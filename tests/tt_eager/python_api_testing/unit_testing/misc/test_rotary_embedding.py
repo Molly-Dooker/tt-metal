@@ -26,8 +26,9 @@ def apply_rotary_pos_emb(x, cos_cached, sin_cached, token_idx):
 @pytest.mark.parametrize("token_idx", [0])
 @pytest.mark.parametrize("in_sharded", [False])
 @pytest.mark.parametrize("out_sharded", [False])
+@pytest.mark.parametrize("input_dtype", [ttnn.bfloat8_b, ttnn.bfloat16])
 # @pytest.mark.parametrize("input_dtype", [ttnn.bfloat16])
-@pytest.mark.parametrize("input_dtype", [ttnn.bfloat8_b])
+# @pytest.mark.parametrize("input_dtype", [ttnn.bfloat8_b])
 @pytest.mark.parametrize("sincos_dtype", [ttnn.bfloat16])
 def test_rotary_embedding_decode(
     W, Z, Y, X, cache_size, token_idx, in_sharded, out_sharded, input_dtype, sincos_dtype, device

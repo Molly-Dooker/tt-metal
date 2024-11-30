@@ -12,6 +12,7 @@
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/host_api.hpp"
+#include <iostream>
 
 namespace tt {
 
@@ -51,6 +52,16 @@ operation::ProgramWithCallbacks rotary_embedding_multi_core(
     uint32_t HtWt = Ht * Wt;
     uint32_t Wbytes = input.get_legacy_shape()[-1] * sizeof(bfloat16);
 
+    std::cout <<"Float16_b " << DataFormat::Float16_b << std::endl;
+    std::cout <<"Bfp8_b " << DataFormat::Bfp8_b << std::endl;
+    std::cout <<"Input DF " << input_cb_data_format << std::endl;
+    std::cout <<"Input TSz " << input_single_tile_size << std::endl;
+    std::cout <<"Sine DF " << input_cb_data_format << std::endl;
+    std::cout <<"Sine TSz " << sin_single_tile_size << std::endl;
+    std::cout <<"num_tiles " << num_tiles << " num_rows " << num_rows << std::endl;
+    std::cout <<"Ht " << Ht << " Wt " << Wt << " Wbytes " << Wbytes << std::endl;
+
+
     tt_metal::Device* device = input.device();
 
     auto [math_fidelity, math_approx_mode, fp32_dest_acc_en, packer_l1_acc, dst_full_sync_en] =
@@ -71,19 +82,7 @@ operation::ProgramWithCallbacks rotary_embedding_multi_core(
 
     uint32_t num_input_tiles, num_output_tiles;
 
-    if (shard_spec.has_value()) {
-        row_major = shard_spec.value().orientation == ShardOrientation::ROW_MAJOR;
-        all_cores = shard_spec.value().grid;
-        num_cores = all_cores.num_cores();
-        core_group_1 = all_cores;
-        core_group_2 = CoreRangeSet();
-        num_rows_per_core_group_1 = shard_spec.value().shape[0] / TILE_HEIGHT;
-        num_rows_per_core_group_2 = 0;
-        num_input_tiles = in_sharded ? shard_spec.value().shape[0] * shard_spec.value().shape[1] / TILE_HW : 2 * Wt;
-        num_output_tiles = out_sharded ? shard_spec.value().shape[0] * shard_spec.value().shape[1] / TILE_HW : 2 * Wt;
-        auto bbox = all_cores.bounding_box();
-        num_cores_x = bbox.end_coord.x + 1;
-        num_cores_y = bbox.end_coord.y + 1;
+    if (false /*shard_spec.has_value()*/) {
     } else {
         row_major = true;
         std::tie(
