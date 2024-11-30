@@ -92,7 +92,7 @@ std::tuple<uint32_t, uint32_t> get_out_subblock_params(
     return {1, 1};
 }
 
-std::tuple<std::vector<tt_metal::Program>, std::vector<std::unique_ptr<tt_metal::GlobalSemaphore>>> create_programs(
+std::tuple<std::vector<tt_metal::Program>, std::vector<std::shared_ptr<tt_metal::GlobalSemaphore>>> create_programs(
     tt_metal::Device* device,
     const CoreRangeSet& dram_reader_core,
     const CoreRangeSet& l1_receiver_cores,
@@ -199,7 +199,7 @@ std::tuple<std::vector<tt_metal::Program>, std::vector<std::unique_ptr<tt_metal:
     // semaphore
     std::vector<uint32_t> pages_acked_semaphore_ids(num_receivers);
     std::vector<uint32_t> pages_sent_semaphore_ids(num_receivers);
-    std::vector<std::unique_ptr<GlobalSemaphore>> global_sems;
+    std::vector<std::shared_ptr<GlobalSemaphore>> global_sems;
     // Global semaphores use an actual address instead of an index
     if (use_sub_devices) {
         global_sems.reserve(num_receivers * 2);

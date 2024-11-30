@@ -6,6 +6,7 @@
 
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/impl/allocator/allocator.hpp"
+#include "tt_metal/impl/buffers/global_semaphore.hpp"
 #include "tt_metal/impl/sub_device/sub_device.hpp"
 #include "ttnn/distributed/types.hpp"
 #include "ttnn/tensor/tensor.hpp"
@@ -56,6 +57,7 @@ static std::ostream& operator<<(std::ostream& os, const CoreGrid& core_grid) {
     return os;
 }
 
+using tt::tt_metal::GlobalSemaphore;
 using tt::tt_metal::SubDevice;
 using tt::tt_metal::SubDeviceManagerId;
 

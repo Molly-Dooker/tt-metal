@@ -102,6 +102,12 @@ from ttnn._ttnn.multi_device import (
 
 from ttnn._ttnn.events import create_event, record_event, wait_for_event
 
+from ttnn._ttnn.global_semaphore import (
+    create_global_semaphore,
+    get_global_semaphore_address,
+    reset_global_semaphore_value,
+)
+
 from ttnn.types import (
     TILE_SIZE,
     DataType,
