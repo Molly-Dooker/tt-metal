@@ -56,6 +56,7 @@ enum class UnaryOpType {
     ISFINITE,
     ERFINV,
     I0,
+    I1,
     TAN,
     RSUB,
     RDIV,
@@ -104,7 +105,7 @@ struct UnaryWithParam {
 
 using FusedActivations = std::vector<ttnn::operations::unary::UnaryWithParam>;
 
-}
+}  // namespace ttnn::operations::unary
 
 namespace tt::stl::json {
 
