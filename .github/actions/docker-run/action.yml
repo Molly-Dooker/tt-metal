@@ -27,7 +27,7 @@ inputs:
       -v /dev/hugepages-1G:/dev/hugepages-1G
       --device /dev/tenstorrent
   prepare_metal_run:
-    description: "Prepare the environment for running Metalium"
+    description: "RK - this should be unneeded now"
     type: boolean
     required: false
     default: false
@@ -93,13 +93,6 @@ runs:
           -w ${{ github.workspace }}
         run: |
           set -eu
-
-          prepare_metal_run=${{ inputs.prepare_metal_run }}
-          if [[ "${prepare_metal_run,,}" == "true" ]]; then
-            rm -rf ${PYTHON_ENV_DIR}
-            ./create_venv.sh
-            source python_env/bin/activate
-          fi
 
           install_wheel=${{ inputs.install_wheel }}
           if [[ "${install_wheel,,}" == "true" ]]; then

@@ -10,7 +10,7 @@ Example:
     ./tests/scripts/tt_bisect.sh -f ./build/test/tt_metal/test_add_two_ints -b HEAD -g 1eb7930
 If the test involves multiple words you have to do "test_file":
     ./tests/scripts/tt_bisect.sh -f "pytest $TT_METAL_HOME/models/demos/resnet/tests/test_resnet18.py" -b HEAD -g 1eb7930
-    ./tests/scripts/tt_bisect.sh -f "python tests/scripts/run_tt_metal.py --dispatch-mode fast" -b HEAD -g HEAD~10
+    ./tests/scripts/tt_bisect.sh -f "python3 tests/scripts/run_tt_metal.py --dispatch-mode fast" -b HEAD -g HEAD~10
 END
 
 cd $TT_METAL_HOME
