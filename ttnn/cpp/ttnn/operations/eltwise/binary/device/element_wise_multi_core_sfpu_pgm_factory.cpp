@@ -376,11 +376,12 @@ BinaryDeviceOperation::ElementWiseMultiCoreSfpu::create(
     std::map<string, string> eltwise_defines = utils::get_defines_fp32(
         op_type, a.get_dtype(), output.get_dtype(), fused_activations, operation_attributes.input_tensor_a_activation);
 
+    uint32_t src0interim_cb_index = tt::CBIndex::c_3;
     if (eltwise_defines.find("SFPU_OP_INIT_PRE_IN0_0") != eltwise_defines.end()) {
-        if (op_type == BinaryOpType::LOGADDEXP || op_type == BinaryOpType::LDEXP ||
-            op_type == BinaryOpType::LOGADDEXP2) {
-            interim_cb0_format = tt::DataFormat::Float16_b;
-        }
+        // if (op_type == BinaryOpType::LOGADDEXP || op_type == BinaryOpType::LDEXP ||
+        //     op_type == BinaryOpType::LOGADDEXP2) {
+        //     interim_cb0_format = tt::DataFormat::Float32;
+        // }
         uint32_t interim0_single_tile_size = tt_metal::detail::TileSize(interim_cb0_format);
         tt_metal::CircularBufferConfig cb_interm_config =
             tt_metal::CircularBufferConfig(
@@ -388,11 +389,12 @@ BinaryDeviceOperation::ElementWiseMultiCoreSfpu::create(
                 .set_page_size(tt::CBIndex::c_3, interim0_single_tile_size);
         auto cb_interm = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_interm_config);
     }
+    uint32_t src1interim_cb_index = tt::CBIndex::c_4;
     if (eltwise_defines.find("SFPU_OP_INIT_PRE_IN1_0") != eltwise_defines.end()) {
-        if (op_type == BinaryOpType::LOGADDEXP || op_type == BinaryOpType::LDEXP ||
-            op_type == BinaryOpType::LOGADDEXP2) {
-            interim_cb1_format = tt::DataFormat::Float16_b;
-        }
+    //     if (op_type == BinaryOpType::LOGADDEXP || op_type == BinaryOpType::LDEXP ||
+    //         op_type == BinaryOpType::LOGADDEXP2) {
+    //         interim_cb1_format = tt::DataFormat::Float32;
+    //     }
         uint32_t interim1_single_tile_size = tt_metal::detail::TileSize(interim_cb1_format);
         tt_metal::CircularBufferConfig cb_interm2_config =
             tt_metal::CircularBufferConfig(
@@ -446,13 +448,15 @@ BinaryDeviceOperation::ElementWiseMultiCoreSfpu::create(
         all_device_cores,
         tt_metal::WriterDataMovementConfig(writer_compile_time_args, writer_defines));
 
-    bool fp32_dest_acc_en = dst_cb_data_format == tt::DataFormat::UInt32 ||
-                            dst_cb_data_format == tt::DataFormat::Int32 ||
-                            dst_cb_data_format == tt::DataFormat::Float32;
+
+    bool fp32_dest_acc_en = dst_cb_data_format == tt::DataFormat::Float32;
 
     std::vector<UnpackToDestMode> unpack_to_dest_mode(NUM_CIRCULAR_BUFFERS, UnpackToDestMode::Default);
     unpack_to_dest_mode[src0_cb_index] = UnpackToDestMode::UnpackToDestFp32;
     unpack_to_dest_mode[src1_cb_index] = UnpackToDestMode::UnpackToDestFp32;
+    unpack_to_dest_mode[src0interim_cb_index] = UnpackToDestMode::UnpackToDestFp32;
+    unpack_to_dest_mode[src1interim_cb_index] = UnpackToDestMode::UnpackToDestFp32;
+
 
     auto eltwise_binary_kernel_id = tt_metal::CreateKernel(
         program,

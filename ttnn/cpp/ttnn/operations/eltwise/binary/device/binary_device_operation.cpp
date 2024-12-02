@@ -21,6 +21,20 @@ namespace utils {
         case BinaryOpType::MUL:
         case BinaryOpType::DIV_FAST:
         case BinaryOpType::RSUB:
+        case BinaryOpType::LOGADDEXP:
+        case BinaryOpType::LOGADDEXP2:
+        case BinaryOpType::LDEXP:
+        case BinaryOpType::SQUARED_DIFFERENCE:
+        case BinaryOpType::LOGICAL_OR:
+        case BinaryOpType::LOGICAL_XOR:
+        case BinaryOpType::LOGICAL_AND:
+        case BinaryOpType::BIAS_GELU:
+        case BinaryOpType::GT:
+        case BinaryOpType::LT:
+        case BinaryOpType::GTE:
+        case BinaryOpType::LTE:
+        case BinaryOpType::EQ:
+        case BinaryOpType::NE:
         case BinaryOpType::POWER: return true;
         default: return false;
     }
@@ -47,12 +61,10 @@ BinaryDeviceOperation::program_factory_t BinaryDeviceOperation::select_program_f
 
     if (height_a == height_b and width_a == width_b) {
         bool device_check = tensor_args.input_tensor_a.device()->arch() != tt::ARCH::GRAYSKULL;
-        // bool sfpu_op_check = (operation_attributes.binary_op_type == BinaryOpType::RSUB) || (operation_attributes.binary_op_type == BinaryOpType::POWER);
         if( (tensor_args.input_tensor_a.get_dtype() == DataType::FLOAT32 && tensor_args.input_tensor_b->get_dtype() == DataType::FLOAT32 && device_check) && utils::is_binary_sfpu_op(operation_attributes.binary_op_type)){
-            tt::log_info(tt::LogOp, "********BinaryDeviceOperation sfpu pgm:");
+            // tt::log_debug(tt::LogOp, "********BinaryDeviceOperation sfpu pgm:");
             return ElementWiseMultiCoreSfpu{};
         } else {
-            tt::log_info(tt::LogOp, "********BinaryDeviceOperation MC pgm:");
             return ElementWiseMultiCore{};
         }
     }
