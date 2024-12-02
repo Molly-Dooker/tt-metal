@@ -98,6 +98,11 @@ def test_prepare_conv_weights(
     if device.core_grid.y == 7:
         pytest.skip("Issue #6992: Statically allocated circular buffers in program clash with L1 buffers on core range")
 
+    if batch_size == 20 and (
+        output_channels == 64 or (stride_h == 2 and (output_channels == 256 or output_channels == 128))
+    ):
+        pytest.skip("Skipping test because it won't fit in L1!")
+
     inp_shape = (batch_size, input_channels, input_height, input_width)
     conv_weight_shape = (output_channels, input_channels, filter_height, filter_width)
     torch_weight_tensor = torch.randn(conv_weight_shape, dtype=torch.bfloat16)
