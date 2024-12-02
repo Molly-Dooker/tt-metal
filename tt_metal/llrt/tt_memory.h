@@ -16,8 +16,8 @@ class memory {
  public:
   typedef std::uint64_t address_t;
   typedef std::uint32_t word_t;
-  enum class PackSpans { PACK, NO_PACK };
-  enum class Relocate { XIP, NONE };
+  enum class Packing { SEPARATE, CONTIGUOUS };
+  enum class Relocate { ABS, XIP };
 
  private:
   static constexpr uint32_t initial_data_space_ = 0x400;
@@ -39,7 +39,7 @@ class memory {
 
  public:
   memory();
-  memory(std::string const &path, Relocate relo_type);
+  memory(std::string const &path, Packing packing, Relocate relo_type);
 
   public:
   // These can be large objects, so ban copying ...

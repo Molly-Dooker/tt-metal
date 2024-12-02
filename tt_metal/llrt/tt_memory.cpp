@@ -20,7 +20,7 @@ memory::memory() {
     packed_size_ = 0;
 }
 
-memory::memory(std::string const& path, Relocate relo_type) : memory() {
+memory::memory(std::string const& path, Packing pack_type, Relocate relo_type) : memory() {
     ElfFile elf;
 
     elf.ReadImage(path);
@@ -38,9 +38,9 @@ memory::memory(std::string const& path, Relocate relo_type) : memory() {
         data_.insert(data_.end(), segment.contents.begin(), segment.contents.end());
         total_size += segment.contents.size();
     };
-    ElfFile::Segment* text = nullptr;//&elf.GetSegments()[0];
-    for (auto& segment : std::span(elf.GetSegments()).subspan(0)) {
-        if (false && text && segment.address > text->address) {
+    auto* text = &elf.GetSegments()[0];
+    for (auto& segment : std::span(elf.GetSegments()).subspan(1)) {
+        if (text && segment.address > text->address) {
             emit_segment(*text);
             text = nullptr;
         }
