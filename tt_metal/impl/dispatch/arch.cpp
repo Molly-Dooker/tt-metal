@@ -94,7 +94,10 @@ std::vector<FDKernel *> node_id_to_kernel;
 // Helper function to get the right struct for dispatch kernels. TODO: replace with reading yaml file later?
 inline std::vector<dispatch_kernel_node_t> get_nodes(Device *device) {
     std::vector<dispatch_kernel_node_t> nodes;
-    uint32_t num_devices = tt::Cluster::instance().number_of_user_devices();
+    uint32_t num_devices = device->total_devices();
+    if (num_devices == 0)
+        num_devices = tt::Cluster::instance().number_of_user_devices();
+
     if (num_devices == 1) { // E150, N150
         nodes = (device->num_hw_cqs() == 1) ? single_card_arch_1cq : single_card_arch_2cq;
     } else if (num_devices == 2) { // N300

@@ -256,7 +256,7 @@ void DevicePool::initialize_device(v1::DeviceHandle handle) const {
     }
 }
 
-void DevicePool::activate_device(chip_id_t id) {
+void DevicePool::activate_device(chip_id_t id, uint32_t total_devices) {
     TT_FATAL(
         id < tt::Cluster::instance().number_of_devices(),
         "Device index {} out of range. There are {} devices available.",
@@ -278,7 +278,8 @@ void DevicePool::activate_device(chip_id_t id) {
             this->l1_bank_remap,
             false,
             worker_core_thread_core,
-            completion_queue_reader_core);
+            completion_queue_reader_core,
+            total_devices);
         dev->update_dispatch_cores_for_multi_cq_eth_dispatch();
         if (!this->firmware_built_keys.contains(dev->build_key())) {
             dev->build_firmware();
@@ -319,7 +320,7 @@ void DevicePool::add_devices_to_pool(const std::vector<chip_id_t>& device_ids) {
             const auto& mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
             TT_ASSERT(device_id == mmio_device_id, "Skipping remote devices is only available for mmio devices");
             if (not this->is_device_active(device_id)) {
-                this->activate_device(device_id);
+                this->activate_device(device_id, device_ids.size());
             }
         }
     } else {
@@ -330,7 +331,7 @@ void DevicePool::add_devices_to_pool(const std::vector<chip_id_t>& device_ids) {
             for (const auto& mmio_controlled_device_id :
                  tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
                 if (not this->is_device_active(mmio_controlled_device_id)) {
-                    this->activate_device(mmio_controlled_device_id);
+                    this->activate_device(mmio_controlled_device_id, device_ids.size());
                 }
             }
         }
