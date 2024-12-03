@@ -22,7 +22,7 @@ namespace detail {
 
 ttnn::Tensor host_reshape(const ttnn::Tensor& tensor, const ttnn::Shape& shape) {
     if (!ttnn::has_storage_type_of(tensor, ttnn::StorageType::DEVICE)) {
-        return ttnn::experimental::reshape(tensor, shape);
+        return ttnn::experimental::unsafe_view(tensor, shape);
     }
     auto tensor_shape = tensor.shape();
     auto layout = tensor.layout();
@@ -42,7 +42,7 @@ ttnn::Tensor host_reshape(const ttnn::Tensor& tensor, const ttnn::Shape& shape) 
         host_tensor_4d = ttnn::slice(host_tensor_4d, begins, ends, step, std::nullopt);
         host_tensor = squeeze_from_4D(host_tensor_4d, tensor_shape.rank());
     }
-    auto host_reshape_tensor = ttnn::experimental::reshape(rm_tensor, shape);
+    auto host_reshape_tensor = ttnn::experimental::unsafe_view(rm_tensor, shape);
     auto final_layout_tensor =
         ttnn::to_layout(host_reshape_tensor, layout, std::nullopt, std::nullopt, (Device*)nullptr);
     auto device_tensor = ttnn::data_transfer_to_device(final_layout_tensor, device, memory_config);
@@ -68,7 +68,7 @@ ttnn::Tensor convert_tensor_to_rm_reshape_convert_back_to_orig_layout(
         if (rm_tensor.is_contiguous()) {
             // Page size depends on the width, so only modify the shape if the width is the same
             if (tensor_shape_with_padding[-1] == shape_with_padding[-1]) {
-                reshaped_rm_tensor = ttnn::experimental::reshape(rm_tensor, shape);
+                reshaped_rm_tensor = ttnn::experimental::unsafe_view(rm_tensor, shape);
             }
             // Different page width, going to use device kernel that does transpose
             else {
@@ -87,7 +87,7 @@ ttnn::Tensor convert_tensor_to_rm_reshape_convert_back_to_orig_layout(
             if (tensor_shape[-1] == shape[-1] and tensor_shape[-2] == shape[-2] and
                 tensor_shape_with_padding[-1] == shape_with_padding[-1] and
                 tensor_shape_with_padding[-2] == shape_with_padding[-2]) {
-                reshaped_rm_tensor = ttnn::experimental::reshape(rm_tensor, shape);
+                reshaped_rm_tensor = ttnn::experimental::unsafe_view(rm_tensor, shape);
             }
         } else {
             reshaped_rm_tensor = host_reshape(tensor, shape);
@@ -138,10 +138,10 @@ ttnn::Tensor PerformView(const ttnn::Tensor& tensor, const ttnn::Shape& shape) {
     if (tensor.get_layout() == ttnn::TILE_LAYOUT &&
         (shape[-1] % ttnn::types::TILE_SIZE != 0 || shape[-2] % ttnn::types::TILE_SIZE != 0)) {
         // Correct the output shape to add padding metadata before reshape (view)
-        return ttnn::experimental::reshape(tensor, tiling_reshape_corrector(shape));
+        return ttnn::experimental::unsafe_view(tensor, tiling_reshape_corrector(shape));
     }
     // Perform a reshape (view)
-    return ttnn::experimental::reshape(tensor, shape);
+    return ttnn::experimental::unsafe_view(tensor, shape);
 }
 
 void Validate_transform(const ttnn::Shape& input_shape, const ttnn::Shape& output_shape) {
@@ -189,7 +189,7 @@ ttnn::Tensor ReshapeViewOperation::invoke(const ttnn::Tensor& tensor, const ttnn
 
     if (!(ttnn::has_storage_type_of(tensor, ttnn::StorageType::DEVICE)) or tile_tensor_view_reshape_possible) {
         // This case has been allowed in the past though it means introducing padding values to the data
-        return ttnn::experimental::reshape(tensor, shape);
+        return ttnn::experimental::unsafe_view(tensor, shape);
     }
     if (!(ttnn::has_storage_type_of(tensor, ttnn::StorageType::DEVICE)) or this_is_view) {
         return PerformView(tensor, shape);
