@@ -242,11 +242,21 @@ Tensor create_tt_tensor_from_py_data(
 
 Tensor convert_python_tensor_to_tt_tensor(
     const py::handle& py_tensor,
-    std::optional<DataType> optional_data_type = std::nullopt,
-    const std::optional<Tile>& optional_tile = std::nullopt,
-    bool enable_borrow = true) {
+    std::optional<DataType> optional_data_type,
+    Layout layout,
+    const std::optional<Tile>& optional_tile,
+    const MemoryConfig& memory_config,
+    Device* device,
+    bool enable_borrow) {
     GraphTracker::instance().track_function_start(
-        "tt::tt_metal::detail::convert_python_tensor_to_tt_tensor", py_tensor, optional_data_type, enable_borrow);
+        "tt::tt_metal::detail::convert_python_tensor_to_tt_tensor",
+        py_tensor,
+        optional_data_type,
+        layout,
+        optional_tile,
+        memory_config,
+        device,
+        enable_borrow);
     py::object torch = py::module_::import("torch");
     py::object np = py::module_::import("numpy");
 
@@ -397,6 +407,11 @@ Tensor convert_python_tensor_to_tt_tensor(
         enable_borrow,
         on_creation_callback,
         on_destruction_callback);
+
+    output = output.to(layout);
+    if (device) {
+        output = output.to(device, memory_config);
+    }
     output = tt::tt_metal::set_tensor_id(output);
     GraphTracker::instance().track_function_end(output);
     return output;
@@ -411,7 +426,8 @@ Tensor convert_python_tensors_to_tt_tensors(
         "tt::tt_metal::detail::convert_python_tensors_to_tt_tensors", tensor_shards, data_type, strategy);
     std::vector<Tensor> tt_shards;
     for (const auto& shard : tensor_shards) {
-        tt_shards.push_back(detail::convert_python_tensor_to_tt_tensor(shard, data_type, tile, false));
+        tt_shards.push_back(detail::convert_python_tensor_to_tt_tensor(
+            shard, data_type, Layout::ROW_MAJOR, tile, MemoryConfig{}, nullptr, false));
     }
     std::vector<OwnedBuffer> host_owned_buffers;
     std::vector<ttnn::Shape> host_owned_shapes;
@@ -842,7 +858,8 @@ void pytensor_module(py::module& m_tensor) {
                 if (py::isinstance<py::list>(tensor)) {
                     return detail::convert_python_tensors_to_tt_tensors(tensor, data_type, tile, strategy);
                 }
-                return detail::convert_python_tensor_to_tt_tensor(tensor, data_type, tile);
+                return detail::convert_python_tensor_to_tt_tensor(
+                    tensor, data_type, Layout::ROW_MAJOR, tile, MemoryConfig{}, nullptr, true);
             }),
             py::arg("tensor"),
             py::arg("data_type") = std::nullopt,
@@ -872,15 +889,14 @@ void pytensor_module(py::module& m_tensor) {
                           Layout layout,
                           const MemoryConfig& mem_config,
                           const std::optional<Tile>& tile) {
-                auto tensor = detail::convert_python_tensor_to_tt_tensor(python_tensor, data_type, tile);
-                auto layout_tensor = tensor.to(layout);
-                return layout_tensor.to(device, mem_config);
+                return detail::convert_python_tensor_to_tt_tensor(
+                    python_tensor, data_type, layout, tile, mem_config, device, true);
             }),
             py::arg("tensor"),
             py::arg("data_type") = std::nullopt,
-            py::arg("device").noconvert(),
-            py::arg("layout").noconvert(),
-            py::arg("mem_config").noconvert(),
+            py::arg("device").noconvert() = nullptr,
+            py::arg("layout").noconvert() = Layout::ROW_MAJOR,
+            py::arg("mem_config").noconvert() = MemoryConfig{},
             py::arg("tile") = std::nullopt,
             py::return_value_policy::move,
             R"doc(
