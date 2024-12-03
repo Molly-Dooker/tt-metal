@@ -172,7 +172,7 @@ void DevicePool::init_profiler_devices() const {
             }
         }
     }
-    detail::PorfilerSync();
+    detail::ProfilerSync();
 #endif
 }
 

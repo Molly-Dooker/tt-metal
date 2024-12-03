@@ -187,7 +187,7 @@ inline namespace v0 {
          * | Argument      | Description                                       | Type            | Valid Range               | Required |
          * |---------------|---------------------------------------------------|-----------------|---------------------------|----------|
          * */
-        void PorfilerSync();
+        void ProfilerSync();
 
         /**
          * Read device side profiler data and dump results into device side CSV log

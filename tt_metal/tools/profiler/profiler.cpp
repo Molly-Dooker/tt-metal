@@ -392,7 +392,7 @@ void DeviceProfiler::dumpResults (
         {
             if (lastDump)
             {
-                if (tt::llrt::OptionsG.get_profiler_do_dispatch_cores())
+                //if (tt::llrt::OptionsG.get_profiler_do_dispatch_cores())
                 {
                     tt_metal::detail::ReadFromBuffer(output_dram_buffer, profile_buffer);
                 }
