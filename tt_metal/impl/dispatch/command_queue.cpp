@@ -2916,6 +2916,7 @@ void EnqueueReadBuffer(
     std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer,
     void* dst,
     bool blocking) {
+    TRACE_FUNCTION_CALL(captureEnqueueReadBuffer, cq, buffer, dst, blocking);
     detail::DispatchStateCheck(true);
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::ENQUEUE_READ_BUFFER, .blocking = blocking, .buffer = buffer, .dst = dst});
@@ -2926,6 +2927,7 @@ void EnqueueWriteBuffer(
     std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer,
     HostDataType src,
     bool blocking) {
+    TRACE_FUNCTION_CALL(captureEnqueueWriteBuffer, cq, buffer, src, blocking);
     detail::DispatchStateCheck(true);
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::ENQUEUE_WRITE_BUFFER, .blocking = blocking, .buffer = buffer, .src = src});
@@ -2993,6 +2995,7 @@ bool EventQuery(const std::shared_ptr<Event>& event) {
 }
 
 void Finish(CommandQueue& cq) {
+    TRACE_FUNCTION_CALL(captureFinish, cq);
     detail::DispatchStateCheck(true);
     cq.run_command(CommandInterface{.type = EnqueueCommandType::FINISH, .blocking = true});
     TT_ASSERT(

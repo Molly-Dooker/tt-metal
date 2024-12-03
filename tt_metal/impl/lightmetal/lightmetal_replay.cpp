@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "lightmetal_replay.hpp"
+#include <cstddef>
 #include <iostream>
 #include "binary_generated.h"
 #include "command_generated.h"
@@ -16,11 +17,6 @@
 
 namespace tt::tt_metal {
 inline namespace v0 {
-
-// There are a bunch of things to do in this file and figure out
-// 1. Executor: Open Flatbuffer binary, loop over contents, execute contents.
-// 2. In order to do that, need deserialize/convert from flatbuffer representation
-// 3. And have handlers to call Host API functions.
 
 //////////////////////////////////////
 // Helper Functions                 //
@@ -61,6 +57,17 @@ detail::TraceDescriptor fromFlatBuffer(const tt::target::lightmetal::TraceDescri
     traceDesc.num_traced_programs_needing_go_signal_unicast = fb_desc->num_traced_programs_needing_go_signal_unicast();
 
     return traceDesc;
+}
+
+inline BufferType fromFlatbuffer(tt::target::BufferType type) {
+    switch (type) {
+        case tt::target::BufferType::DRAM: return BufferType::DRAM;
+        case tt::target::BufferType::L1: return BufferType::L1;
+        case tt::target::BufferType::SystemMemory: return BufferType::SYSTEM_MEMORY;
+        case tt::target::BufferType::L1Small: return BufferType::L1_SMALL;
+        case tt::target::BufferType::Trace: return BufferType::TRACE;
+        default: throw std::invalid_argument("Unknown tt::target::BufferType value");
+    }
 }
 
 //////////////////////////////////////
@@ -110,114 +117,24 @@ std::optional<detail::TraceDescriptor> LightMetalReplay::getTraceByTraceId(uint3
 }
 
 
-
-//////////////////////////////////////
-// Debug Code                       //
-//////////////////////////////////////
-
-bool example_code() {
-    int device_id = 0;
-    tt_metal::Device* device = tt_metal::CreateDevice(device_id, 1, DEFAULT_L1_SMALL_SIZE, 900000000);
-    tt_metal::CommandQueue& cq = device->command_queue();
-    tt_metal::Program program = tt_metal::CreateProgram();
-    bool pass = tt_metal::CloseDevice(device);
-    return pass;
+// Object maps public accessors
+void LightMetalReplay::addBufferToMap(uint32_t global_id, std::shared_ptr<::tt::tt_metal::Buffer> buffer) {
+    if (bufferMap_.find(global_id) != bufferMap_.end()) {
+        log_warning(tt::LogMetalTrace, "Buffer with global_id: {} already exists in map.", global_id);
+    }
+    bufferMap_[global_id] = buffer; // Shared ownership
 }
 
-// Temporary debug function to print the contents of the FlatBuffer binary.
-void LightMetalReplay::printLightMetalBinaryContents() {
-
-    if (!lm_binary_) {
-        std::cerr << "FlatBuffer binary not initialized." << std::endl;
-        return;
+std::shared_ptr<::tt::tt_metal::Buffer> LightMetalReplay::getBufferFromMap(uint32_t global_id) const {
+    auto it = bufferMap_.find(global_id);
+    if (it != bufferMap_.end()) {
+        return it->second; // Return shared_ptr
     }
+    return nullptr; // If not found
+}
 
-    const auto* trace_descriptors = lm_binary_->trace_descriptors();
-    if (!trace_descriptors) {
-        std::cout << "No trace descriptors found in the binary." << std::endl;
-    } else {
-        // Print all trace descriptors.
-        std::cout << "Number of trace descriptors: " << trace_descriptors->size() << std::endl;
-        for (const auto* descriptor_by_id : *trace_descriptors) {
-            if (!descriptor_by_id) continue;
-
-            uint32_t trace_id = descriptor_by_id->trace_id();
-            const auto* trace_desc = descriptor_by_id->desc();
-
-            if (!trace_desc) {
-                std::cerr << "Descriptor is null for trace_id: " << trace_id << std::endl;
-                continue;
-            }
-
-            // Print trace descriptor details.
-            std::cout << "Trace ID: " << trace_id << std::endl;
-            std::cout << "  Number of completion worker cores: "
-                      << trace_desc->num_completion_worker_cores() << std::endl;
-            std::cout << "  Number of programs needing multicast: "
-                      << trace_desc->num_traced_programs_needing_go_signal_multicast() << std::endl;
-            std::cout << "  Number of programs needing unicast: "
-                      << trace_desc->num_traced_programs_needing_go_signal_unicast() << std::endl;
-
-            // Print trace data.
-            const auto* trace_data = trace_desc->trace_data();
-            if (trace_data && trace_data->size() > 0) {
-                std::cout << "  Trace Data (size: " << trace_data->size() << "): ";
-                for (uint32_t value : *trace_data) {
-                    std::cout << value << " ";
-                }
-                std::cout << std::endl;
-            } else {
-                std::cout << "  Trace Data: None" << std::endl;
-            }
-        }
-    }
-
-    // Print all commands.
-    const auto* commands = lm_binary_->commands();
-    if (!commands || commands->size() == 0) {
-        std::cout << "No commands found in the binary." << std::endl;
-    } else {
-        std::cout << "Number of commands: " << commands->size() << std::endl;
-        for (const auto* command : *commands) {
-            if (!command) continue;
-
-            auto cmd_type = command->cmd_type();
-            switch (cmd_type) {
-                case tt::target::CommandType::ReplayTraceCommand: {
-                    const auto* cmd_variant = command->cmd_as_ReplayTraceCommand();
-                    if (cmd_variant) {
-                        std::cout << "ReplayTrace Command:" << std::endl;
-                        std::cout << "  cq_id: " << cmd_variant->cq_id() << std::endl;
-                        std::cout << "  tid: " << cmd_variant->tid() << std::endl;
-                        std::cout << "  blocking: " << (cmd_variant->blocking() ? "true" : "false") << std::endl;
-                    }
-                    break;
-                }
-                case tt::target::CommandType::EnqueueTraceCommand: {
-                    const auto* cmd_variant = command->cmd_as_EnqueueTraceCommand();
-                    if (cmd_variant) {
-                        std::cout << "EnqueueTrace Command:" << std::endl;
-                        std::cout << "  cq_id: " << cmd_variant->cq_id() << std::endl;
-                        std::cout << "  tid: " << cmd_variant->tid() << std::endl;
-                        std::cout << "  blocking: " << (cmd_variant->blocking() ? "true" : "false") << std::endl;
-                    }
-                    break;
-                }
-                case tt::target::CommandType::LoadTraceCommand: {
-                    const auto* cmd_variant = command->cmd_as_LoadTraceCommand();
-                    if (cmd_variant) {
-                        std::cout << "LoadTrace Command:" << std::endl;
-                        std::cout << "  tid: " << cmd_variant->tid() << std::endl;
-                        std::cout << "  cq_id: " << cmd_variant->cq_id() << std::endl;
-                    }
-                    break;
-                }
-                default:
-                    std::cout << "Unsupported Command type: " << EnumNameCommandType(cmd_type) << std::endl;
-                    break;
-            }
-        }
-    }
+void LightMetalReplay::removeBufferFromMap(uint32_t global_id) {
+    bufferMap_.erase(global_id);
 }
 
 
@@ -259,6 +176,22 @@ void LightMetalReplay::execute(tt::target::Command const *command) {
     execute(command->cmd_as_LoadTraceCommand());
     break;
   }
+  case ::tt::target::CommandType::CreateBufferCommand: {
+    execute(command->cmd_as_CreateBufferCommand());
+    break;
+  }
+  case ::tt::target::CommandType::EnqueueWriteBufferCommand: {
+    execute(command->cmd_as_EnqueueWriteBufferCommand());
+    break;
+  }
+  case ::tt::target::CommandType::EnqueueReadBufferCommand: {
+    execute(command->cmd_as_EnqueueReadBufferCommand());
+    break;
+  }
+  case ::tt::target::CommandType::FinishCommand: {
+    execute(command->cmd_as_FinishCommand());
+    break;
+  }
   default:
     throw std::runtime_error("Unsupported type: " + std::string(EnumNameCommandType(command->cmd_type())));
     break;
@@ -285,6 +218,72 @@ void LightMetalReplay::execute(tt::target::LoadTraceCommand const *cmd) {
     LoadTrace(this->device_, cmd->cq_id(), cmd->tid(), trace_desc.value());
 }
 
+void LightMetalReplay::execute(tt::target::CreateBufferCommand const *cmd) {
+    log_info(tt::LogMetalTrace, "KCM LightMetalReplay CreateBufferCommand(). global_id: {} size: {} page_size: {} layout: {} buffer_type: {}",
+        cmd->global_id(), cmd->config()->size(), cmd->config()->page_size(),
+        EnumNameTensorMemoryLayout(cmd->config()->buffer_layout()), EnumNameBufferType(cmd->config()->buffer_type()));
+
+    switch (cmd->config()->buffer_layout()) {
+    case tt::target::TensorMemoryLayout::Interleaved: {
+        tt::tt_metal::InterleavedBufferConfig config{
+            .device = this->device_,
+            .size = cmd->config()->size(),
+            .page_size = cmd->config()->page_size(),
+            .buffer_type = fromFlatbuffer(cmd->config()->buffer_type())};
+
+        log_info(tt::LogMetalTrace, "KCM About to call CreateBuffer()");
+        auto buffer = CreateBuffer(config);
+        log_info(tt::LogMetalTrace, "KCM About to call addBufferToMap() for global_id: {} addr: 0x{:x}", cmd->global_id(), buffer->address());
+        addBufferToMap(cmd->global_id(), buffer);
+        break;
+    }
+    default:
+        throw std::runtime_error("Unsupported buffer_layout: " + std::string(EnumNameTensorMemoryLayout(cmd->config()->buffer_layout())));
+    }
+}
+
+void LightMetalReplay::execute(tt::target::EnqueueWriteBufferCommand const *cmd) {
+    auto buffer = getBufferFromMap(cmd->buffer_global_id());
+    log_info(tt::LogMetalTrace, "KCM LightMetalReplay EnqueueWriteBufferCommand(). cq_global_id: {} buffer_global_id: {} addr: 0x{:x}",
+        cmd->cq_global_id(), cmd->buffer_global_id(), buffer->address());
+
+    if (buffer) {
+        // FIXME - get cq object from global CQ map instead.
+        CommandQueue &cq = this->device_->command_queue(cmd->cq_global_id());
+        EnqueueWriteBuffer(cq, buffer, cmd->src()->data(), cmd->blocking());
+    } else {
+        throw std::runtime_error("BufferMap missing Buffer for global_id: " + std::to_string(cmd->buffer_global_id()));
+    }
+}
+
+void LightMetalReplay::execute(tt::target::EnqueueReadBufferCommand const *cmd) {
+    auto buffer = getBufferFromMap(cmd->buffer_global_id());
+    log_info(tt::LogMetalTrace, "KCM LightMetalReplay EnqueueReadBufferCommand(). cq_global_id: {} buffer_global_id: {} addr: 0x{:x} buf_size: {}",
+        cmd->cq_global_id(), cmd->buffer_global_id(), buffer->address(), buffer->size());
+
+    if (buffer) {
+        // FIXME - get cq object from global CQ map instead.
+        CommandQueue &cq = this->device_->command_queue(cmd->cq_global_id());
+        std::vector<uint32_t> readback_data(buffer->size() / sizeof(uint32_t), 0);
+        EnqueueReadBuffer(cq, buffer, readback_data.data(), cmd->blocking());
+
+        // FIXME - What should we do with readback data? For not just print.
+        // One idea is to store in map by global_read_id that caller can access.
+        log_info(tt::LogMetalTrace, "Readback data for buffer_global_id: {}", cmd->buffer_global_id());
+        for (size_t i = 0; i < readback_data.size(); i++) {
+            log_info(tt::LogMetalTrace, " rd_data i: {:3d} => data: {}", i, readback_data[i]);
+        }
+    } else {
+        throw std::runtime_error("BufferMap missing Buffer for global_id: " + std::to_string(cmd->buffer_global_id()));
+    }
+}
+
+void LightMetalReplay::execute(tt::target::FinishCommand const *cmd) {
+    log_info(tt::LogMetalTrace, "KCM LightMetalReplay FinishCommand(). cq_global_id: {}", cmd->cq_global_id());
+    CommandQueue &cq = this->device_->command_queue(cmd->cq_global_id());
+    Finish(cq);
+}
+
 // Main entry point to execute a light metal binary blob, return true if pass.
 bool LightMetalReplay::executeLightMetalBinary() {
 
@@ -294,8 +293,6 @@ bool LightMetalReplay::executeLightMetalBinary() {
     }
 
     try {
-        // example_code(); // Debug
-
         const auto* trace_descriptors = lm_binary_->trace_descriptors();
         const auto* commands = lm_binary_->commands();
         if (!commands) {

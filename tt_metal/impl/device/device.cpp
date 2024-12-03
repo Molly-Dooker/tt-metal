@@ -3437,6 +3437,7 @@ void Device::light_metal_load_trace_id(const uint32_t tid, const uint8_t cq_id) 
 
 // Load the TraceDescriptor for a given trace_id to the device.
 void Device::load_trace(const uint8_t cq_id, const uint32_t tid, detail::TraceDescriptor &trace_desc) {
+    log_info(tt::LogMetal, "KCM load_trace for cq_id: {} tid: {}", (uint32_t)cq_id, tid);
     this->MarkAllocationsSafe(); // KCM - Copied from begin_trace
     this->trace_buffer_pool_.insert({tid, Trace::create_empty_trace_buffer()});
     *this->trace_buffer_pool_[tid]->desc = trace_desc;
