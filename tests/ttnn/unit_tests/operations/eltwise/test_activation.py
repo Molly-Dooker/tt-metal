@@ -10,6 +10,26 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 from models.utility_functions import skip_for_grayskull
 
 
+def run_activation_unary_test_nchw(device, n, c, h, w, ttnn_function, pcc=0.99):
+    torch.manual_seed(0)
+
+    torch_input_tensor = torch.randn((n, c, h, w), dtype=torch.bfloat16)
+    torch_input_tensor = torch_input_tensor + 3.0
+    golden_function = ttnn.get_golden_function(ttnn_function)
+    torch_output_tensor = golden_function(torch_input_tensor)
+
+    input_tensor = ttnn.from_torch(
+        torch_input_tensor, layout=ttnn.TILE_LAYOUT, memory_config=ttnn.L1_MEMORY_CONFIG, device=device
+    )
+    output_tensor = ttnn_function(input_tensor)
+    # output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    print(output_tensor.memory_config(), output_tensor.get_layout())
+    output_tensor = ttnn.from_device(output_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(torch_output_tensor, output_tensor, pcc)
+
+
 def run_activation_unary_test(device, h, w, ttnn_function, pcc=0.99):
     torch.manual_seed(0)
 
@@ -55,6 +75,33 @@ def test_log_sigmoid(device, h, w):
 @pytest.mark.parametrize("w", [128])
 def test_mish(device, h, w):
     run_activation_unary_test(device, h, w, ttnn.mish)
+
+
+@pytest.mark.parametrize(
+    "n, c, h, w",
+    (
+        (1, 32, 640, 640),
+        (1, 64, 320, 320),
+        (1, 32, 320, 320),
+        (1, 128, 160, 160),
+        (1, 64, 160, 160),
+        (1, 256, 80, 80),
+        (1, 128, 80, 80),
+        (1, 512, 40, 40),
+        (1, 256, 40, 40),
+        (1, 1024, 20, 20),
+        (1, 512, 20, 20),
+        (1, 256, 20, 20),
+        (1, 128, 40, 40),
+    ),
+)
+def test_yolov4_mish(device, n, c, h, w):
+    run_activation_unary_test_nchw(device, n, c, h, w, ttnn.mish)
+
+
+@pytest.mark.parametrize("n, c, h, w", ((1, 32, 640, 640),))
+def test_yolov4_mish_failing_case(device, n, c, h, w):
+    run_activation_unary_test_nchw(device, n, c, h, w, ttnn.mish)
 
 
 @pytest.mark.parametrize("h", [64])

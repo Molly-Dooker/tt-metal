@@ -359,3 +359,40 @@ def test_bilinear_multi_core(
 
     assert allclose
     assert passing
+
+
+@skip_for_grayskull()
+@skip_for_blackhole()
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, num_channels, height, width, scale_h, scale_w",
+    (
+        (1, 256, 20, 20, 2, 2),
+        (1, 128, 40, 40, 2, 2),
+    ),
+)
+def test_yolov4_640x640_upsample(device, batch_size, height, width, num_channels, scale_h, scale_w):
+    torch.manual_seed(0)
+    input = torch.rand((batch_size, height, width, num_channels), dtype=torch.bfloat16)
+    tt_input = input.permute(0, 3, 1, 2)
+
+    scale_factor = (scale_h, scale_w)
+    m = nn.Upsample(scale_factor=scale_factor, mode="nearest")
+    torch_result = m(tt_input)
+    torch_result = torch_result.permute(0, 2, 3, 1)
+
+    ## ttnn uses NHWC, so need to set scale_factor_c = 1
+    scale_factor = (scale_h, scale_w, 1)
+    input_tensor = ttnn.from_torch(input, device=device)
+    output_tensor = ttnn.upsample(input_tensor, scale_factor)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(torch_result, output_tensor)
+
+    allclose = torch.allclose(output_tensor, torch_result)
+    isclose = torch.all(torch.isclose(output_tensor, torch_result))
+    isequal = torch.equal(output_tensor, torch_result)
+
+    assert allclose
+    assert isclose
+    assert isequal

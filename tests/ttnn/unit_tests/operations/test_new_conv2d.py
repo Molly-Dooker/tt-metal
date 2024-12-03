@@ -2679,3 +2679,242 @@ def test_shallow_conv_with_tiled_input(device):
     passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_output_tensor, torch_out_golden_tensor, pcc=0.99)
     logger.info(f"PCC = {pcc_msg}. Threshold = 0.99")
     assert passing
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, input_channels, output_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (1, 3, 32, 640, 640, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 240}, False),
+        (1, 64, 64, 320, 320, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 64, 32, 320, 320, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 32, 64, 320, 320, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 240}, False),
+        (1, 128, 64, 320, 320, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 128, 64, 160, 160, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 64, 64, 160, 160, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 64, 64, 160, 160, 3, 3, 1, 1, 1, 1, True, None, False),
+        (1, 128, 128, 160, 160, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 128, 256, 160, 160, 3, 3, 2, 2, 1, 1, True, None, False),
+        (1, 256, 128, 80, 80, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 128, 128, 80, 80, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 128, 128, 80, 80, 3, 3, 1, 1, 1, 1, True, None, False),
+        (1, 256, 256, 80, 80, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 256, 512, 80, 80, 3, 3, 2, 2, 1, 1, True, None, False),  # passes if weights_dtype is bf8
+        (1, 512, 256, 40, 40, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 256, 256, 40, 40, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 256, 256, 40, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        (1, 512, 512, 40, 40, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 1024, 512, 20, 20, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 512, 512, 20, 20, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 512, 512, 20, 20, 3, 3, 1, 1, 1, 1, True, None, False),  # passes if weights_dtype is bf8
+        (1, 1024, 1024, 20, 20, 1, 1, 1, 1, 0, 0, True, None, False),  # passes if weights_dtype is bf8
+        (1, 512, 256, 20, 20, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 256, 512, 40, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        (1, 256, 128, 40, 40, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 128, 256, 80, 80, 3, 3, 1, 1, 1, 1, True, None, False),
+        (1, 256, 255, 80, 80, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 128, 256, 80, 80, 3, 3, 2, 2, 1, 1, True, None, False),
+        (1, 512, 255, 40, 40, 1, 1, 1, 1, 0, 0, True, None, False),
+        (1, 256, 512, 40, 40, 3, 3, 2, 2, 1, 1, True, None, False),
+        (1, 1024, 255, 20, 20, 1, 1, 1, 1, 0, 0, True, None, False),
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16, ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+@skip_for_grayskull()
+def test_conv_yolov4_640x640_model(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    output_layout,
+):
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        groups=1,
+        output_layout=output_layout,
+        has_bias=True,
+    )
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, input_channels, output_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override, split_factor",
+    (
+        (1, 64, 128, 320, 320, 3, 3, 2, 2, 1, 1, True, False, 2),  # passes
+        (1, 512, 1024, 40, 40, 3, 3, 2, 2, 1, 1, True, False, 4),  # passes
+        (1, 512, 1024, 20, 20, 3, 3, 1, 1, 1, 1, True, False, 4),  # passes
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat16, ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16, ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+def test_split_conv_yolov4_640x640_model(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    split_factor,
+):
+    run_conv_with_split(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        split_factor=split_factor,
+    )
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+@pytest.mark.parametrize(
+    "batch_size, input_channels, output_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        (1, 32, 64, 640, 640, 3, 3, 2, 2, 1, 1, True, None, False),  # fails
+        (
+            1,
+            2048,
+            512,
+            20,
+            20,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            True,
+            {"act_block_h": 240},
+            False,
+        ),  # passes if weights_dtype is bf8 and input_dtype is bf8
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat16, ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+@skip_for_grayskull()
+def test_conv_yolov4_640x640_failing_cases(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    output_layout,
+):
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        groups=1,
+        output_layout=output_layout,
+        has_bias=True,
+    )
