@@ -11,27 +11,7 @@ import torch
 import numpy as np
 
 import ttnn
-
-tt_dtype_to_torch_dtype = {
-    ttnn.uint8: torch.uint8,
-    ttnn.uint16: torch.int16,
-    ttnn.uint32: torch.int32,
-    ttnn.int32: torch.int32,
-    ttnn.float32: torch.float,
-    ttnn.bfloat16: torch.bfloat16,
-    ttnn.bfloat8_b: torch.float,
-    ttnn.bfloat4_b: torch.float,
-}
-
-tt_dtype_to_np_dtype = {
-    ttnn.uint8: np.ubyte,
-    ttnn.uint16: np.int16,
-    ttnn.uint32: np.int32,
-    ttnn.int32: np.int32,
-    ttnn.float32: np.float32,
-    ttnn.bfloat8_b: np.float32,
-    ttnn.bfloat4_b: np.float32,
-}
+from tests.ttnn.utils_for_testing import tt_dtype_to_torch_dtype, tt_dtype_to_np_dtype
 
 
 @pytest.mark.parametrize(
