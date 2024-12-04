@@ -399,7 +399,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--device-id",
         type=int,
-        default=0,
+        default=6,
         help="Target device id",
     )
     parser.addoption(
