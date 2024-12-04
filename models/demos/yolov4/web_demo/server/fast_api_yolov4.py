@@ -27,7 +27,7 @@ async def root():
 
 @app.on_event("startup")
 async def startup():
-    device_id = 0
+    device_id = 6
     device = ttnn.CreateDevice(device_id, l1_small_size=24576, trace_region_size=1617920, num_command_queues=2)
     ttnn.enable_program_cache(device)
     global model

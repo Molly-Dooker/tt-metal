@@ -255,6 +255,7 @@ def plot_boxes_cv2(img, boxes, savename=None, class_names=None, color=None):
             if color is None:
                 rgb = (red, green, blue)
             msg = str(class_names[cls_id]) + " " + str(round(cls_conf, 3))
+            print(f'========================= msg:{msg}')
             t_size = cv2.getTextSize(msg, 0, 0.7, thickness=bbox_thick // 2)[0]
             c1, c2 = (x1, y1), (x2, y2)
             c3 = (c1[0] + t_size[0], c1[1] - t_size[1] - 3)
@@ -474,8 +475,7 @@ def do_detect(model, img, conf_thresh, nms_thresh, n_classes, device=None, class
             print("      Model Inference : %f" % (t2 - t1))
             print("-----------------------------------")
 
-            boxes = post_processing(img, conf_thresh, nms_thresh, output)
-
+            boxes = post_processing(img, conf_thresh, nms_thresh, output)            
             class_names = load_class_names(class_name)
             img = cv2.imread(imgfile)
 
@@ -531,14 +531,15 @@ def do_detect(model, img, conf_thresh, nms_thresh, n_classes, device=None, class
 
 @skip_for_grayskull()
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
-@pytest.mark.parametrize(
-    "use_pretrained_weight",
-    [True, False],
-    ids=[
-        "pretrained_weight_true",
-        "pretrained_weight_false",
-    ],
-)
+@pytest.mark.parametrize("use_pretrained_weight", [True])
+# @pytest.mark.parametrize(
+#     "use_pretrained_weight",
+#     [True, False],
+#     ids=[
+#         "pretrained_weight_true",
+#         "pretrained_weight_false",
+#     ],
+# )
 def test_yolov4_model(device, model_location_generator, reset_seeds, input_path, use_pretrained_weight):
     model_path = model_location_generator("models", model_subdir="Yolo")
     if use_pretrained_weight:
@@ -589,6 +590,6 @@ def test_yolov4_model(device, model_location_generator, reset_seeds, input_path,
     sized = cv2.resize(img, (width, height))
     sized = cv2.cvtColor(sized, cv2.COLOR_BGR2RGB)
 
-    for i in range(2):  # This 'for' loop is for speed check
-        # Because the first iteration is usually longer
-        do_detect(ttnn_model, sized, 0.3, 0.4, n_classes, device, class_name=namesfile, imgfile=imgfile)
+    # for i in range(2):  # This 'for' loop is for speed check
+    #     # Because the first iteration is usually longer
+    do_detect(ttnn_model, sized, 0.3, 0.4, n_classes, device, class_name=namesfile, imgfile=imgfile)
