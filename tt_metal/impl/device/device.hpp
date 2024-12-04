@@ -75,8 +75,7 @@ class Device {
         tt::stl::Span<const std::uint32_t> l1_bank_remap = {},
         bool minimal = false,
         uint32_t worker_core = 0,
-        uint32_t completion_queue_reader_core = 0,
-        uint32_t total_devices = 0);
+        uint32_t completion_queue_reader_core = 0);
 
     ~Device();
 
@@ -90,8 +89,6 @@ class Device {
     tt::ARCH arch() const;
 
     chip_id_t id() const { return id_; }
-
-    uint32_t total_devices() const { return total_devices_; }
 
     uint32_t build_key() const { return build_key_; }
 
@@ -303,7 +300,6 @@ class Device {
 
     static constexpr MemoryAllocator allocator_scheme_ = MemoryAllocator::L1_BANKING;
     chip_id_t id_;
-    uint32_t total_devices_;
     uint32_t build_key_;
     // Leaving here for compatibility with current reacharounds
     // TODO: Replace with get_initialized_allocator()

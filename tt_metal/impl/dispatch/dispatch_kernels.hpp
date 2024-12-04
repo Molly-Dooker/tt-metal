@@ -15,13 +15,15 @@ typedef struct {
 
 class FDKernel {
    public:
-    FDKernel(int node_id, uint8_t cq_id, noc_selection_t noc_selection) :
-        node_id(node_id), cq_id(cq_id), noc_selection(noc_selection){};
+    FDKernel(int node_id, chip_id_t device_id, uint8_t cq_id, noc_selection_t noc_selection) :
+        node_id(node_id), device_id(device_id), cq_id(cq_id), noc_selection(noc_selection){};
+    virtual ~FDKernel() = default;
     virtual void CreateKernel() = 0;
     virtual void GenerateStaticConfigs() = 0;
     virtual void GenerateDependentConfigs() = 0;
     virtual void ConfigureCore() {}; // Overridden for specific kernels that need host-side configuration
-    static FDKernel *Generate(int node_id, uint8_t cq_id, noc_selection_t noc_selection, DispatchWorkerType type);
+    static FDKernel* Generate(
+        int node_id, chip_id_t device_id, uint8_t cq_id, noc_selection_t noc_selection, DispatchWorkerType type);
 
     void AddUpstreamKernel(FDKernel *upstream) { this->upstream_kernels.push_back(upstream); }
     void AddDownstreamKernel(FDKernel *downstream) { this->downstream_kernels.push_back(downstream); }
@@ -38,6 +40,7 @@ class FDKernel {
         this->device = device;
         this->program = program;
     };
+    chip_id_t GetDeviceId() { return this->device_id; } // Since this->device may not exist yet
 
    protected:
     void configure_kernel_variant(
@@ -56,9 +59,10 @@ class FDKernel {
         return -1;
     }
 
-    Device *device;
-    Program *program;
+    Device *device = nullptr; // Set at configuration time by AddDeviceAndProgram()
+    Program *program = nullptr;
     tt_cxy_pair logical_core;
+    chip_id_t device_id;
     int node_id;
     uint8_t cq_id;
     noc_selection_t noc_selection;
@@ -297,8 +301,8 @@ typedef struct demux_config {
 
 class PrefetchKernel : public FDKernel {
    public:
-    PrefetchKernel(int node_id, uint8_t cq_id, noc_selection_t noc_selection, bool h_variant, bool d_variant) :
-        FDKernel(node_id, cq_id, noc_selection) {
+    PrefetchKernel(int node_id, chip_id_t device_id, uint8_t cq_id, noc_selection_t noc_selection, bool h_variant, bool d_variant) :
+        FDKernel(node_id, device_id, cq_id, noc_selection) {
         config.is_h_variant = h_variant;
         config.is_d_variant = d_variant;
     }
@@ -314,8 +318,8 @@ class PrefetchKernel : public FDKernel {
 
 class DispatchKernel : public FDKernel {
    public:
-    DispatchKernel(int node_id, uint8_t cq_id, noc_selection_t noc_selection, bool h_variant, bool d_variant) :
-        FDKernel(node_id, cq_id, noc_selection) {
+    DispatchKernel(int node_id, chip_id_t device_id, uint8_t cq_id, noc_selection_t noc_selection, bool h_variant, bool d_variant) :
+        FDKernel(node_id, device_id, cq_id, noc_selection) {
         config.is_h_variant = h_variant;
         config.is_d_variant = d_variant;
     }
@@ -331,7 +335,7 @@ class DispatchKernel : public FDKernel {
 
 class DispatchSKernel : public FDKernel {
    public:
-    DispatchSKernel(int node_id, uint8_t cq_id, noc_selection_t noc_selection) : FDKernel(node_id, cq_id, noc_selection) {}
+    DispatchSKernel(int node_id, chip_id_t device_id, uint8_t cq_id, noc_selection_t noc_selection) : FDKernel(node_id, device_id, cq_id, noc_selection) {}
     void CreateKernel() override;
     void GenerateStaticConfigs() override;
     void GenerateDependentConfigs() override;
@@ -344,7 +348,7 @@ class DispatchSKernel : public FDKernel {
 
 class MuxKernel : public FDKernel {
    public:
-    MuxKernel(int node_id, uint8_t cq_id, noc_selection_t noc_selection) : FDKernel(node_id, cq_id, noc_selection) {}
+    MuxKernel(int node_id, chip_id_t device_id, uint8_t cq_id, noc_selection_t noc_selection) : FDKernel(node_id, device_id, cq_id, noc_selection) {}
     void CreateKernel() override;
     void GenerateStaticConfigs() override;
     void GenerateDependentConfigs() override;
@@ -356,7 +360,7 @@ class MuxKernel : public FDKernel {
 
 class DemuxKernel : public FDKernel {
    public:
-    DemuxKernel(int node_id, uint8_t cq_id, noc_selection_t noc_selection) : FDKernel(node_id, cq_id, noc_selection) {}
+    DemuxKernel(int node_id, chip_id_t device_id, uint8_t cq_id, noc_selection_t noc_selection) : FDKernel(node_id, device_id, cq_id, noc_selection) {}
     void CreateKernel() override;
     void GenerateStaticConfigs() override;
     void GenerateDependentConfigs() override;
@@ -368,8 +372,8 @@ class DemuxKernel : public FDKernel {
 
 class EthTunnelerKernel : public FDKernel {
    public:
-    EthTunnelerKernel(int node_id, uint8_t cq_id, noc_selection_t noc_selection, bool is_remote) :
-        FDKernel(node_id, cq_id, noc_selection), is_remote(is_remote) {}
+    EthTunnelerKernel(int node_id, chip_id_t device_id, uint8_t cq_id, noc_selection_t noc_selection, bool is_remote) :
+        FDKernel(node_id, device_id, cq_id, noc_selection), is_remote(is_remote) {}
     void CreateKernel() override;
     void GenerateStaticConfigs() override;
     void GenerateDependentConfigs() override;
@@ -394,8 +398,8 @@ class EthTunnelerKernel : public FDKernel {
 
 class EthRouterKernel : public FDKernel {
    public:
-    EthRouterKernel(int node_id, uint8_t cq_id, noc_selection_t noc_selection, bool as_mux) :
-        FDKernel(node_id, cq_id, noc_selection), as_mux(as_mux) {}
+    EthRouterKernel(int node_id, chip_id_t device_id, uint8_t cq_id, noc_selection_t noc_selection, bool as_mux) :
+        FDKernel(node_id, device_id, cq_id, noc_selection), as_mux(as_mux) {}
     void CreateKernel() override;
     void GenerateStaticConfigs() override;
     void GenerateDependentConfigs() override;

@@ -74,7 +74,7 @@ private:
     std::unordered_map<uint32_t, uint32_t> completion_queue_reader_to_cpu_core_map;
     void init_firmware_on_active_devices() const;
     void init_profiler_devices() const;
-    void activate_device(chip_id_t id, uint32_t total_devices);
+    void activate_device(chip_id_t id);
     void initialize_device(tt_metal::v1::DeviceHandle dev) const;
     void add_devices_to_pool(const std::vector<chip_id_t>& device_ids);
     static DevicePool* _inst;

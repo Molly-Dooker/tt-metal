@@ -91,19 +91,22 @@ static const std::vector<dispatch_kernel_node_t> two_card_arch_2cq = {
 
 std::vector<FDKernel *> node_id_to_kernel;
 
-// Helper function to get the right struct for dispatch kernels. TODO: replace with reading yaml file later?
-inline std::vector<dispatch_kernel_node_t> get_nodes(Device *device) {
+// Populate node_id_to_kernel and set up kernel objects. Do this once at the beginning since they (1) don't need a valid
+// Device until fields are populated, (2) need to be connected to kernel objects for devices that aren't created yet,
+// and (3) the table to choose depends on total number of devices, not know at Device creation.
+void populate_fd_kernels(uint32_t num_devices, uint32_t num_hw_cqs) {
+    tt::log_warning("FD Config: {} devices, {} HW CQs", num_devices, num_hw_cqs);
+    // Select/generate the right input table. TODO: read this out of YAML instead of the structs above?
     std::vector<dispatch_kernel_node_t> nodes;
-    uint32_t num_devices = device->total_devices();
     if (num_devices == 0)
         num_devices = tt::Cluster::instance().number_of_user_devices();
 
     if (num_devices == 1) { // E150, N150
-        nodes = (device->num_hw_cqs() == 1) ? single_card_arch_1cq : single_card_arch_2cq;
+        nodes = (num_hw_cqs == 1) ? single_card_arch_1cq : single_card_arch_2cq;
     } else if (num_devices == 2) { // N300
-        nodes = (device->num_hw_cqs() == 1) ? two_card_arch_1cq : two_card_arch_2cq;
+        nodes = (num_hw_cqs == 1) ? two_card_arch_1cq : two_card_arch_2cq;
     } else if (num_devices == 8) { // T3K
-        const std::vector<dispatch_kernel_node_t> *nodes_for_one_mmio = (device->num_hw_cqs() == 1) ? &two_card_arch_1cq : &two_card_arch_2cq;
+        const std::vector<dispatch_kernel_node_t> *nodes_for_one_mmio = (num_hw_cqs == 1) ? &two_card_arch_1cq : &two_card_arch_2cq;
         // TODO: specify replication + device id mapping from struct/yaml? Just to avoid having these huge graphs typed out
         uint32_t num_mmio_devices = 4;
         uint32_t num_nodes_for_one_mmio = nodes_for_one_mmio->size();
@@ -133,42 +136,48 @@ inline std::vector<dispatch_kernel_node_t> get_nodes(Device *device) {
         tt::log_info("[{}, {}, {}, {}, [{}], [{}], {}, {}, {}]", node.id, node.device_id, node.cq_id, node.kernel_type, upstream, downstream, node.my_noc, node.upstream_noc, node.downstream_noc);
     }
 #endif
-    return nodes;
-}
 
-std::unique_ptr<Program> create_mmio_cq_program(Device *device) {
-    std::vector<dispatch_kernel_node_t> nodes = get_nodes(device);
-    if (node_id_to_kernel.empty()) {
-        // Do setup of kernel objects one time at the beginning, since they (1) don't need a valid Device until fields
-        // are populated, and (2) need to be connected to kernel objects for devices that aren't being created yet.
-        // Read the input table, create configs for each node
-        for (const auto &node : nodes) {
-            node_id_to_kernel.push_back(FDKernel::Generate(
-                node.id, node.cq_id, {node.my_noc, node.upstream_noc, node.downstream_noc}, node.kernel_type));
+    // If we already had nodes from a previous run, clear them (since we could have a different # of devices or CQs).
+    if (!node_id_to_kernel.empty()) {
+        for (int idx = 0; idx < node_id_to_kernel.size(); idx++) {
+            delete node_id_to_kernel[idx];
         }
+        node_id_to_kernel.clear();
+    }
 
-        // Connect the graph with upstream/downstream kernels
-        for (const auto &node : nodes) {
-            for (int idx = 0; idx < DISPATCH_MAX_UPSTREAM; idx++) {
-                if (node.upstream_ids[idx] >= 0) {
-                    // tt::log_info("Node {} has upstream node: {}", node.id, node.upstream_ids[idx]);
-                    node_id_to_kernel.at(node.id)->AddUpstreamKernel(node_id_to_kernel.at(node.upstream_ids[idx]));
-                }
+    // Read the input table, create configs for each node
+    for (const auto& node : nodes) {
+        node_id_to_kernel.push_back(FDKernel::Generate(
+            node.id, node.device_id, node.cq_id, {node.my_noc, node.upstream_noc, node.downstream_noc}, node.kernel_type));
+    }
+
+    // Connect the graph with upstream/downstream kernels
+    for (const auto& node : nodes) {
+        for (int idx = 0; idx < DISPATCH_MAX_UPSTREAM; idx++) {
+            if (node.upstream_ids[idx] >= 0) {
+                // tt::log_info("Node {} has upstream node: {}", node.id, node.upstream_ids[idx]);
+                node_id_to_kernel.at(node.id)->AddUpstreamKernel(node_id_to_kernel.at(node.upstream_ids[idx]));
             }
-            for (int idx = 0; idx < DISPATCH_MAX_DOWNSTREAM; idx++) {
-                if (node.downstream_ids[idx] >= 0) {
-                    // tt::log_info("Node {} has downstream node: {}", node.id, node.downstream_ids[idx]);
-                    node_id_to_kernel.at(node.id)->AddDownstreamKernel(node_id_to_kernel.at(node.downstream_ids[idx]));
-                }
+        }
+        for (int idx = 0; idx < DISPATCH_MAX_DOWNSTREAM; idx++) {
+            if (node.downstream_ids[idx] >= 0) {
+                // tt::log_info("Node {} has downstream node: {}", node.id, node.downstream_ids[idx]);
+                node_id_to_kernel.at(node.id)->AddDownstreamKernel(node_id_to_kernel.at(node.downstream_ids[idx]));
             }
         }
     }
+}
+
+std::unique_ptr<Program> create_mmio_cq_program(Device *device) {
+    TT_ASSERT(
+        node_id_to_kernel.size() > 0,
+        "Tried to create CQ program without nodes populated (need to run populate_fd_kernels()");
 
     // First pass, add device/program to all kernels for this device and generate static configs.
     auto cq_program_ptr = std::make_unique<Program>();
     // for (auto &node_and_kernel : node_id_to_kernel) {
     for (int idx = 0; idx < node_id_to_kernel.size(); idx++) {
-        if (nodes.at(idx).device_id == device->id()) {
+        if (node_id_to_kernel[idx]->GetDeviceId() == device->id()) {
             node_id_to_kernel[idx]->AddDeviceAndProgram(device, cq_program_ptr.get());
             node_id_to_kernel[idx]->GenerateStaticConfigs();
             // tt::log_warning("Node {} has coord: {} (phys={})", idx, node_id_to_kernel[idx]->GetLogicalCore().str(), node_id_to_kernel[idx]->GetPhysicalCore().str());
@@ -178,7 +187,7 @@ std::unique_ptr<Program> create_mmio_cq_program(Device *device) {
     // Third pass, populate dependent configs and create kernels for each node
     // for (auto &node_and_kernel : node_id_to_kernel) {
     for (int idx = 0; idx < node_id_to_kernel.size(); idx++) {
-        if (nodes.at(idx).device_id == device->id()) {
+        if (node_id_to_kernel[idx]->GetDeviceId() == device->id()) {
             node_id_to_kernel[idx]->GenerateDependentConfigs();
             node_id_to_kernel[idx]->CreateKernel();
         }
@@ -223,9 +232,9 @@ void configure_dispatch_cores(Device *device) {
             }
         }
     }
-    std::vector<dispatch_kernel_node_t> nodes = get_nodes(device);
+    // Configure cores for all nodes corresponding to this device
     for (int idx = 0; idx < node_id_to_kernel.size(); idx++) {
-        if (nodes.at(idx).device_id == device->id()) {
+        if (node_id_to_kernel[idx]->GetDeviceId() == device->id()) {
             node_id_to_kernel[idx]->ConfigureCore();
         }
     }

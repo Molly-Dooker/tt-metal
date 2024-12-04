@@ -34,34 +34,34 @@ static std::vector<string> dispatch_kernel_file_names = {
 };
 // static_assert(dispatch_kernel_file_names.size() == DispatchWorkerType::COUNT);
 
-FDKernel *FDKernel::Generate(int node_id, uint8_t cq_id, noc_selection_t noc_selection, DispatchWorkerType type) {
+FDKernel *FDKernel::Generate(int node_id, chip_id_t device_id, uint8_t cq_id, noc_selection_t noc_selection, DispatchWorkerType type) {
     switch (type) {
         case PREFETCH_HD:
-            return new PrefetchKernel(node_id, cq_id, noc_selection, true, true);
+            return new PrefetchKernel(node_id, device_id, cq_id, noc_selection, true, true);
         case PREFETCH_H:
-            return new PrefetchKernel(node_id, cq_id, noc_selection, true, false);
+            return new PrefetchKernel(node_id, device_id, cq_id, noc_selection, true, false);
         case PREFETCH_D:
-            return new PrefetchKernel(node_id, cq_id, noc_selection, false, true);
+            return new PrefetchKernel(node_id, device_id, cq_id, noc_selection, false, true);
         case DISPATCH_HD:
-            return new DispatchKernel(node_id, cq_id, noc_selection, true, true);
+            return new DispatchKernel(node_id, device_id, cq_id, noc_selection, true, true);
         case DISPATCH_H:
-            return new DispatchKernel(node_id, cq_id, noc_selection, true, false);
+            return new DispatchKernel(node_id, device_id, cq_id, noc_selection, true, false);
         case DISPATCH_D:
-            return new DispatchKernel(node_id, cq_id, noc_selection, false, true);
+            return new DispatchKernel(node_id, device_id, cq_id, noc_selection, false, true);
         case DISPATCH_S:
-            return new DispatchSKernel(node_id, cq_id, noc_selection);
+            return new DispatchSKernel(node_id, device_id, cq_id, noc_selection);
         case MUX_D:
-            return new MuxKernel(node_id, cq_id, noc_selection);
+            return new MuxKernel(node_id, device_id, cq_id, noc_selection);
         case DEMUX:
-            return new DemuxKernel(node_id, cq_id, noc_selection);
+            return new DemuxKernel(node_id, device_id, cq_id, noc_selection);
         case US_TUNNELER_REMOTE:
-            return new EthTunnelerKernel(node_id, cq_id, noc_selection, true);
+            return new EthTunnelerKernel(node_id, device_id, cq_id, noc_selection, true);
         case US_TUNNELER_LOCAL:
-            return new EthTunnelerKernel(node_id, cq_id, noc_selection, false);
+            return new EthTunnelerKernel(node_id, device_id, cq_id, noc_selection, false);
         case PACKET_ROUTER_MUX:
-            return new EthRouterKernel(node_id, cq_id, noc_selection, true);
+            return new EthRouterKernel(node_id, device_id, cq_id, noc_selection, true);
         case PACKET_ROUTER_DEMUX:
-            return new EthRouterKernel(node_id, cq_id, noc_selection, false);
+            return new EthRouterKernel(node_id, device_id, cq_id, noc_selection, false);
         default:
             TT_FATAL(false, "Unrecognized dispatch kernel type: {}.", type);
             return nullptr;
