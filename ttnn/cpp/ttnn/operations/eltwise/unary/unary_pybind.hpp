@@ -460,7 +460,8 @@ void bind_unary_operation_with_float_parameter(
             {6}
 
         Example:
-            >>> tensor = ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16), device=device)
+            >>> tensor = ttnn.from_torch(torch.tensor([[1, 2], [3, 4]], dtype=torch.bfloat16), dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, device=device)
+            >>> {2} = 3
             >>> output = {1}(tensor, {2})
         )doc",
         operation.base_name(),
@@ -1559,7 +1560,7 @@ void bind_unary_composite_float_with_default(
             input_tensor (ttnn.Tensor): the input tensor.
 
         Keyword args:
-            {2} (float): {3}. Defaults to `{4}`.
+            {2} (float, optional): {3}. Defaults to `{4}`.
             memory_config (ttnn.MemoryConfig, optional): Memory configuration for the operation. Defaults to `None`.
 
         Returns:
@@ -1581,8 +1582,8 @@ void bind_unary_composite_float_with_default(
             {6}
 
         Example:
-            >>> tensor = ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16), device=device)
-            >>> output = {1}(tensor, {2} = {4})
+            >>> tensor = ttnn.from_torch(torch.tensor([[1, 2], [3, 4]], dtype=torch.bfloat16), dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, device=device)
+            >>> output = {1}(tensor, {2} = 5)
         )doc",
         operation.base_name(),
         operation.python_fully_qualified_name(),
@@ -1810,7 +1811,7 @@ void py_module(py::module& module) {
     detail::bind_unary_operation_with_fast_and_approximate_mode(module, ttnn::erf, R"doc(BFLOAT16, BFLOAT8_B)doc");
     detail::bind_unary_operation_with_fast_and_approximate_mode(module, ttnn::erfc, R"doc(BFLOAT16, BFLOAT8_B)doc");
     detail::bind_unary_operation_with_fast_and_approximate_mode(module, ttnn::gelu, R"doc(BFLOAT16, BFLOAT8_B)doc");
-    detail::bind_unary_operation_with_fast_and_approximate_mode(module, ttnn::rsqrt);
+    detail::bind_unary_operation_with_fast_and_approximate_mode(module, ttnn::rsqrt, R"doc(BFLOAT16, BFLOAT8_B)doc");
 
     // Unaries with float parameter
     detail::bind_unary_operation_with_float_parameter(module, ttnn::elu, "alpha", "The alpha parameter for the ELU function","",R"doc(BFLOAT16, BFLOAT8_B)doc");
@@ -1820,7 +1821,7 @@ void py_module(py::module& module) {
     detail::bind_unary_operation_with_float_parameter(module, ttnn::heaviside, "value", "The value parameter for the Heaviside function", "", R"doc(BFLOAT16, BFLOAT8_B)doc");
     detail::bind_unary_operation_with_float_parameter(module, ttnn::leaky_relu, "negative_slope", "The slope parameter for the Leaky ReLU function", "",R"doc(BFLOAT16, BFLOAT8_B)doc");
     detail::bind_unary_operation_with_float_parameter(module, ttnn::fill, "fill_value", "The value to be filled in the output tensor",
-        "This will create a tensor of same shape as input reference tensor with fill_value.", R"doc(BFLOAT16, BFLOAT8_B)doc", R"doc(Support provided for float32 dtypes in Wormhole_B0. System memory is not supported.)doc");
+        "This will create a tensor of same shape and dtype as input reference tensor with fill_value.", R"doc(BFLOAT16, BFLOAT8_B)doc", R"doc(Support provided for float32 dtypes in Wormhole_B0. System memory is not supported.)doc");
     detail::bind_unary_operation_with_float_parameter(module, ttnn::relu_max, "upper_limit", "The max value for ReLU function",
         "This function caps off the input to a max value and a min value of 0", R"doc(BFLOAT16, BFLOAT8_B)doc",
         R"doc(System memory is not supported.)doc");
@@ -2007,12 +2008,12 @@ void py_module(py::module& module) {
         module,
         ttnn::softshrink,
         "lambd", "lambd value", 0.5f,
-            R"doc(BFLOAT16)doc");
+            R"doc(BFLOAT16, BFLOAT8_B)doc");
 
     detail::bind_unary_composite_float_with_default(
         module,
         ttnn::celu,
-        "alpha", "alpha value", 1.0f, R"doc(BFLOAT16)doc");
+        "alpha", "alpha value", 1.0f, R"doc(BFLOAT16, BFLOAT8_B)doc");
 
     detail::bind_unary_composite_float_with_default(
         module,

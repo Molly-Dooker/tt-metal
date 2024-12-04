@@ -31,7 +31,6 @@ tt_metal/llrt/rtoptions.hpp
 tt_metal/llrt/tt_cluster.cpp
 tt_metal/llrt/tt_cluster.hpp
 tt_metal/llrt/tt_memory.h
-tt_metal/tt_metal.cpp
 ttnn/cpp/pybind11/tensor.cpp
 ttnn/cpp/ttnn/device_operation.hpp
 ttnn/cpp/ttnn/graph/graph_processor.cpp
@@ -100,7 +99,7 @@ ttnn/cpp/ttnn/operations/embedding_backward/device/embedding_backward_device_ope
 ttnn/cpp/ttnn/operations/embedding_backward/device/embedding_backward_device_operation.hpp
 ttnn/cpp/ttnn/operations/experimental/ccl/reduce_scatter_async/device/reduce_scatter_async_program.cpp
 ttnn/cpp/ttnn/operations/experimental/matmul/group_attn_matmul/device/kernels/compute/transformer_group_attn_matmul.cpp
-ttnn/cpp/ttnn/operations/pool/maxpool/max_pool2d.cpp
+ttnn/cpp/ttnn/operations/pool/generic/generic_pools.cpp
 ttnn/cpp/ttnn/operations/uniform/device/uniform_device_operation.cpp
 ttnn/cpp/ttnn/operations/uniform/device/uniform_device_operation.hpp
 ttnn/cpp/ttnn/tensor/types.hpp
