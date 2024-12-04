@@ -125,6 +125,7 @@ class TtLlamaCrossAttentionTransformerBlock(LightweightModule):
         mode,
         user_id=0,
         vision_tokens=None,
+        cross_page_table=None,
     ):
         attn_out = self.attention(
             x_11SH=self.attention_norm(x_11SH, mode=mode),
@@ -134,6 +135,7 @@ class TtLlamaCrossAttentionTransformerBlock(LightweightModule):
             mode=mode,
             user_id=user_id,
             vision_tokens=vision_tokens,
+            cross_page_table=cross_page_table,
         )
         # FIXME: DRAM workaround for No circular buffer with id error
         attn_out = ttnn.to_memory_config(attn_out, memory_config=ttnn.DRAM_MEMORY_CONFIG)
