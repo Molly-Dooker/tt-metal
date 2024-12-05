@@ -10,8 +10,8 @@ import time
 import math
 import ipdb
 import supervision as sv
-from supervision import Detections
-namesfile = "models/demos/yolov4/demo/coco.names"
+from supervision import VideoInfo, VideoSink, get_video_frames_generator, Detections
+
 
 def startup():
     device_id = 6
@@ -20,7 +20,6 @@ def startup():
     global model
     model = Yolov4Trace2CQ()
     model.initialize_yolov4_trace_2cqs_inference(device)
-
 
 
 def shutdown():
@@ -33,9 +32,7 @@ def process_request(output):
     return output_serializable
 
 
-
-def objdetection_v2(image:np.ndarray):
-    
+def objdetection_v2(image: np.ndarray):
     if type(image) == np.ndarray and len(image.shape) == 3:  # cv2 image
         image = torch.from_numpy(image).float().div(255.0).unsqueeze(0)
     elif type(image) == np.ndarray and len(image.shape) == 4:
@@ -55,7 +52,7 @@ def objdetection_v2(image:np.ndarray):
     return output
 
 
-def post_processing(output, conf_thresh=0.6, nms_thresh=0.5):
+def post_processing(output, conf_thresh=0.5, nms_thresh=0.5):
     # ipdb.set_trace()
     box_array = output[0]
     confs = output[1].float()
@@ -111,6 +108,7 @@ def post_processing(output, conf_thresh=0.6, nms_thresh=0.5):
         bboxes_batch.append(bboxes)
     return bboxes_batch[0]
 
+
 def nms_cpu(boxes, confs, nms_thresh=0.5, min_mode=False):
     x1 = boxes[:, 0]
     y1 = boxes[:, 1]
@@ -156,7 +154,6 @@ def load_class_names(namesfile):
     return class_names
 
 
-
 def plot_boxes_cv2(bgr_img, boxes, savename=None, class_names=None, color=None):
     img = np.copy(bgr_img)
     colors = np.array([[1, 0, 1], [0, 0, 1], [0, 1, 1], [0, 1, 0], [1, 1, 0], [1, 0, 0]], dtype=np.float32)
@@ -187,7 +184,7 @@ def plot_boxes_cv2(bgr_img, boxes, savename=None, class_names=None, color=None):
             cls_conf = box[5]
             cls_id = box[6]
             # print("%s: %f" % (class_names[cls_id], cls_conf))
-            print(f'{class_names[cls_id]:20}: {cls_conf:.4f}  ({x1},{y1}),({x2},{y2})')
+            print(f"{class_names[cls_id]:20}: {cls_conf:.4f}  ({x1},{y1}),({x2},{y2})")
             classes = len(class_names)
             offset = cls_id * 123457 % classes
             red = get_color(2, offset, classes)
@@ -215,18 +212,14 @@ def plot_boxes_cv2(bgr_img, boxes, savename=None, class_names=None, color=None):
     return img
 
 
-
-def get_detections(boxes, class_names, height_o, width_o):    
-    dets = {
-        'xyxy':[],
-        'confidence':[],
-        'class_id':[],
-        'data':[]}
+def get_detections(boxes, class_names, height_o, width_o):
+    dets = {"xyxy": [], "confidence": [], "class_id": [], "data": []}
     # for i in range(len(boxes)):
     #     if not len(box) >= 7: continue
     #     box = boxes[i]
     for box in boxes:
-        if not len(box) >= 7: continue
+        if not len(box) >= 7:
+            continue
         x1 = int(box[0] * width_o)
         y1 = int(box[1] * height_o)
         x2 = int(box[2] * width_o)
@@ -234,45 +227,58 @@ def get_detections(boxes, class_names, height_o, width_o):
         cls_conf = box[5]
         cls_id = box[6]
         cls_name = class_names[cls_id]
-        dets['xyxy'].append([x1,y1,x2,y2])
-        dets['confidence'].append(cls_conf)
-        dets['class_id'].append(cls_id)
-        dets['data'].append(cls_name)
-    dets['xyxy'] = np.array(dets['xyxy'])
-    dets['confidence'] = np.array(dets['confidence'])
-    dets['class_id'] = np.array(dets['class_id'])
-    dets['data'] = {'class_name':np.array(dets['data'])} 
-    return dets        
-        
+        dets["xyxy"].append([x1, y1, x2, y2])
+        dets["confidence"].append(cls_conf)
+        dets["class_id"].append(cls_id)
+        dets["data"].append(cls_name)
+    dets["xyxy"] = np.array(dets["xyxy"])
+    dets["confidence"] = np.array(dets["confidence"])
+    dets["class_id"] = np.array(dets["class_id"])
+    dets["data"] = {"class_name": np.array(dets["data"])}
+    return dets
 
-if __name__ == '__main__':
 
+namesfile = "models/demos/yolov4/demo/coco.names"
+class_names = load_class_names(namesfile)
+
+box_annotator = sv.BoxAnnotator(thickness=2)
+label_annotator = sv.LabelAnnotator(text_thickness=1, text_scale=0.5, text_padding=3)
+
+
+def callback(frame: np.ndarray, index: int) -> np.ndarray:
+    height, width, _ = frame.shape
+    frame_ = cv2.resize(frame, (320, 320))
+    result = objdetection_v2(frame_)
+    result = post_processing(result)
+    dets = get_detections(result, class_names, height, width)
+    detections = Detections(
+        xyxy=dets["xyxy"], confidence=dets["confidence"], class_id=dets["class_id"], data=dets["data"]
+    )
+    labels = [f"{class_names[class_id]} {confidence:0.2f}" for _, _, confidence, class_id, _, _ in detections]
+    frame = box_annotator.annotate(scene=frame, detections=detections)
+    frame = label_annotator.annotate(scene=frame, detections=detections, labels=labels)
+    return frame
+
+
+# 640, 480
+# 800 600
+
+frame_height = 480
+frame_width = 640
+# frame_height = 600; frame_width = 800
+
+if __name__ == "__main__":
+    source_path = "__yolo__/car.mp4"
+    target_path = "__yolo__/car_WH.mp4"
     startup()
-    class_names = load_class_names(namesfile)
-    
-    image_o = cv2.imread('__yolo__/people.jpg')
-    height_o,width_o,_ = image_o.shape
-    image = cv2.resize(image_o,(320,320))
-    
-    output = objdetection_v2(image)
-    output = post_processing(output) 
-    
-    dets = get_detections(output,class_names,height_o,width_o)
-    ipdb.set_trace()
-    
-    detections = Detections(xyxy=dets['xyxy'],
-                            confidence=dets['confidence'],
-                            class_id=dets['class_id'],
-                            data=dets['data'])
-    
-    labels = [
-        f"{class_names[class_id]} {confidence:0.2f}"
-        for _, _, confidence, class_id, _, _
-        in detections
-    ]
-    
-    box_annotator = sv.BoxAnnotator(thickness=2)
-    label_annotator = sv.LabelAnnotator(text_thickness=1, text_scale=0.5, text_padding=3)
-    
-    image_o = box_annotator.annotate(scene=image_o, detections=detections)
-    image_o = label_annotator.annotate(scene=image_o, detections=detections, labels=labels)
+
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+
+    while True:
+        ret, frame = cap.read()
+        result_frame = callback(frame, 0)
+        cv2.imshow("DEMO", frame)
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
