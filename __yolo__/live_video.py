@@ -11,12 +11,9 @@ import math
 import ipdb
 import supervision as sv
 from supervision import VideoInfo, VideoSink, get_video_frames_generator, Detections
-TIME1 =[]
-TIME2 =[]
-TIME3 =[]
 
-def startup():
-    device_id = 0
+
+def startup(device_id):
     device = ttnn.CreateDevice(device_id, l1_small_size=24576, trace_region_size=1617920, num_command_queues=2)
     ttnn.enable_program_cache(device)
     global model
@@ -34,7 +31,6 @@ def process_request(output):
     return output_serializable
 
 
-
 def objdetection_v2(image: np.ndarray):
     if type(image) == np.ndarray and len(image.shape) == 3:  # cv2 image
         image = torch.from_numpy(image).float().div(255.0).unsqueeze(0)
@@ -43,17 +39,16 @@ def objdetection_v2(image: np.ndarray):
     else:
         print("unknow image type")
         exit(-1)
-    
+
     response = model.run_traced_inference(image)
-    # Convert response tensors to JSON-serializable format
-    response_dict = process_request(response)
-    # to tensor list
-    output = [torch.tensor(tensor_data) for tensor_data in response_dict["output"]]
-    return output
+    # # Convert response tensors to JSON-serializable format
+    # response_dict = process_request(response)
+    # # to tensor list
+    # output = [torch.tensor(tensor_data) for tensor_data in response_dict["output"]]
+    return response
 
 
 def post_processing(output, conf_thresh=0.5, nms_thresh=0.5):
-    # ipdb.set_trace()
     box_array = output[0]
     confs = output[1].float()
 
@@ -245,66 +240,39 @@ box_annotator = sv.BoxAnnotator(thickness=2)
 label_annotator = sv.LabelAnnotator(text_thickness=1, text_scale=0.5, text_padding=3)
 
 
-
 def callback(frame: np.ndarray, index: int) -> np.ndarray:
-    
     height, width, _ = frame.shape
     frame_ = cv2.resize(frame, (320, 320))
     result = objdetection_v2(frame_)
-    t1 = time.time()
-    result = post_processing(result)    
-    t2 =time.time()
-    TIME1.append(t2-t1)
+    result = post_processing(result)
     dets = get_detections(result, class_names, height, width)
-    if dets['xyxy'].shape==(0,): return frame
+    if dets["xyxy"].shape == (0,):
+        return frame
     detections = Detections(
         xyxy=dets["xyxy"], confidence=dets["confidence"], class_id=dets["class_id"], data=dets["data"]
     )
     labels = [f"{class_names[class_id]} {confidence:0.2f}" for _, _, confidence, class_id, _, _ in detections]
-    t3 = time.time()
     frame = box_annotator.annotate(scene=frame, detections=detections)
     frame = label_annotator.annotate(scene=frame, detections=detections, labels=labels)
-    t4 = time.time()
-    TIME2.append(t4-t3)
     return frame
 
 
-# 640, 480
-# 800 600
-
-frame_height = 480
-frame_width = 640
-# frame_height = 600; frame_width = 800
-
 if __name__ == "__main__":
-    startup()
+    startup(device_id=0)
 
     video_path = "__yolo__/car.mp4"
     cap = cv2.VideoCapture(video_path)
 
-
-    while cap.isOpened():  
+    while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
-
-        result_frame = callback(frame, 0)
-        t1= time.time()
+        frame = callback(frame, 0)
         cv2.imshow("DEMO", frame)
-        t2 = time.time()
-        TIME3.append(t2-t1)
         # 'q' 키를 누르면 종료
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
-    
+
     # 리소스 해제
     cap.release()
     cv2.destroyAllWindows()
-    TIME3 = np.array(TIME3)*1000
-    TIME2 = np.array(TIME2)*1000
-    TIME1 = np.array(TIME1)*1000
-    # TIME = np.array(TIME)*1000
-    # TIME_pre = np.array(TIME_pre)*1000
-    # TIME_run = np.array(TIME_run)*1000
-    # TIME_post = np.array(TIME_post)*1000
-    ipdb.set_trace()
