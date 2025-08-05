@@ -151,6 +151,13 @@ tt::tt_metal::operation::ProgramWithCallbacks send_async_multicore(
     std::vector<uint32_t> writer_rt_args = {mesh_socket.get_config_buffer()->address(), bank_id};
 
     auto link_indices = tt::tt_fabric::get_forwarding_link_indices(sender_fabric_node_id, receiver_fabric_node_id);
+
+    log_info(
+        tt::LogOp,
+        "SendAsync: sender_fabric_node_id: {}, receiver_fabric_node_id: {}, link_indices: {}",
+        sender_fabric_node_id,
+        receiver_fabric_node_id,
+        link_indices);
     TT_FATAL(
         link_indices.size() > 0,
         "No link indices found {} {} {} {}",

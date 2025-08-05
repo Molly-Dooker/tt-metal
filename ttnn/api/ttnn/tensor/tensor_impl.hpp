@@ -173,6 +173,9 @@ bool logical_matches_physical(const TensorSpec& tensor_spec);
 std::shared_ptr<distributed::MeshBuffer> allocate_device_buffer(
     distributed::MeshDevice* mesh_device, const TensorSpec& tensor_spec);
 
+std::shared_ptr<distributed::MeshBuffer> allocate_mesh_buffer_on_device(
+    distributed::MeshDevice* mesh_device, const TensorSpec& tensor_spec, SubDeviceId sub_device_id);
+
 HostBuffer allocate_host_buffer(const TensorSpec& tensor_spec);
 
 // ======================================================================================

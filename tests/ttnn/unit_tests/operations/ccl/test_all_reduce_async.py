@@ -50,6 +50,23 @@ def run_all_reduce_test(
     debug = False
 
     logger.info(f"Per chip output shape: {per_chip_output_shape}, devices: {num_devices}")
+
+    # [1, 1, 32, 512]
+    tensor_mem_layout = ttnn.TensorMemoryLayout.BLOCK_SHARDED
+    shard_spec = ttnn.ShardSpec(
+        ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(1, 7))}),
+        (32, 512),
+        ttnn.ShardOrientation.ROW_MAJOR,
+    )
+    mem_config = ttnn.MemoryConfig(tensor_mem_layout, buffer_type=ttnn.BufferType.L1, shard_spec=shard_spec)
+    input_mem_config = mem_config
+    output_mem_config = mem_config
+    # input_mem_config = ttnn.MemoryConfig(buffer_type=ttnn.BufferType.L1)
+    output_mem_config = ttnn.MemoryConfig(buffer_type=ttnn.BufferType.L1)
+
+    logger.info(f"Input memory config: {input_mem_config}")
+    logger.info(f"Output memory config: {output_mem_config}")
+
     # Generate input tensors
 
     canonical_input_tensors = []
@@ -60,8 +77,10 @@ def run_all_reduce_test(
         input_tensors[-1] = torch.arange(numel).reshape(per_chip_output_shape).bfloat16()
     for i in range(num_devices):
         input_tensor = torch.rand(per_chip_output_shape).bfloat16()
+        print(f"input_tensor shape: {input_tensor.shape}")
         canonical_input_tensors.append(input_tensor)
         input_tensor = input_tensor.view(1, -1, input_tensor.shape[2], input_tensor.shape[3])
+        print(f"input_tensor shape: {input_tensor.shape}")
         input_tensors.append(input_tensor)
 
     unchunked_input_tensor = torch.cat(input_tensors)
@@ -72,7 +91,7 @@ def run_all_reduce_test(
         dtype=input_dtype,
         layout=layout,
         device=mesh_device,
-        memory_config=mem_config,
+        memory_config=input_mem_config,
         mesh_mapper=ttnn.create_mesh_mapper(
             mesh_device,
             ttnn.MeshMapperConfig([ttnn.PlacementReplicate(), ttnn.PlacementShard(0)], ttnn.MeshShape(1, num_devices)),
@@ -87,7 +106,7 @@ def run_all_reduce_test(
             gather_multi_device_global_semaphore=gather_semaphore_handles,
             math_op=math_op,
             num_links=num_links,
-            memory_config=mem_config,
+            memory_config=output_mem_config,
             topology=topology,
             subdevice_id=worker_sub_device_id,
         )

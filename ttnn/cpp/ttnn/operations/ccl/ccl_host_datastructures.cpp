@@ -64,7 +64,7 @@ CCLOpConfig::CCLOpConfig(
     input_sharded(input_tensors.at(0).is_sharded()),
     output_sharded(output_tensors.at(0).is_sharded()),
     df(tt::tt_metal::datatype_to_dataformat_converter(input_tensors.at(0).dtype())),
-    shard_grid_size(output_tensors.at(0).is_sharded() ? input_tensors.at(0).shard_spec()->num_cores() : 0),
+    shard_grid_size(0),
     topology(topology),
     is_row_major(input_tensors.at(0).layout() == Layout::ROW_MAJOR) {
     if (input_tensors.at(0).layout() == Layout::TILE) {
