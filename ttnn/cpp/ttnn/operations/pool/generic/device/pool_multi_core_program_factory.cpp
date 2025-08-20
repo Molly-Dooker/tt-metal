@@ -271,7 +271,7 @@ Pool2D::MultiCore::cached_program_t pool2d_multi_core_sharded_with_halo_v2_impl_
                   params.nbytes
             : tt::round_up(input_shape[3] / num_shards_c, tt::constants::TILE_WIDTH) * params.nbytes;
 
-    TT_FATAL(dilation_h == 1 && dilation_w == 1, "Dilation is not yet supported by the maxpool reader");
+    // Dilation is now supported in the pool reader kernel
 
     uint32_t next_cb_index = tt::CBIndex::c_0;
     const uint32_t in_scalar_cb_id_0 = next_cb_index++;
@@ -445,7 +445,9 @@ Pool2D::MultiCore::cached_program_t pool2d_multi_core_sharded_with_halo_v2_impl_
         in_nbytes_c,                    // 25
         in_nbytes_padded_c,             // 26
         params.multi_buffering_factor,  // 27
-        stride_w};                      // 28
+        stride_w,                       // 28
+        dilation_h,                     // 29
+        dilation_w};                    // 30
     std::vector<uint32_t> reader1_ct_args = reader0_ct_args;
     reader1_ct_args[8] = 1;  // split reader id for reader1
 

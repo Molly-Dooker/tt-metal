@@ -207,7 +207,23 @@ def run_max_pool(
 
     # adjust the TTNN output to match the expected shape
     ttnn_output = ttnn.to_torch(ttnn_output)
-    ttnn_output = ttnn_output.reshape(out_n, out_h, out_w, out_c)  # N, H, W, C
+
+    # Get actual output dimensions from PyTorch reference instead of pre-calculated values
+    # This fixes the dilation shape mismatch issue
+    pytorch_out_n, pytorch_out_c, pytorch_out_h, pytorch_out_w = torch_output.shape
+
+    # Verify the sizes match before reshaping
+    expected_flat_size = pytorch_out_n * pytorch_out_h * pytorch_out_w * pytorch_out_c
+    actual_flat_size = ttnn_output.numel()
+
+    if expected_flat_size != actual_flat_size:
+        raise RuntimeError(
+            f"TTNN output size mismatch: expected {expected_flat_size}, got {actual_flat_size}. "
+            f"Expected shape: [{pytorch_out_n}, {pytorch_out_c}, {pytorch_out_h}, {pytorch_out_w}]"
+        )
+
+    # Use actual dimensions from PyTorch reference for correct reshaping
+    ttnn_output = ttnn_output.reshape(pytorch_out_n, pytorch_out_h, pytorch_out_w, pytorch_out_c)  # N, H, W, C
     ttnn_output = torch.permute(ttnn_output, (0, 3, 1, 2))  # N, C, H, W
 
     # test for equivalance
@@ -282,7 +298,14 @@ def run_max_pool(
         (2, 2),
     ),
 )
-@pytest.mark.parametrize("dilation", ((1, 1),))  ## default
+@pytest.mark.parametrize(
+    "dilation",
+    (
+        (1, 1),  # default - no dilation
+        (2, 2),  # symmetric dilation
+        (2, 1),  # asymmetric dilation
+    ),
+)
 @pytest.mark.parametrize(
     "dtype",
     [
@@ -345,7 +368,13 @@ def test_run_max_pool_height_shard(
     "stride",
     ((1, 1),),
 )
-@pytest.mark.parametrize("dilation", ((1, 1),))  ## default
+@pytest.mark.parametrize(
+    "dilation",
+    (
+        (1, 1),  # default - no dilation
+        (2, 2),  # symmetric dilation for wide tests
+    ),
+)
 @pytest.mark.parametrize(
     "dtype",
     [
@@ -414,7 +443,14 @@ def test_run_max_pool_width_shard(
     "stride",
     ((1, 1),),
 )
-@pytest.mark.parametrize("dilation", ((1, 1),))  ## default
+@pytest.mark.parametrize(
+    "dilation",
+    (
+        (1, 1),  # default - no dilation
+        (2, 2),  # symmetric dilation for block shard
+        (1, 3),  # asymmetric dilation for block shard
+    ),
+)
 @pytest.mark.parametrize(
     "dtype",
     [
@@ -507,7 +543,13 @@ def test_run_max_pool_mem_config(
     "stride",
     ((1, 1),),
 )
-@pytest.mark.parametrize("dilation", ((1, 1),))  ## default
+@pytest.mark.parametrize(
+    "dilation",
+    (
+        (1, 1),  # default - no dilation
+        (2, 2),  # symmetric dilation for model tests
+    ),
+)
 @pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 def test_run_max_pool_yolov4(
     input_shape,
@@ -536,7 +578,13 @@ def test_run_max_pool_yolov4(
     ((0, 0),),
 )
 @pytest.mark.parametrize("stride", ((2, 2),))
-@pytest.mark.parametrize("dilation", ((1, 1),))
+@pytest.mark.parametrize(
+    "dilation",
+    (
+        (1, 1),  # default - no dilation
+        (2, 2),  # symmetric dilation for model tests
+    ),
+)
 @pytest.mark.parametrize("dtype", [ttnn.bfloat16])
 @pytest.mark.parametrize("ceil_mode", [False, True])
 def test_run_max_pool_squeeze_net_model(
