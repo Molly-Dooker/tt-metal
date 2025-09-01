@@ -4,14 +4,103 @@
 
 import glob
 import os
+from typing import Tuple
 
 import torch
+import torch.nn as nn
 from datasets import load_dataset
 from PIL import Image
 from torchvision import models
 from tqdm import tqdm
 
 from models.sample_data.huggingface_imagenet_classes import IMAGENET2012_CLASSES
+
+
+@torch.no_grad()
+def _fuse_conv_bn(conv: nn.Conv2d, bn: nn.BatchNorm2d) -> nn.Conv2d:
+    fused = nn.Conv2d(
+        conv.in_channels,
+        conv.out_channels,
+        conv.kernel_size,
+        stride=conv.stride,
+        padding=conv.padding,
+        dilation=conv.dilation,
+        groups=conv.groups,
+        bias=True,
+        padding_mode=conv.padding_mode,
+        device=conv.weight.device,
+        dtype=conv.weight.dtype,
+    )
+    W = conv.weight
+    b = conv.bias if conv.bias is not None else torch.zeros(conv.out_channels, device=W.device, dtype=W.dtype)
+    gamma = bn.weight if bn.affine else torch.ones_like(bn.running_var)
+    beta = bn.bias if bn.affine else torch.zeros_like(bn.running_mean)
+    mu = bn.running_mean
+    var = bn.running_var
+    eps = bn.eps
+    s = gamma / torch.sqrt(var + eps)
+    W_fused = W * s.view(-1, 1, 1, 1)
+    b_fused = (b - mu) * s + beta
+    fused.weight.copy_(W_fused)
+    fused.bias.copy_(b_fused)
+    return fused
+
+
+@torch.no_grad()
+def _fuse_linear_bn(fc: nn.Linear, bn: nn.BatchNorm1d) -> nn.Linear:
+    fused = nn.Linear(
+        fc.in_features,
+        fc.out_features,
+        bias=True,
+        device=fc.weight.device,
+        dtype=fc.weight.dtype,
+    )
+    W = fc.weight
+    b = fc.bias if fc.bias is not None else torch.zeros(fc.out_features, device=W.device, dtype=W.dtype)
+    gamma = bn.weight if bn.affine else torch.ones_like(bn.running_var)
+    beta = bn.bias if bn.affine else torch.zeros_like(bn.running_mean)
+    mu = bn.running_mean
+    var = bn.running_var
+    eps = bn.eps
+    s = gamma / torch.sqrt(var + eps)  # (out_features,)
+    W_fused = W * s.view(-1, 1)
+    b_fused = (b - mu) * s + beta
+    fused.weight.copy_(W_fused)
+    fused.bias.copy_(b_fused)
+    return fused
+
+
+def _maybe_fuse_pair(parent: nn.Module, names: Tuple[str, str]):
+    n1, n2 = names
+    m1 = getattr(parent, n1)
+    m2 = getattr(parent, n2)
+    if isinstance(m1, nn.Conv2d) and isinstance(m2, nn.BatchNorm2d):
+        fused = _fuse_conv_bn(m1, m2)
+        setattr(parent, n1, fused)
+        setattr(parent, n2, nn.Identity())
+    elif isinstance(m1, nn.Linear) and isinstance(m2, nn.BatchNorm1d):
+        fused = _fuse_linear_bn(m1, m2)
+        setattr(parent, n1, fused)
+        setattr(parent, n2, nn.Identity())
+
+
+@torch.no_grad()
+def _fold_batchnorm(module: nn.Module):
+    children = list(module.named_children())
+    for i in range(len(children) - 1):
+        name1, m1 = children[i]
+        name2, m2 = children[i + 1]
+        _maybe_fuse_pair(module, (name1, name2))
+    for _, child in module.named_children():
+        _fold_batchnorm(child)
+
+
+def _reshape_scale_for_broadcast(scale: torch.Tensor, x: torch.Tensor, channel_axis: int):
+    if channel_axis < 0:
+        channel_axis += x.ndim
+    shape = [1] * x.ndim
+    shape[channel_axis] = -1
+    return scale.view(*shape)
 
 
 class InputExample(object):

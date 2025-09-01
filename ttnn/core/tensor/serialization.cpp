@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
-
+// ttnn/core/tensor/serialization.cpp
 #include "ttnn/tensor/serialization.hpp"
 
 #include <cstdint>
@@ -430,6 +430,72 @@ Tensor load_tensor_flatbuffer(const std::string& file_name, MeshDevice* device) 
 
     std::vector<std::byte> data_buffer(data_size);
     safe_fread(data_buffer.data(), data_size, 1, input_file);
+
+    Tensor tensor = ttnn::from_flatbuffer(fb_tensor, data_buffer);
+    if (device != nullptr) {
+        tensor = tensor.to_device(device);
+    }
+    return tensor;
+}
+std::string dump_tensor_flatbuffer_to_bytes(const Tensor& tensor) {
+    Tensor cpu_tensor = tensor.cpu();
+
+    flatbuffers::FlatBufferBuilder builder;
+    auto tensor_offset = ttnn::to_flatbuffer(cpu_tensor, builder);
+    builder.Finish(tensor_offset);
+
+    // 헤더 크기(8바이트) + 헤더 + 데이터
+    std::string out;
+    const uint64_t header_size = builder.GetSize();
+    out.resize(sizeof(header_size) + header_size);  // 우선 헤더 부분 확보
+
+    // 1) header_size
+    std::memcpy(out.data(), &header_size, sizeof(header_size));
+    // 2) header bytes
+    std::memcpy(out.data() + sizeof(header_size), builder.GetBufferPointer(), header_size);
+
+    // 3) data bytes append
+    std::visit(
+        tt::stl::overloaded{
+            [&](const HostStorage& storage) {
+                auto view = storage.buffer.view_bytes();
+                out.append(reinterpret_cast<const char*>(view.data()), view.size());
+            },
+            [&](const DeviceStorage&) { TT_THROW("Device storage isn't supported in flatbuffer serialization"); },
+            [&](const MultiDeviceHostStorage& storage) {
+                for (const auto& shard : storage.distributed_buffer().shard_coords()) {
+                    if (auto buf = storage.distributed_buffer().get_shard(shard); buf.has_value()) {
+                        auto view = buf->view_bytes();
+                        out.append(reinterpret_cast<const char*>(view.data()), view.size());
+                    }
+                }
+            }},
+        cpu_tensor.storage());
+
+    return out;
+}
+
+Tensor load_tensor_flatbuffer_from_bytes(const std::uint8_t* data, std::size_t len, MeshDevice* device) {
+    TT_FATAL(data != nullptr && len >= sizeof(uint64_t), "Invalid buffer");
+
+    // 1) header_size
+    uint64_t header_size = 0;
+    std::memcpy(&header_size, data, sizeof(header_size));
+    TT_FATAL(len >= sizeof(header_size) + header_size, "Truncated buffer: header");
+
+    // 2) header bytes
+    const std::byte* header_ptr = reinterpret_cast<const std::byte*>(data + sizeof(header_size));
+    auto fb_tensor = ttnn::flatbuffer::GetTensor(header_ptr);
+
+    // 3) remaining data region
+    const std::size_t data_region_offset = sizeof(header_size) + header_size;
+    const std::size_t data_region_size = len - data_region_offset;
+    const std::byte* data_ptr = reinterpret_cast<const std::byte*>(data + data_region_offset);
+
+    std::vector<std::byte> data_buffer(data_region_size);
+    if (data_region_size) {
+        std::memcpy(data_buffer.data(), data_ptr, data_region_size);
+    }
 
     Tensor tensor = ttnn::from_flatbuffer(fb_tensor, data_buffer);
     if (device != nullptr) {

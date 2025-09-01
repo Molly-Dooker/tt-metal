@@ -1,15 +1,19 @@
 # SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 # SPDX-License-Identifier: Apache-2.0
-
+# ttnn/ttnn/operations/core.py
 import math
 import pathlib
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import ttnn.decorators
 from loguru import logger
-
+import struct, zlib
+from typing import Optional
+from collections import OrderedDict
+from tqdm import tqdm
 import ttnn
+import io
 
 
 def _golden_function(input_tensor: ttnn.Tensor, slices):
@@ -557,6 +561,116 @@ def dump_tensor(file_name: Union[str, pathlib.Path], tensor: ttnn.Tensor, distri
         distribute = dict()
     file_name = pathlib.Path(file_name)
     ttnn._ttnn.tensor.dump_tensor(str(file_name), tensor, distribute)
+
+
+@ttnn.register_python_operation(name="ttnn.dump_tensor_bytes")
+def dump_tensor_bytes(tensor: ttnn.Tensor) -> bytes:
+    """
+    Serialize a tensor into FlatBuffer bytes (same format as dump_tensor_flatbuffer).
+
+    Args:
+        tensor (ttnn.Tensor): Tensor to serialize.
+
+    Returns:
+        bytes: FlatBuffer-encoded bytes.
+    """
+    return ttnn._ttnn.tensor.dump_tensor_bytes(tensor)
+
+
+@ttnn.register_python_operation(name="ttnn.load_tensor_bytes")
+def load_tensor_bytes(data: Union[bytes, bytearray, memoryview], *, device: ttnn.MeshDevice = None) -> ttnn.Tensor:
+    """
+    Deserialize a tensor from FlatBuffer bytes.
+
+    Args:
+        data (bytes-like): FlatBuffer-encoded bytes produced by dump_tensor_bytes.
+    Keyword Args:
+        device (ttnn.MeshDevice, optional): Target device to place the tensor on. Defaults to None (host).
+
+    Returns:
+        ttnn.Tensor: The loaded tensor.
+    """
+    # memoryview로 받아도 OK하게 통일
+    b = memoryview(data).tobytes() if not isinstance(data, (bytes, bytearray)) else data
+    return ttnn._ttnn.tensor.load_tensor_bytes(b, device)
+
+
+_MAGIC = b"TTNNSTATE"
+_VERSION = 1
+_TTYPE_TTNN = 1
+_TTYPE_TORCH = 2
+
+
+def _write_item(f, name: str, type_code: int, payload: bytes) -> None:
+    name_b = name.encode("utf-8")
+    crc = zlib.crc32(payload) & 0xFFFFFFFF
+    f.write(struct.pack("<I", len(name_b)))
+    f.write(name_b)
+    f.write(struct.pack("<B", type_code))
+    f.write(struct.pack("<Q", len(payload)))
+    f.write(payload)
+    f.write(struct.pack("<I", crc))
+
+
+def _read_exact(f, n: int) -> bytes:
+    b = f.read(n)
+    if len(b) != n:
+        raise RuntimeError("Unexpected EOF while reading state file")
+    return b
+
+
+@ttnn.register_python_operation(name="ttnn.save_ttnn_state")
+def save_ttnn_state(path: str, state: "OrderedDict[str, Any]") -> None:
+    import torch
+
+    with open(path, "wb") as f:
+        f.write(_MAGIC)
+        f.write(struct.pack("<B", _VERSION))
+        f.write(struct.pack("<I", len(state)))
+        for name, value in tqdm(state.items()):
+            if isinstance(value, ttnn.Tensor):
+                blob = ttnn.dump_tensor_bytes(value)
+                _write_item(f, name, _TTYPE_TTNN, blob)
+            elif isinstance(value, torch.Tensor):
+                bio = io.BytesIO()
+                torch.save(value, bio)  # 포함: dtype, shape, device 등
+                _write_item(f, name, _TTYPE_TORCH, bio.getvalue())
+            else:
+                raise TypeError(f"Unsupported value for key '{name}': {type(value)}")
+
+
+@ttnn.register_python_operation(name="ttnn.load_ttnn_state")
+def load_ttnn_state(path: str, *, device: Optional[ttnn.MeshDevice] = None) -> "OrderedDict[str, Any]":
+    import torch
+
+    state = OrderedDict()
+    with open(path, "rb") as f:
+        magic = _read_exact(f, len(_MAGIC))
+        if magic != _MAGIC:
+            raise RuntimeError("Invalid TTNN state file (bad magic)")
+        version = struct.unpack("<B", _read_exact(f, 1))[0]
+        if version != _VERSION:
+            raise RuntimeError(f"Unsupported TTNN state version {version}")
+        n_items = struct.unpack("<I", _read_exact(f, 4))[0]
+        for _ in range(n_items):
+            name_len = struct.unpack("<I", _read_exact(f, 4))[0]
+            name = _read_exact(f, name_len).decode("utf-8")
+            type_code = struct.unpack("<B", _read_exact(f, 1))[0]
+            blob_len = struct.unpack("<Q", _read_exact(f, 8))[0]
+            blob = _read_exact(f, blob_len)
+            crc_expected = struct.unpack("<I", _read_exact(f, 4))[0]
+            if (zlib.crc32(blob) & 0xFFFFFFFF) != crc_expected:
+                raise RuntimeError(f"CRC mismatch for key '{name}'")
+
+            if type_code == _TTYPE_TTNN:
+                value = ttnn.load_tensor_bytes(blob, device=device)
+            elif type_code == _TTYPE_TORCH:
+                bio = io.BytesIO(blob)
+                value = torch.load(bio, map_location="cpu")
+            else:
+                raise RuntimeError(f"Unknown type code {type_code} for key '{name}'")
+            state[name] = value
+    return state
 
 
 @ttnn.register_python_operation(name="ttnn.as_tensor")

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
-
+// ttnn/cpp/ttnn-pybind/tensor.cpp
 #include "tensor.hpp"
 
 #include <array>
@@ -299,6 +299,34 @@ void tensor_mem_config_module(py::module& m_tensor) {
         py::arg("file_name"),
         py::arg("device") = nullptr,
         R"doc(Load tensor to file)doc");
+    // --- FlatBuffer bytes I/O ---
+    m_tensor.def(
+        "dump_tensor_bytes",
+        [](const ttnn::Tensor& tensor) {
+            auto s = tt::tt_metal::dump_tensor_flatbuffer_to_bytes(tensor);
+            return py::bytes(s.data(), s.size());
+        },
+        R"doc(
+        Serialize a tensor to FlatBuffer bytes (same format as dump_tensor_flatbuffer).
+        Returns: Python 'bytes'
+    )doc");
+
+    m_tensor.def(
+        "load_tensor_bytes",
+        [](py::bytes b, MeshDevice* device) {
+            char* ptr;
+            py::ssize_t len;
+            if (PYBIND11_BYTES_AS_STRING_AND_SIZE(b.ptr(), &ptr, &len)) {
+                throw std::runtime_error("Invalid bytes object");
+            }
+            return tt::tt_metal::load_tensor_flatbuffer_from_bytes(
+                reinterpret_cast<const std::uint8_t*>(ptr), static_cast<std::size_t>(len), device);
+        },
+        py::arg("data"),
+        py::arg("device") = nullptr,
+        R"doc(
+        Deserialize a tensor from FlatBuffer bytes (same format as load_tensor_flatbuffer).
+    )doc");
 }
 
 }  // namespace ttnn::tensor

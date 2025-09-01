@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
-
+// ttnn/tensor/serialization.hpp
 #pragma once
 
 #include "ttnn/tensor/tensor.hpp"
@@ -30,5 +30,10 @@ MemoryConfig load_memory_config(const std::string& file_name);
 // TODO: #22259 - the format is not yet finalized, and is not stable. Avoid using it in production.
 void dump_tensor_flatbuffer(const std::string& file_name, const Tensor& tensor);
 Tensor load_tensor_flatbuffer(const std::string& file_name, distributed::MeshDevice* device = nullptr);
+
+// In-memory (bytes) API
+std::string dump_tensor_flatbuffer_to_bytes(const Tensor& tensor);
+Tensor load_tensor_flatbuffer_from_bytes(
+    const std::uint8_t* data, std::size_t len, distributed::MeshDevice* device = nullptr);
 
 }  // namespace tt::tt_metal

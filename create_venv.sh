@@ -15,6 +15,7 @@ if ! command -v $PYTHON_CMD &>/dev/null; then
 fi
 
 # Set Python environment directory
+unset PYTHON_ENV_DIR
 if [ -z "$PYTHON_ENV_DIR" ]; then
     PYTHON_ENV_DIR=$(pwd)/python_env
 fi

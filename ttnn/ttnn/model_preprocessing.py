@@ -20,6 +20,7 @@ try:
     import torch
 except ImportError:
     raise ImportError("Torch is not installed. Model preprocessing functions require torch to be installed.")
+import torch.nn as nn
 
 
 def preprocess_linear_weight(weight, *, dtype, layout=ttnn.TILE_LAYOUT):
@@ -45,24 +46,28 @@ def preprocess_embedding_weight(weight, *, dtype):
     return weight
 
 
-def fold_batch_norm2d_into_conv2d(conv, bn):
+@torch.no_grad()
+def fold_batch_norm2d_into_conv2d(conv: nn.Conv2d, bn: nn.Module | None):
+    if bn is None or isinstance(bn, nn.Identity):
+        W = conv.weight.detach()
+        if conv.bias is None:
+            b = torch.zeros(conv.out_channels, dtype=W.dtype, device=W.device)
+        else:
+            b = conv.bias.detach()
+        return W, b
+    if not isinstance(bn, nn.BatchNorm2d):
+        raise TypeError("bn must be BatchNorm2d, Identity, or None")
     if not bn.track_running_stats:
         raise RuntimeError("BatchNorm2d must have track_running_stats=True to be folded into Conv2d")
-
-    weight = conv.weight
-    bias = conv.bias
-    running_mean = bn.running_mean
-    running_var = bn.running_var
-    eps = bn.eps
-    scale = bn.weight
-    shift = bn.bias
-    weight = weight * (scale / torch.sqrt(running_var + eps))[:, None, None, None]
-    if bias is not None:
-        bias = (bias - running_mean) * (scale / torch.sqrt(running_var + eps)) + shift
-    else:
-        bias = shift - running_mean * (scale / torch.sqrt(running_var + eps))
-
-    return weight, bias
+    W = conv.weight.detach()
+    b = conv.bias.detach() if conv.bias is not None else torch.zeros(conv.out_channels, dtype=W.dtype, device=W.device)
+    gamma = bn.weight if bn.affine else torch.ones_like(bn.running_var)
+    beta = bn.bias if bn.affine else torch.zeros_like(bn.running_mean)
+    mu, var, eps = bn.running_mean, bn.running_var, bn.eps
+    s = gamma / torch.sqrt(var + eps)
+    Wp = W * s.view(-1, 1, 1, 1)
+    bp = (b - mu) * s + beta
+    return Wp, bp
 
 
 class ParameterList(list):

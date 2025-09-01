@@ -4,6 +4,7 @@
 
 import copy
 import os
+from collections import OrderedDict
 
 import pytest
 import torch
@@ -17,6 +18,8 @@ from models.demos.ttnn_resnet.tt.ttnn_functional_resnet50 import resnet50
 from models.utility_functions import divup, is_blackhole, is_grayskull, is_wormhole_b0
 from tests.ttnn.utils_for_testing import check_with_pcc
 
+from .demo_utils import _fold_batchnorm, _reshape_scale_for_broadcast
+
 
 def load_resnet50_model(model_location_generator):
     # TODO: Can generalize the version to an arg
@@ -28,8 +31,26 @@ def load_resnet50_model(model_location_generator):
             torch_resnet50 = torchvision.models.resnet50()
             torch_resnet50.load_state_dict(torch.load(model_path))
     if torch_resnet50 is None:
-        torch_resnet50 = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V1)
+        torch_resnet50 = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
     return torch_resnet50
+
+
+def fakequantize(model):
+    for _, m in model.named_modules():
+        if not isinstance(m, (torch.nn.Conv2d, torch.nn.Linear)):
+            continue
+        w = m.weight.detach().clone()
+        if isinstance(m, torch.nn.Conv2d):
+            per_channel_absmax = w.abs().amax(dim=(1, 2, 3))
+        else:  # Linear
+            per_channel_absmax = w.abs().amax(dim=1)
+
+        scale = torch.clamp(per_channel_absmax, 1e-12) / 127
+        scale = _reshape_scale_for_broadcast(scale, w, 0)
+        q = torch.round(w / scale).clamp(-127, 127)
+        qdq = q * scale
+        with torch.no_grad():
+            m.weight.copy_(qdq.to(dtype=m.weight.dtype))
 
 
 ## copied from ttlib version test:
@@ -176,7 +197,7 @@ class ResNet50TestInfra:
         act_dtype,
         weight_dtype,
         math_fidelity,
-        use_pretrained_weight,
+        modelpath,
         dealloc_input,
         final_output_mem_config,
         model_location_generator=None,
@@ -205,12 +226,32 @@ class ResNet50TestInfra:
         elif is_wormhole_b0() and batch_size == 20:
             pytest.skip("Skipping batch size 20 for Wormhole B0 due to fitting issue")
 
-        torch_model = (
-            load_resnet50_model(model_location_generator).eval()
-            if use_pretrained_weight
-            else torchvision.models.resnet50().eval()
-        )
-
+        # torch_model = (
+        #     load_resnet50_model(model_location_generator).eval()
+        #     if use_pretrained_weight
+        #     else torchvision.models.resnet50().eval()
+        # )
+        # prepare model
+        torch_model = torchvision.models.resnet50().eval()
+        _fold_batchnorm(torch_model)
+        state_dict = torch.load(modelpath)
+        if "conv1.scale" in state_dict:  # quantized version -> dequantize weight
+            state_dict_dq = OrderedDict()
+            for key, value in state_dict.items():
+                if "weight" in key:
+                    module_name = key[:-7]
+                    scale_key = module_name + ".scale"
+                    scale = state_dict[scale_key]
+                    dq = scale * value
+                    state_dict_dq[key] = dq
+                elif "bias" in key:
+                    state_dict_dq[key] = value
+            torch_model.load_state_dict(state_dict_dq)
+            del state_dict
+            del state_dict_dq
+        else:  # default
+            torch_model.load_state_dict(state_dict)
+            del state_dict
         model_config = {
             "MATH_FIDELITY": math_fidelity,
             "WEIGHTS_DTYPE": weight_dtype,
@@ -360,7 +401,7 @@ def create_test_infra(
     act_dtype,
     weight_dtype,
     math_fidelity,
-    use_pretrained_weight=True,
+    modelpath,
     dealloc_input=True,
     final_output_mem_config=ttnn.L1_MEMORY_CONFIG,
     model_location_generator=None,
@@ -371,7 +412,7 @@ def create_test_infra(
         act_dtype,
         weight_dtype,
         math_fidelity,
-        use_pretrained_weight,
+        modelpath,
         dealloc_input,
         final_output_mem_config,
         model_location_generator,
