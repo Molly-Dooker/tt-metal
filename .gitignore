@@ -19,7 +19,7 @@ build_*
 CMakeUserPresets.json
 /llk_out/
 /out/
-
+*.pth
 /test_*
 core_graph_lib/core_graph_lib_integration_tests
 coremodel/model/release/
